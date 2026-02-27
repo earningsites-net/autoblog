@@ -14,7 +14,8 @@ Usage:
   autoblog init-content <site-slug>
   autoblog provision-env <site-slug> [--force]
   autoblog seed-cms <site-slug>
-  autoblog seed-topics <site-slug> [--count 30] [--status brief_ready] [--replace]
+  autoblog seed-topics <site-slug> [--count 30] [--status brief_ready] [--replace] [--source suggest|synthetic]
+  autoblog discover-topics <site-slug> [--count 30] [--status brief_ready] [--replace] [--source suggest|synthetic]
   autoblog deploy <site-slug>
   autoblog doctor <site-slug>
   autoblog handoff-pack <site-slug>
@@ -170,7 +171,6 @@ function generateTopicQueries(seedTopics, targetCount) {
     'mistakes to avoid',
     'easy wins',
     'that are easy to maintain',
-    'for busy weekdays',
     'for apartments'
   ];
 
@@ -226,7 +226,204 @@ function generateTopicQueries(seedTopics, targetCount) {
   return out;
 }
 
-function buildTopicCandidateDoc(query, index, status, workflowRunId) {
+function tokenizeForMatching(input) {
+  return String(input || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 3 && !['and', 'the', 'for', 'with', 'from', 'into'].includes(part));
+}
+
+function buildCategoryProfiles(categories) {
+  return (Array.isArray(categories) ? categories : []).map((category, index) => {
+    const slug = String(category?.slug || '').trim();
+    const title = String(category?.title || '').trim();
+    const description = String(category?.description || '').trim();
+    const keywordSet = new Set([
+      ...tokenizeForMatching(slug.replace(/-/g, ' ')),
+      ...tokenizeForMatching(title),
+      ...tokenizeForMatching(description)
+    ]);
+    return {
+      index,
+      slug,
+      title,
+      description,
+      keywords: [...keywordSet]
+    };
+  }).filter((profile) => profile.slug);
+}
+
+function scoreCategoryForQuery(query, profile) {
+  const queryTokens = tokenizeForMatching(query);
+  if (!queryTokens.length) return 0;
+  const keywordSet = new Set(profile.keywords);
+  let score = 0;
+  for (const token of queryTokens) {
+    if (keywordSet.has(token)) score += 2;
+  }
+  if (String(query || '').toLowerCase().includes(String(profile.title || '').toLowerCase())) score += 1;
+  return score;
+}
+
+function classifyQueryToCategory(query, profiles) {
+  if (!profiles.length) return null;
+  let best = profiles[0];
+  let bestScore = -1;
+  for (const profile of profiles) {
+    const score = scoreCategoryForQuery(query, profile);
+    if (score > bestScore) {
+      best = profile;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+function isSafeTopicQuery(query, excludedSubtopics) {
+  const q = String(query || '').toLowerCase();
+  if (!q) return false;
+  if (q.length < 6 || q.length > 120) return false;
+
+  const hardBlocked = [
+    /electrical|wiring|breaker|circuit|voltage|panel/i,
+    /plumbing repair|pipe repair|sewer|toilet repair|water heater/i,
+    /foundation|load-bearing|structural/i,
+    /medical|health claim|diagnose|treat|cure/i,
+    /legal|financial|tax|insurance|investment/i
+  ];
+  if (hardBlocked.some((pattern) => pattern.test(q))) return false;
+
+  const excluded = Array.isArray(excludedSubtopics) ? excludedSubtopics : [];
+  if (excluded.some((item) => q.includes(String(item || '').toLowerCase()))) return false;
+  return true;
+}
+
+function buildCategorySeedMap(seedTopics, categoryProfiles) {
+  const map = new Map();
+  for (const profile of categoryProfiles) map.set(profile.slug, []);
+  for (const seed of seedTopics) {
+    const category = classifyQueryToCategory(seed, categoryProfiles);
+    if (!category) continue;
+    const list = map.get(category.slug) || [];
+    list.push(seed);
+    map.set(category.slug, list);
+  }
+  for (const profile of categoryProfiles) {
+    const list = map.get(profile.slug) || [];
+    list.push(profile.title);
+    list.push(`${profile.title} tips`);
+    list.push(`${profile.title} ideas`);
+    list.push(`${profile.title} checklist`);
+    list.push(`${profile.title} for beginners`);
+    map.set(profile.slug, uniqueStrings(list));
+  }
+  return map;
+}
+
+async function fetchGoogleSuggest(query, locale = 'en-US') {
+  const language = String(locale || 'en-US').split('-')[0] || 'en';
+  const url = `https://suggestqueries.google.com/complete/search?client=firefox&hl=${encodeURIComponent(language)}&q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'autoblog-topic-discovery/1.0'
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Suggest request failed (${response.status})`);
+  }
+  const payload = await response.json();
+  if (!Array.isArray(payload) || !Array.isArray(payload[1])) return [];
+  return payload[1]
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean);
+}
+
+function synthesizeQueriesForCategory(baseSeeds, perCategoryTarget) {
+  const synthetic = generateTopicQueries(baseSeeds, Math.max(perCategoryTarget * 2, 10));
+  return synthetic.slice(0, perCategoryTarget);
+}
+
+async function discoverTopicQueriesByCategory({
+  seedTopics,
+  categories,
+  targetCount,
+  locale,
+  excludedSubtopics
+}) {
+  const profiles = buildCategoryProfiles(categories);
+  if (!profiles.length) {
+    throw new Error('No categories found in blueprint. Categories are required for dynamic distribution.');
+  }
+
+  const perCategoryTarget = Math.max(1, Math.ceil(targetCount / profiles.length));
+  const categorySeedMap = buildCategorySeedMap(seedTopics, profiles);
+  const globalSeen = new Set();
+  const output = [];
+
+  for (const profile of profiles) {
+    const seeds = categorySeedMap.get(profile.slug) || [];
+    const collected = [];
+    let requestCount = 0;
+    const maxRequestsPerCategory = 18;
+
+    for (const seed of seeds) {
+      if (collected.length >= perCategoryTarget) break;
+      if (requestCount >= maxRequestsPerCategory) break;
+      requestCount += 1;
+
+      let suggestions = [];
+      try {
+        suggestions = await fetchGoogleSuggest(seed, locale);
+      } catch {
+        suggestions = [];
+      }
+
+      for (const suggestion of suggestions) {
+        if (collected.length >= perCategoryTarget) break;
+        if (!isSafeTopicQuery(suggestion, excludedSubtopics)) continue;
+        const assigned = classifyQueryToCategory(suggestion, profiles);
+        if (!assigned || assigned.slug !== profile.slug) continue;
+        const key = suggestion.toLowerCase();
+        if (globalSeen.has(key)) continue;
+        globalSeen.add(key);
+        collected.push({ query: suggestion, categorySlug: profile.slug });
+      }
+    }
+
+    if (collected.length < perCategoryTarget) {
+      const fallback = synthesizeQueriesForCategory(seeds, perCategoryTarget);
+      for (const suggestion of fallback) {
+        if (collected.length >= perCategoryTarget) break;
+        if (!isSafeTopicQuery(suggestion, excludedSubtopics)) continue;
+        const key = suggestion.toLowerCase();
+        if (globalSeen.has(key)) continue;
+        globalSeen.add(key);
+        collected.push({ query: suggestion, categorySlug: profile.slug });
+      }
+    }
+
+    output.push(...collected);
+  }
+
+  if (output.length < targetCount) {
+    const fallbackAll = generateTopicQueries(seedTopics, targetCount * 3);
+    for (const query of fallbackAll) {
+      if (output.length >= targetCount) break;
+      if (!isSafeTopicQuery(query, excludedSubtopics)) continue;
+      const key = query.toLowerCase();
+      if (globalSeen.has(key)) continue;
+      globalSeen.add(key);
+      const assigned = classifyQueryToCategory(query, profiles) || profiles[0];
+      output.push({ query, categorySlug: assigned.slug });
+    }
+  }
+
+  return output.slice(0, targetCount);
+}
+
+function buildTopicCandidateDoc(query, index, status, workflowRunId, categorySlug) {
   const normalizedQuery = String(query).trim();
   const templateType = inferTemplateType(normalizedQuery);
   const targetKeyword = normalizedQuery;
@@ -245,6 +442,7 @@ function buildTopicCandidateDoc(query, index, status, workflowRunId) {
     searchIntent: 'informational',
     templateType,
     status,
+    categorySlug: categorySlug || undefined,
     evergreenScore: 75,
     riskScore: 10,
     brief: buildTopicBrief(normalizedQuery, templateType),
@@ -559,13 +757,15 @@ function commandSeedCms(siteSlug) {
   console.log(`Generated Sanity seed payload: ${filePath}`);
 }
 
-function commandSeedTopics(siteSlug, flags) {
+async function commandSeedTopics(siteSlug, flags) {
   const blueprint = loadSiteBlueprint(siteSlug);
   const siteDir = resolveSiteDir(siteSlug);
   const outputDir = path.join(siteDir, 'seed-content');
   ensureDir(outputDir);
 
   const count = Math.max(1, Number(flags.count || 30));
+  const source = String(flags.source || 'suggest').toLowerCase();
+  const locale = String(flags.locale || blueprint.locale || 'en-US');
   const status = ['queued', 'brief_ready', 'generated', 'skipped'].includes(String(flags.status || 'brief_ready'))
     ? String(flags.status || 'brief_ready')
     : 'brief_ready';
@@ -574,10 +774,40 @@ function commandSeedTopics(siteSlug, flags) {
   if (!seedTopics.length) {
     throw new Error(`No seedTopics found in blueprint for '${siteSlug}'`);
   }
+  const categories = Array.isArray(blueprint.categories) ? blueprint.categories : [];
+  if (!categories.length) {
+    throw new Error(`No categories found in blueprint for '${siteSlug}'`);
+  }
 
-  const queries = generateTopicQueries(seedTopics, count);
+  const excludedSubtopics = blueprint.niche?.excludedSubtopics || [];
+  let discovered = [];
+  if (source === 'suggest') {
+    discovered = await discoverTopicQueriesByCategory({
+      seedTopics,
+      categories,
+      targetCount: count,
+      locale,
+      excludedSubtopics
+    });
+  } else if (source === 'synthetic') {
+    const profiles = buildCategoryProfiles(categories);
+    const fallback = generateTopicQueries(seedTopics, count * 3);
+    discovered = fallback.slice(0, count).map((query) => ({
+      query,
+      categorySlug: (classifyQueryToCategory(query, profiles) || profiles[0])?.slug
+    }));
+  } else {
+    throw new Error(`Unknown --source value "${source}". Use "suggest" or "synthetic".`);
+  }
+
+  if (!discovered.length) {
+    throw new Error(`No topic candidates discovered for '${siteSlug}'`);
+  }
+
   const workflowRunId = `seed-topics-${new Date().toISOString()}`;
-  const docs = queries.map((query, index) => buildTopicCandidateDoc(query, index, status, workflowRunId));
+  const docs = discovered
+    .map((item, index) => buildTopicCandidateDoc(item.query, index, status, workflowRunId, item.categorySlug))
+    .slice(0, count);
 
   const mutationOp = flags.replace ? 'createOrReplace' : 'createIfNotExists';
   const mutations = {
@@ -591,18 +821,30 @@ function commandSeedTopics(siteSlug, flags) {
   writeJson(previewPath, {
     siteSlug,
     count: docs.length,
+    source,
+    locale,
     status,
     workflowRunId,
     topics: docs.map((doc) => ({
       _id: doc._id,
       query: doc.query,
+      categorySlug: doc.categorySlug || null,
       templateType: doc.templateType,
       status: doc.status
     }))
   });
   writeJson(mutationsPath, mutations);
 
+  const categoryDistribution = docs.reduce((acc, doc) => {
+    const key = doc.categorySlug || 'unassigned';
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
   console.log(`Generated ${docs.length} topicCandidate documents for '${siteSlug}'`);
+  console.log(`Discovery source: ${source}`);
+  console.log(`Locale: ${locale}`);
+  console.log(`Category distribution: ${JSON.stringify(categoryDistribution)}`);
   console.log(`Mutation strategy: ${mutationOp}`);
   console.log(`Preview: ${previewPath}`);
   console.log(`Sanity mutations: ${mutationsPath}`);
@@ -729,7 +971,7 @@ function commandListBlueprints() {
   console.log(JSON.stringify({ count: items.length, items }, null, 2));
 }
 
-function main() {
+async function main() {
   const { command, positional, flags } = parseArgs(process.argv.slice(2));
 
   if (!command || command === '--help' || command === 'help') {
@@ -752,7 +994,10 @@ function main() {
         commandSeedCms(positional[0]);
         break;
       case 'seed-topics':
-        commandSeedTopics(positional[0], flags);
+        await commandSeedTopics(positional[0], flags);
+        break;
+      case 'discover-topics':
+        await commandSeedTopics(positional[0], flags);
         break;
       case 'deploy':
         commandDeploy(positional[0]);

@@ -13,6 +13,7 @@ export const topicCandidateType = defineType({
       of: [defineArrayMember({ type: 'string' })],
       initialValue: []
     }),
+    defineField({ name: 'categorySlug', type: 'string' }),
     defineField({ name: 'searchIntent', type: 'string', initialValue: 'informational', options: { list: ['informational'] } }),
     defineField({ name: 'templateType', type: 'string', options: { list: ['how-to', 'list', 'tips', 'checklist'] }, initialValue: 'tips' }),
     defineField({
