@@ -1,0 +1,28 @@
+{
+  "name": "auto-blog-project",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace @autoblog/web run dev",
+    "dev:studio": "npm --workspace @autoblog/studio run dev",
+    "dev:engine": "npm --workspace @autoblog/engine run dev",
+    "build:web": "npm --workspace @autoblog/web run build",
+    "build:studio": "npm --workspace @autoblog/studio run build",
+    "factory": "node scripts/autoblog.mjs",
+    "sanity:apply": "node scripts/sanity-apply-mutations.mjs",
+    "typecheck": "npm --workspace @autoblog/web run typecheck && npm --workspace @autoblog/studio run typecheck",
+    "n8n:check:flows": "node skills/n8n-flow-guard/scripts/check_n8n_flows.mjs --mode changed-only --write-report --import",
+    "n8n:import:changed": "node skills/n8n-flow-guard/scripts/check_n8n_flows.mjs --mode changed-only --write-report --import --no-smoke",
+    "n8n:test:flows": "node skills/n8n-flow-guard/scripts/check_n8n_flows.mjs --mode changed-only --write-report --import --smoke"
+  },
+  "bin": {
+    "autoblog": "./scripts/autoblog.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

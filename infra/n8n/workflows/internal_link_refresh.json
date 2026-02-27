@@ -1,0 +1,16 @@
+{
+  "name": "internal_link_refresh",
+  "active": false,
+  "nodes": [
+    {"id": "schedule", "name": "Daily Trigger", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1, "position": [220, 220], "parameters": {"rule": {"interval": [{"field": "hours", "hoursInterval": 24}]}}},
+    {"id": "fetchPublished", "name": "Fetch Published Articles", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [470, 220], "parameters": {"method": "GET", "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/query/{{$env.SANITY_DATASET || 'production'}}?query=*[_type==\"article\" && status==\"published\"]{_id,title,category,slug,publishedAt}", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{$env.SANITY_READ_TOKEN}}"}]}}},
+    {"id": "computeLinks", "name": "Compute Internal Link Suggestions", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [730, 220], "parameters": {"language": "JavaScript", "jsCode": "const docs = $json.result || []; const byCat = new Map(); for (const d of docs) { const key = d.category?._ref || d.category || 'uncat'; if (!byCat.has(key)) byCat.set(key, []); byCat.get(key).push(d); } const out = []; for (const [, list] of byCat.entries()) { for (const item of list) { const links = list.filter(x => x._id !== item._id).slice(0,4).map(x => ({ title: x.title, slug: x.slug?.current || x.slug })); out.push({ json: { articleId: item._id, internalLinks: links } }); } } return out;"}},
+    {"id": "patchLinks", "name": "Patch internalLinks", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1000, 220], "parameters": {"method": "POST", "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"}]}, "sendBody": true, "specifyBody": "json", "jsonBody": "={\"mutations\": [{\"patch\": {\"id\": $json.articleId, \"set\": {\"internalLinks\": $json.internalLinks}}}]}"}}
+  ],
+  "connections": {
+    "Daily Trigger": {"main": [[{"node": "Fetch Published Articles", "type": "main", "index": 0}]]},
+    "Fetch Published Articles": {"main": [[{"node": "Compute Internal Link Suggestions", "type": "main", "index": 0}]]},
+    "Compute Internal Link Suggestions": {"main": [[{"node": "Patch internalLinks", "type": "main", "index": 0}]]}
+  },
+  "meta": {"template": true, "pipelineStage": "internal_links"}
+}

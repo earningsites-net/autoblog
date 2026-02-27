@@ -1,0 +1,62 @@
+{
+  "name": "engine_pipeline_trigger",
+  "active": false,
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [220, 220],
+      "parameters": { "rule": { "interval": [{ "field": "hours", "hoursInterval": 12 }] } }
+    },
+    {
+      "id": "payload",
+      "name": "Build Engine Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [470, 220],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "name": "siteSlug", "type": "string", "value": "={{$env.SITE_SLUG || 'hammer-hearth'}}" },
+            { "name": "stage", "type": "string", "value": "pipeline" },
+            { "name": "input", "type": "object", "value": { "trigger": "n8n-schedule" } },
+            { "name": "options", "type": "object", "value": { "workflowRunner": "direct", "dryRun": false } }
+          ]
+        }
+      }
+    },
+    {
+      "id": "callEngine",
+      "name": "POST /v1/pipelines/run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [740, 220],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.CONTENT_ENGINE_URL || 'http://localhost:8787'}}/v1/pipelines/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json}}"
+      }
+    },
+    {
+      "id": "log",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [990, 220],
+      "parameters": {
+        "language": "JavaScript",
+        "jsCode": "console.log('Engine pipeline result', $json); return items;"
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": { "main": [[{ "node": "Build Engine Request", "type": "main", "index": 0 }]] },
+    "Build Engine Request": { "main": [[{ "node": "POST /v1/pipelines/run", "type": "main", "index": 0 }]] },
+    "POST /v1/pipelines/run": { "main": [[{ "node": "Log Result", "type": "main", "index": 0 }]] }
+  },
+  "meta": { "template": true, "pipelineStage": "engine_adapter" }
+}

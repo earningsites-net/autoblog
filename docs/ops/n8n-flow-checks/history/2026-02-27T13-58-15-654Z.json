@@ -1,0 +1,318 @@
+{
+  "runAt": "2026-02-27T13:58:15.654Z",
+  "mode": "changed-only",
+  "workflowsDir": "/Users/danilociamprone/Documents/Auto blog project/infra/n8n/workflows",
+  "reportDir": "/Users/danilociamprone/Documents/Auto blog project/docs/ops/n8n-flow-checks",
+  "importEnabled": true,
+  "smokeEnabled": false,
+  "importConfigured": true,
+  "importReason": "configured",
+  "overallStatus": "fail",
+  "summary": {
+    "total": 10,
+    "pass": 0,
+    "warn": 0,
+    "fail": 10
+  },
+  "regression": {
+    "count": 0,
+    "items": []
+  },
+  "workflows": [
+    {
+      "path": "infra/n8n/workflows/article_generation_worker.json",
+      "name": "article_generation_worker",
+      "status": "fail",
+      "errors": [],
+      "warnings": [
+        "env var \"$env.BUDGET_MODE\" is not declared in .env examples",
+        "env var \"$env.PREPOPULATE_BATCH_ID\" is not declared in .env examples"
+      ],
+      "envVars": [
+        "ARTICLE_BATCH_SIZE",
+        "BUDGET_MODE",
+        "OPENAI_API_KEY",
+        "PIPELINE_MODE_DEFAULT",
+        "PREPOPULATE_BATCH_ID",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN",
+        "TEXT_MODEL_DRAFT"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "fail",
+        "action": "none",
+        "remoteId": null,
+        "details": "n8n request failed for GET /api/v1/workflows?limit=250: fetch failed"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/brief_generation_worker.json",
+      "name": "brief_generation_worker",
+      "status": "fail",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "OPENAI_API_KEY",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN",
+        "TEXT_MODEL_DRAFT"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "fail",
+        "action": "none",
+        "remoteId": null,
+        "details": "n8n request failed for GET /api/v1/workflows?limit=250: fetch failed"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/budget_monitor_and_alerts.json",
+      "name": "budget_monitor_and_alerts",
+      "status": "fail",
+      "errors": [],
+      "warnings": [
+        "node \"Persist budget_mode (Settings/Run)\" still contains TODO/placeholder text"
+      ],
+      "envVars": [
+        "MONTHLY_BUDGET_USD",
+        "PUBLISH_QUOTA_MAX",
+        "PUBLISH_QUOTA_MIN",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "fail",
+        "action": "none",
+        "remoteId": null,
+        "details": "n8n request failed for GET /api/v1/workflows?limit=250: fetch failed"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/engine_pipeline_trigger.json",
+      "name": "engine_pipeline_trigger",
+      "status": "fail",
+      "errors": [],
+      "warnings": [
+        "env var \"$env.SITE_SLUG\" is not declared in .env examples"
+      ],
+      "envVars": [
+        "CONTENT_ENGINE_URL",
+        "SITE_SLUG"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "fail",
+        "action": "none",
+        "remoteId": null,
+        "details": "n8n request failed for GET /api/v1/workflows?limit=250: fetch failed"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/image_generation_worker.json",
+      "name": "image_generation_worker",
+      "status": "fail",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "IMAGE_BATCH_SIZE",
+        "IMAGE_MODEL",
+        "REPLICATE_API_TOKEN",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "fail",
+        "action": "none",
+        "remoteId": null,
+        "details": "n8n request failed for GET /api/v1/workflows?limit=250: fetch failed"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/internal_link_refresh.json",
+      "name": "internal_link_refresh",
+      "status": "fail",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "fail",
+        "action": "none",
+        "remoteId": null,
+        "details": "n8n request failed for GET /api/v1/workflows?limit=250: fetch failed"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/prepopulate_bulk_runner.json",
+      "name": "prepopulate_bulk_runner",
+      "status": "fail",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "N8N_WORKFLOW_ID_ARTICLE_GENERATION",
+        "N8N_WORKFLOW_ID_IMAGE_GENERATION",
+        "N8N_WORKFLOW_ID_QA_PUBLISH",
+        "PREPOPULATE_BATCH_SIZE",
+        "PREPOPULATE_MAX_COST_USD",
+        "PREPOPULATE_MAX_RUN_MINUTES",
+        "PREPOPULATE_TARGET_PUBLISHED",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "fail",
+        "action": "none",
+        "remoteId": null,
+        "details": "n8n request failed for GET /api/v1/workflows?limit=250: fetch failed"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/publish_scheduler_worker.json",
+      "name": "publish_scheduler_worker",
+      "status": "fail",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "PUBLISH_CADENCE_RULES_JSON",
+        "PUBLISH_REVALIDATE_ENABLED",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN",
+        "WEB_APP_URL",
+        "WEB_REVALIDATE_SECRET"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "fail",
+        "action": "none",
+        "remoteId": null,
+        "details": "n8n request failed for GET /api/v1/workflows?limit=250: fetch failed"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/qa_scoring_and_publish_worker.json",
+      "name": "qa_scoring_and_publish_worker",
+      "status": "fail",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "QA_BATCH_SIZE",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN",
+        "WEB_REVALIDATE_SECRET"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "fail",
+        "action": "none",
+        "remoteId": null,
+        "details": "n8n request failed for GET /api/v1/workflows?limit=250: fetch failed"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/topic_discovery_daily.json",
+      "name": "topic_discovery_daily",
+      "status": "fail",
+      "errors": [],
+      "warnings": [
+        "node \"Normalize + Dedup + Score\" still contains TODO/placeholder text"
+      ],
+      "envVars": [
+        "OPENAI_API_KEY",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_WRITE_TOKEN",
+        "TEXT_MODEL_DRAFT",
+        "TOPIC_DISCOVERY_TARGET_PER_DAY"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "fail",
+        "action": "none",
+        "remoteId": null,
+        "details": "n8n request failed for GET /api/v1/workflows?limit=250: fetch failed"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    }
+  ]
+}

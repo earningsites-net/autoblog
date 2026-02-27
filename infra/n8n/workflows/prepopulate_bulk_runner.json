@@ -1,0 +1,322 @@
+{
+  "name": "prepopulate_bulk_runner",
+  "active": false,
+  "nodes": [
+    {
+      "id": "manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        260
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "loadCfg",
+      "name": "Load Prepopulate Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        260
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForEachItem",
+        "jsCode": "const targetPublishedCount = Number($env.PREPOPULATE_TARGET_PUBLISHED || 20);\nconst batchSize = Math.max(1, Number($env.PREPOPULATE_BATCH_SIZE || 3));\nconst maxRunMinutes = Math.max(1, Number($env.PREPOPULATE_MAX_RUN_MINUTES || 90));\nconst maxCostUsd = Math.max(1, Number($env.PREPOPULATE_MAX_COST_USD || 15));\nconst batchId = 'prepop-' + new Date().toISOString().replace(/[:.]/g, '-');\nreturn { json: { targetPublishedCount, batchSize, maxRunMinutes, maxCostUsd, pipelineMode: 'prepopulate_bulk_direct', prepopulateBatchId: batchId } };"
+      }
+    },
+    {
+      "id": "countPublished",
+      "name": "Count published articles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        760,
+        260
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('count(*[_type==\\\"article\\\" && status==\\\"published\\\"])') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SANITY_READ_TOKEN}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "planCycles",
+      "name": "Plan prepopulate cycles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        260
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const cfg = $('Load Prepopulate Config').item.json;\nconst countNode = $('Count published articles').item.json || {};\nconst publishedCount = Number(countNode.result || 0);\nconst remaining = Math.max(0, Number(cfg.targetPublishedCount || 0) - publishedCount);\nconst batchSize = Math.max(1, Number(cfg.batchSize || 3));\nconst plannedCycles = Math.ceil(remaining / batchSize);\n\nif (plannedCycles <= 0) {\n  return [{ json: { ...cfg, publishedCount, remaining, plannedCycles: 0, noWorkNeeded: true } }];\n}\n\nreturn Array.from({ length: plannedCycles }, (_, index) => ({\n  json: {\n    ...cfg,\n    publishedCount,\n    remaining,\n    plannedCycles,\n    cycleIndex: index + 1,\n    noWorkNeeded: false,\n  }\n}));"
+      }
+    },
+    {
+      "id": "noWorkGate",
+      "name": "No work needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1290,
+        260
+      ],
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ Number($json.remaining || 0) }}",
+              "operation": "smallerEqual",
+              "value2": 0
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "runArticleWorker",
+      "name": "Run article_generation_worker",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        140
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{$env.N8N_WORKFLOW_ID_ARTICLE_GENERATION}}",
+          "cachedResultName": "article_generation_worker"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "pipelineMode": "={{$json.pipelineMode}}",
+            "prepopulateBatchId": "={{$json.prepopulateBatchId}}",
+            "cycleIndex": "={{$json.cycleIndex}}",
+            "plannedCycles": "={{$json.plannedCycles}}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "runImageWorker",
+      "name": "Run image_generation_worker",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1790,
+        140
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{$env.N8N_WORKFLOW_ID_IMAGE_GENERATION}}",
+          "cachedResultName": "image_generation_worker"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "pipelineMode": "={{$json.pipelineMode}}",
+            "prepopulateBatchId": "={{$json.prepopulateBatchId}}",
+            "cycleIndex": "={{$json.cycleIndex}}",
+            "plannedCycles": "={{$json.plannedCycles}}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "runQaWorker",
+      "name": "Run qa_scoring_and_publish_worker",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2040,
+        140
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{$env.N8N_WORKFLOW_ID_QA_PUBLISH}}",
+          "cachedResultName": "qa_scoring_and_publish_worker"
+        },
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "pipelineMode": "={{$json.pipelineMode}}",
+            "prepopulateBatchId": "={{$json.prepopulateBatchId}}",
+            "cycleIndex": "={{$json.cycleIndex}}",
+            "plannedCycles": "={{$json.plannedCycles}}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "summary",
+      "name": "Build Prepopulate Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2310,
+        260
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const cfg = $('Load Prepopulate Config').item.json;\nconst allItems = (typeof $input !== 'undefined' && $input && typeof $input.all === 'function')\n  ? $input.all()\n  : (typeof items !== 'undefined' ? items : []);\nconst cycleItems = allItems.map((item) => item.json || {});\nconst executedCycles = cycleItems.filter((item) => !item.noWorkNeeded).length;\nconst plannedFromNode = Number(($('Plan prepopulate cycles').item.json || {}).plannedCycles || 0);\nconst plannedCycles = plannedFromNode || cycleItems.length || 0;\nreturn [{\n  json: {\n    workflowName: 'prepopulate_bulk_runner',\n    batchId: cfg.prepopulateBatchId,\n    targetPublishedCount: cfg.targetPublishedCount,\n    batchSize: cfg.batchSize,\n    maxRunMinutes: cfg.maxRunMinutes,\n    maxCostUsd: cfg.maxCostUsd,\n    pipelineMode: cfg.pipelineMode,\n    plannedCycles,\n    executedCycles,\n    note: 'This runner orchestrates existing worker workflows. Configure N8N_WORKFLOW_ID_* env vars and keep PIPELINE_MODE_DEFAULT=prepopulate_bulk_direct during launch.'\n  }\n}];"
+      }
+    },
+    {
+      "id": "noWorkSummary",
+      "name": "Build No-op Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        360
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForEachItem",
+        "jsCode": "return { json: { workflowName: 'prepopulate_bulk_runner', noWorkNeeded: true, targetPublishedCount: $json.targetPublishedCount, publishedCount: $json.publishedCount, remaining: $json.remaining, message: 'Target already reached' } };"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Prepopulate Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Prepopulate Config": {
+      "main": [
+        [
+          {
+            "node": "Count published articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count published articles": {
+      "main": [
+        [
+          {
+            "node": "Plan prepopulate cycles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan prepopulate cycles": {
+      "main": [
+        [
+          {
+            "node": "No work needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No work needed?": {
+      "main": [
+        [
+          {
+            "node": "Build No-op Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run article_generation_worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run article_generation_worker": {
+      "main": [
+        [
+          {
+            "node": "Run image_generation_worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run image_generation_worker": {
+      "main": [
+        [
+          {
+            "node": "Run qa_scoring_and_publish_worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run qa_scoring_and_publish_worker": {
+      "main": [
+        [
+          {
+            "node": "Build Prepopulate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "template": true,
+    "pipelineStage": "prepopulate_bulk"
+  }
+}

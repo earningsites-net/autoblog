@@ -1,0 +1,216 @@
+{
+  "name": "image_generation_worker",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "image-subworkflow-trigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "f3cc797e-50be-4881-92ee-f6ea1bda74c7",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        3248,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && status==\\\"draft\\\" && !defined(coverImage)]|order(_createdAt asc)[0...' + Number($env.IMAGE_BATCH_SIZE || 3) + ']') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SANITY_READ_TOKEN}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5c53c816-1598-4f9d-b33b-c5028d489723",
+      "name": "Fetch drafts missing image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        3488,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = (items[0] && items[0].json) ? items[0].json : {};\nconst docs = Array.isArray(source.result) ? source.result : [];\n\nreturn docs\n  .filter((doc) => doc && typeof doc === 'object')\n  .map((doc) => ({ json: doc }));",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "29082223-d64f-4c8c-a4c6-a714d951371f",
+      "name": "Explode Articles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3728,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const title = String($json.title || '');\nconst excerpt = String($json.excerpt || '').replace(/\\s+/g, ' ').trim().slice(0, 220);\nconst categoryTitle = String($json.category?.title || '');\nconst keyword = String($json.aiMeta?.targetKeyword || $json.aiMeta?.sourceTopicQuery || '').trim();\nconst subject = keyword || title || 'home and DIY guide';\n\nconst classifier = (title + ' ' + excerpt + ' ' + categoryTitle + ' ' + subject).toLowerCase();\nlet scene = 'indoor home organization scene';\nif (/garden|patio|plant|raised bed|outdoor|yard/.test(classifier)) {\n  scene = 'outdoor garden or patio scene';\n} else if (/clean|maintenance|kitchen|bathroom|laundry|reset/.test(classifier)) {\n  scene = 'cleaning or home maintenance scene';\n} else if (/bedroom|living room|decor|entryway|closet/.test(classifier)) {\n  scene = 'indoor room improvement scene';\n}\n\nconst prompt = [\n  'Photorealistic editorial hero image for a Home & DIY article.',\n  'Primary subject: ' + subject + '.',\n  excerpt ? ('Article context: ' + excerpt + '.') : '',\n  'Scene requirement: ' + scene + '.',\n  'Warm natural light, realistic materials, magazine composition.',\n  'No logos, no brand names, no text overlay, no watermark.',\n  'Aspect ratio 16:9, high detail.'\n].filter(Boolean).join(' ');\n\nreturn { json: { ...$json, imagePrompt: prompt } };",
+        "language": "javaScript"
+      },
+      "id": "839d424b-fda2-46dc-9274-8bf325a4ba92",
+      "name": "Build Safe Image Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3968,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.replicate.com/v1/models/' + ($env.IMAGE_MODEL || 'black-forest-labs/flux-schnell') + '/predictions' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Token {{$env.REPLICATE_API_TOKEN}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "wait=60"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  input: {\n    prompt: $json.imagePrompt,\n    aspect_ratio: '16:9'\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "ddedffe1-bd63-4c12-bdf8-423c1ce10780",
+      "name": "Generate Image (Replicate)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        4208,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const nf = (typeof fetch === 'function') ? null : require('node-fetch');\nconst fetchFn = (typeof fetch === 'function') ? fetch : (nf.default || nf);\nconst { Buffer } = require('buffer');\n\nfunction slugify(input) {\n  return String(input || '')\n    .toLowerCase()\n    .trim()\n    .replace(/[\"']/g, '')\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .slice(0, 120);\n}\n\nconst article = $('Build Safe Image Prompt').item.json;\nconst prediction = $json;\n\nconst hasOutput = Array.isArray(prediction.output) ? prediction.output.length > 0 : Boolean(prediction.output);\nif (!hasOutput) {\n  throw new Error('Replicate did not return an image yet (status: ' + (prediction.status || 'unknown') + '). Retry the workflow once the prediction is complete.');\n}\nif (prediction.status === 'failed' || prediction.status === 'canceled') {\n  throw new Error('Replicate prediction failed: ' + (prediction.error || prediction.status));\n}\n\nconst outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;\nif (!outputUrl) {\n  throw new Error('No image output URL from Replicate. Status: ' + prediction.status);\n}\n\nconst imageRes = await fetchFn(outputUrl);\nif (!imageRes.ok) {\n  throw new Error('Failed to download generated image (' + imageRes.status + ')');\n}\nconst imageBuffer = Buffer.from(await imageRes.arrayBuffer());\nconst contentType = imageRes.headers.get('content-type') || 'image/jpeg';\n\nconst apiVersion = $env.SANITY_API_VERSION || '2025-01-01';\nconst projectId = $env.SANITY_PROJECT_ID;\nconst dataset = $env.SANITY_DATASET || 'production';\nconst writeToken = $env.SANITY_WRITE_TOKEN;\nconst imageModel = $env.IMAGE_MODEL || 'black-forest-labs/flux-schnell';\n\nif (!projectId || !writeToken) {\n  throw new Error('Missing Sanity env vars (SANITY_PROJECT_ID / SANITY_WRITE_TOKEN)');\n}\n\nconst filename = slugify((article.slug && article.slug.current) || article.slug || article.title || 'article-hero') + '-hero.jpg';\nconst uploadUrl = 'https://' + projectId + '.api.sanity.io/v' + apiVersion + '/assets/images/' + dataset + '?filename=' + encodeURIComponent(filename);\n\nconst uploadRes = await fetchFn(uploadUrl, {\n  method: 'POST',\n  headers: {\n    Authorization: 'Bearer ' + writeToken,\n    'Content-Type': contentType,\n  },\n  body: imageBuffer,\n});\n\nif (!uploadRes.ok) {\n  const text = await uploadRes.text();\n  throw new Error('Sanity asset upload failed (' + uploadRes.status + '): ' + text);\n}\n\nconst uploadJson = await uploadRes.json();\nconst assetId = uploadJson && uploadJson.document && uploadJson.document._id;\nconst assetUrl = uploadJson && uploadJson.document && uploadJson.document.url;\n\nif (!assetId) {\n  throw new Error('Sanity asset upload succeeded but asset id missing');\n}\n\nconst altText = 'AI-generated editorial hero image for ' + article.title;\nconst mutateUrl = 'https://' + projectId + '.api.sanity.io/v' + apiVersion + '/data/mutate/' + dataset;\n\nconst patchBody = {\n  mutations: [\n    {\n      patch: {\n        id: article._id,\n        set: {\n          coverImage: {\n            _type: 'image',\n            asset: { _type: 'reference', _ref: assetId },\n            aiPrompt: String(article.imagePrompt || '').slice(0, 400),\n            modelVersion: imageModel,\n          },\n          coverImageAlt: 'AI-generated editorial hero image for ' + article.title,\n        },\n      },\n    },\n  ],\n};\n\nconst patchRes = await fetchFn(mutateUrl, {\n  method: 'POST',\n  headers: {\n    Authorization: 'Bearer ' + writeToken,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify(patchBody),\n});\n\nif (!patchRes.ok) {\n  const text = await patchRes.text();\n  throw new Error('Sanity article patch failed (' + patchRes.status + '): ' + text);\n}\n\nconst patchJson = await patchRes.json();\n\nreturn {\n  json: {\n    ...article,\n    replicatePredictionId: prediction.id,\n    imageOutputUrl: outputUrl,\n    sanityAssetId: assetId,\n    sanityAssetUrl: assetUrl,\n    patchResult: patchJson,\n    imageModel,\n  }\n};",
+        "language": "javaScript"
+      },
+      "id": "b2f01803-26bd-42a0-a4d0-c86e8ead59de",
+      "name": "Upload to Sanity + Patch article",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4448,
+        -480
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch drafts missing image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch drafts missing image": {
+      "main": [
+        [
+          {
+            "node": "Explode Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Explode Articles": {
+      "main": [
+        [
+          {
+            "node": "Build Safe Image Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Safe Image Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Image (Replicate)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Image (Replicate)": {
+      "main": [
+        [
+          {
+            "node": "Upload to Sanity + Patch article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Fetch drafts missing image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9217982f-a300-4413-ad5b-71cd88617649",
+  "meta": {
+    "instanceId": "cebe4ce12c17c9f22f40139f61ea1316109f5a06e53544a97428cf8c1031b675"
+  },
+  "id": "DJO82hLkI6S6wg0v",
+  "tags": []
+}

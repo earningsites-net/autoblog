@@ -1,0 +1,41 @@
+# Handoff: n8n workflow failures -> Crea sito blog autopopolato
+
+- Run at: 2026-02-27T14:14:47.335Z
+- Overall status: fail
+- Regressions: 3
+
+## Failed workflows
+
+- `infra/n8n/workflows/article_generation_worker.json` (article_generation_worker)
+  - Import: n8n update workflow failed (400) on /api/v1/workflows/q9jmiptYYBq6ieFd: {"message":"request/body must have required property 'settings'"}
+- `infra/n8n/workflows/brief_generation_worker.json` (brief_generation_worker)
+  - Import: n8n update workflow failed (400) on /api/v1/workflows/wXEiU2LVUe8VKH1B: {"message":"request/body must have required property 'settings'"}
+- `infra/n8n/workflows/budget_monitor_and_alerts.json` (budget_monitor_and_alerts)
+  - Import: n8n update workflow failed (400) on /api/v1/workflows/amySkarPGIdWDqgt: {"message":"request/body must have required property 'settings'"}
+- `infra/n8n/workflows/engine_pipeline_trigger.json` (engine_pipeline_trigger)
+  - Import: n8n update workflow failed (400) on /api/v1/workflows/BRHYtnr8g2rnmRD6: {"message":"request/body must have required property 'settings'"}
+- `infra/n8n/workflows/image_generation_worker.json` (image_generation_worker)
+  - Import: n8n update workflow failed (400) on /api/v1/workflows/DJO82hLkI6S6wg0v: {"message":"request/body must have required property 'settings'"}
+- `infra/n8n/workflows/internal_link_refresh.json` (internal_link_refresh)
+  - Import: n8n update workflow failed (400) on /api/v1/workflows/A7WbjGZV8VfmVzbp: {"message":"request/body must have required property 'settings'"}
+- `infra/n8n/workflows/prepopulate_bulk_runner.json` (prepopulate_bulk_runner)
+  - Import: n8n create workflow failed (400) on /api/v1/workflows: {"message":"request/body must have required property 'settings'"}
+- `infra/n8n/workflows/publish_scheduler_worker.json` (publish_scheduler_worker)
+  - Import: n8n update workflow failed (400) on /api/v1/workflows/5oaSXgkhGeUjlJyc: {"message":"request/body must have required property 'settings'"}
+- `infra/n8n/workflows/qa_scoring_and_publish_worker.json` (qa_scoring_and_publish_worker)
+  - Import: n8n update workflow failed (400) on /api/v1/workflows/6f0gfZAsQQILFj1U: {"message":"request/body must have required property 'settings'"}
+- `infra/n8n/workflows/topic_discovery_daily.json` (topic_discovery_daily)
+  - Import: n8n update workflow failed (400) on /api/v1/workflows/97aJSRReUBbQ3ePV: {"message":"request/body must have required property 'settings'"}
+
+## Requested actions
+
+1. Analizzare gli errori per workflow.
+2. Proporre fix mirati sui nodi/connessioni/config.
+3. Rieseguire il check locale con `npm run n8n:check:flows`.
+4. Confermare `overallStatus=pass` prima del deploy.
+
+## Regression delta
+
+- `infra/n8n/workflows/brief_generation_worker.json`: pass -> fail
+- `infra/n8n/workflows/internal_link_refresh.json`: pass -> fail
+- `infra/n8n/workflows/publish_scheduler_worker.json`: pass -> fail

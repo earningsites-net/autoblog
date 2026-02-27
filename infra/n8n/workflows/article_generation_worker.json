@@ -1,0 +1,289 @@
+{
+  "name": "article_generation_worker",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "article-subworkflow-trigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "ec16b27f-f0dd-4b39-b2bb-0f61128ff532",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        96,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = (typeof $json === 'object' && $json) ? $json : {};\nconst envPipelineMode = $env.PIPELINE_MODE_DEFAULT || 'prepopulate_bulk_direct';\nconst pipelineMode = input.pipelineMode || envPipelineMode;\nconst prepopulateBatchId = input.prepopulateBatchId || $env.PREPOPULATE_BATCH_ID || undefined;\nconst budgetMode = $env.BUDGET_MODE || 'normal';\nconst qualityTier = (budgetMode === 'economy' ? 'economy' : 'normal');\n\nreturn {\n  json: {\n    budgetMode,\n    qualityTier,\n    pipelineMode,\n    prepopulateBatchId,\n  }\n};",
+        "language": "javaScript",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "7eeb9e17-21e5-4081-976f-59785d24a16b",
+      "name": "Load Budget Mode",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"topicCandidate\\\" && status==\\\"brief_ready\\\"]|order(_updatedAt asc)[0...' + Number($env.ARTICLE_BATCH_SIZE || 3) + ']') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SANITY_READ_TOKEN}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3c3d5f2b-ea5a-4d1c-8a0e-bf2f623633c7",
+      "name": "Fetch brief_ready topics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        544,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = (items[0] && items[0].json) ? items[0].json : {};\nconst docs = Array.isArray(source.result) ? source.result : [];\nconst budget = $('Load Budget Mode').item.json || {};\n\nreturn docs\n  .filter((doc) => doc && typeof doc === 'object')\n  .map((doc) => ({\n    json: {\n      ...doc,\n      budgetMode: budget.budgetMode,\n      qualityTier: budget.qualityTier,\n      pipelineMode: budget.pipelineMode,\n      prepopulateBatchId: budget.prepopulateBatchId,\n    }\n  }));",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "159aa3c7-1f71-47e6-8cbb-d1c70ccede0c",
+      "name": "Explode Topics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.OPENAI_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: $env.TEXT_MODEL_DRAFT || 'gpt-4.1-mini',\n  input: [\n    {\n      role: 'system',\n      content: 'Return ONLY valid JSON (no markdown fences). EN-US. Home & DIY informational only, non-YMYL. 900-1400 words. JSON schema: {\"title\":string,\"slug\":string,\"excerpt\":string,\"bodyMarkdown\":string,\"faqItems\":[{\"question\":string,\"answer\":string}],\"seoTitle\":string,\"seoDescription\":string,\"disclaimerVariant\":\"general\"|\"safety\"}'\n    },\n    {\n      role: 'user',\n      content: 'Topic: ' + ($json.query || '') + '\\nKeyword: ' + ($json.targetKeyword || '') + '\\nBrief: ' + JSON.stringify($json.brief || {})\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "7b8f8810-2dd9-4bed-90c4-6f843aec2d7d",
+      "name": "Generate Article JSON",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1024,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function randomKey() {\n  return Math.random().toString(36).slice(2, 10);\n}\n\nfunction slugify(input) {\n  return String(input || '')\n    .toLowerCase()\n    .trim()\n    .replace(/[\"']/g, '')\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .slice(0, 120);\n}\n\nfunction stripCodeFences(text) {\n  const trimmed = String(text || '').trim();\n  const tick = String.fromCharCode(96);\n  const fence = tick + tick + tick;\n  if (!trimmed.startsWith(fence)) return trimmed;\n\n  const firstNl = trimmed.indexOf('\\n');\n  let content = firstNl >= 0 ? trimmed.slice(firstNl + 1) : trimmed.slice(fence.length);\n  if (content.endsWith(fence)) content = content.slice(0, -fence.length);\n  return content.trim();\n}\n\nfunction extractResponseText(resp) {\n  if (typeof resp.output_text === 'string' && resp.output_text.trim()) return resp.output_text;\n\n  if (Array.isArray(resp.output)) {\n    for (const item of resp.output) {\n      if (!Array.isArray(item.content)) continue;\n      for (const content of item.content) {\n        if (typeof content?.text === 'string' && content.text.trim()) return content.text;\n      }\n    }\n  }\n\n  if (Array.isArray(resp.choices) && typeof resp.choices[0]?.message?.content === 'string') {\n    return resp.choices[0].message.content;\n  }\n\n  throw new Error('Unable to extract text from OpenAI response');\n}\n\nfunction makeBlock(style, text) {\n  return {\n    _key: randomKey(),\n    _type: 'block',\n    style,\n    markDefs: [],\n    children: [{ _key: randomKey(), _type: 'span', marks: [], text }],\n  };\n}\n\nfunction markdownToPortableText(markdown) {\n  const lines = String(markdown || '').split(/\\r?\\n/);\n  const blocks = [];\n  let paragraph = [];\n\n  const pushParagraph = () => {\n    const text = paragraph.join(' ').trim();\n    if (!text) return;\n    blocks.push(makeBlock('normal', text));\n    paragraph = [];\n  };\n\n  for (const rawLine of lines) {\n    const line = rawLine.trim();\n\n    if (!line) {\n      pushParagraph();\n      continue;\n    }\n\n    if (line.startsWith('### ')) {\n      pushParagraph();\n      blocks.push(makeBlock('h3', line.replace(/^###\\s+/, '')));\n      continue;\n    }\n\n    if (line.startsWith('## ')) {\n      pushParagraph();\n      blocks.push(makeBlock('h2', line.replace(/^##\\s+/, '')));\n      continue;\n    }\n\n    if (line.startsWith('# ')) {\n      pushParagraph();\n      blocks.push(makeBlock('h2', line.replace(/^#\\s+/, '')));\n      continue;\n    }\n\n    if (line.startsWith('- ') || line.startsWith('* ')) {\n      pushParagraph();\n      blocks.push(makeBlock('normal', line.replace(/^[-*]\\s+/, '')));\n      continue;\n    }\n\n    paragraph.push(line);\n  }\n\n  pushParagraph();\n  return blocks;\n}\n\nconst topic = $('Explode Topics').item.json;\nconst rawText = extractResponseText($json);\nconst parsed = JSON.parse(stripCodeFences(rawText));\n\nconst title = parsed.title || topic.query || 'Untitled article';\nconst slug = slugify(parsed.slug || title);\nconst excerpt = String(parsed.excerpt || '').trim().slice(0, 320);\nconst body = Array.isArray(parsed.body) ? parsed.body : markdownToPortableText(parsed.bodyMarkdown || parsed.content || '');\nconst faqItems = Array.isArray(parsed.faqItems)\n  ? parsed.faqItems\n      .filter((x) => x && x.question && x.answer)\n      .slice(0, 5)\n      .map((x) => ({\n        _key: randomKey(),\n        _type: 'faqItem',\n        question: String(x.question).trim(),\n        answer: String(x.answer).trim(),\n      }))\n  : [];\n\nconst seoTitle = String(parsed.seoTitle || title).slice(0, 70);\nconst seoDescription = String(parsed.seoDescription || excerpt).slice(0, 170);\n\nconst wordCount = body\n  .flatMap((b) => (Array.isArray(b.children) ? b.children : []))\n  .map((c) => c.text || '')\n  .join(' ')\n  .split(/\\s+/)\n  .filter(Boolean).length;\n\nfunction hashString(value) {\n  const input = String(value || '');\n  let h = 0;\n  for (let i = 0; i < input.length; i += 1) {\n    h = ((h << 5) - h) + input.charCodeAt(i);\n    h |= 0;\n  }\n  return Math.abs(h);\n}\n\nconst categoryPool = [\n  'category-home-organization',\n  'category-cleaning-maintenance',\n  'category-garden-basics',\n];\nconst categorySeed = topic.targetKeyword || topic.query || title;\nconst categoryRef = categoryPool[hashString(categorySeed) % categoryPool.length];\n\nreturn {\n  json: {\n      ...topic,\n      title,\n      slug,\n      excerpt: excerpt || ('Practical ' + (topic.targetKeyword || 'home and DIY') + ' tips for beginners.'),\n      body,\n      faqItems,\n      seoTitle,\n      seoDescription,\n      disclaimerVariant: parsed.disclaimerVariant === 'safety' ? 'safety' : 'general',\n      wordCount,\n      readTimeMinutes: Math.max(1, Math.round(wordCount / 220)),\n      categoryRef,\n    },\n};",
+        "language": "javaScript",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "cb6325bb-8629-4bce-9d01-786ad39204a7",
+      "name": "Normalize Article Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  mutations: [\n    {\n      create: {\n        _type: 'article',\n        title: $json.title,\n        slug: { current: $json.slug },\n        excerpt: $json.excerpt,\n        category: { _type: 'reference', _ref: $json.categoryRef || 'category-home-organization' },\n        body: $json.body || [],\n        faqItems: $json.faqItems || [],\n        seoTitle: $json.seoTitle,\n        seoDescription: $json.seoDescription,\n        status: 'draft',\n        qaScore: 0,\n        qaFlags: [],\n        readTimeMinutes: $json.readTimeMinutes || 0,\n        disclaimerVariant: $json.disclaimerVariant || 'general',\n        pipelineMode: $json.pipelineMode || 'prepopulate_bulk_direct',\n        prepopulateBatchId: $json.prepopulateBatchId || undefined,\n        aiMeta: {\n          workflowRunId: String($execution.id),\n          budgetMode: $json.budgetMode,\n          qualityTier: $json.qualityTier,\n          textModelDraft: $env.TEXT_MODEL_DRAFT || 'gpt-4.1-mini',\n          pipelineMode: $json.pipelineMode || 'prepopulate_bulk_direct',\n          sourceTopicQuery: $json.query || '',\n          targetKeyword: $json.targetKeyword || ''\n        }\n      }\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "c6432318-efc6-480e-8108-febe8f2fc2ec",
+      "name": "Upsert Article (ai_draft)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1296,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  mutations: [\n    {\n      patch: {\n        id: $('Normalize Article Payload').item.json._id,\n        set: {\n          status: 'generated',\n          workflowRunId: String($execution.id)\n        }\n      }\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "mark-topic-generated",
+      "name": "Mark Topic Candidate Generated",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        760,
+        260
+      ],
+      "continueOnFail": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Budget Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Budget Mode": {
+      "main": [
+        [
+          {
+            "node": "Fetch brief_ready topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch brief_ready topics": {
+      "main": [
+        [
+          {
+            "node": "Explode Topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Explode Topics": {
+      "main": [
+        [
+          {
+            "node": "Generate Article JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Article JSON": {
+      "main": [
+        [
+          {
+            "node": "Normalize Article Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Article Payload": {
+      "main": [
+        [
+          {
+            "node": "Upsert Article (ai_draft)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Load Budget Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Article (ai_draft)": {
+      "main": [
+        [
+          {
+            "node": "Mark Topic Candidate Generated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "d1f1d64b-ef5f-4ddc-b23e-f0fdad6dd57a",
+  "meta": {
+    "instanceId": "cebe4ce12c17c9f22f40139f61ea1316109f5a06e53544a97428cf8c1031b675"
+  },
+  "id": "q9jmiptYYBq6ieFd",
+  "tags": []
+}

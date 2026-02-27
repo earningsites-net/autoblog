@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --paper: 246 241 233;
+  --ink: 31 27 22;
+  --rust: 224 135 72;
+  --sage: 130 153 117;
+  --coal: 34 31 27;
+}
+
+html {
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 10% 15%, rgba(224, 135, 72, 0.1), transparent 28%),
+    radial-gradient(circle at 85% 0%, rgba(130, 153, 117, 0.12), transparent 33%),
+    rgb(var(--paper));
+  color: rgb(var(--ink));
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

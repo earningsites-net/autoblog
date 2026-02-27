@@ -1,0 +1,408 @@
+{
+  "name": "qa_scoring_and_publish_worker",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "qa-subworkflow-trigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "2bac2b1f-85db-4a08-baac-1985f5630bef",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1184,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && status==\\\"draft\\\" && defined(coverImage)]|order(_updatedAt asc)[0...' + Number($env.QA_BATCH_SIZE || 20) + ']') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SANITY_READ_TOKEN}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b0476a6f-66d9-48b6-9971-db8a317c2640",
+      "name": "Fetch drafts_with_image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -944,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = (items[0] && items[0].json) ? items[0].json : {};\nconst docs = Array.isArray(source.result) ? source.result : [];\n\nreturn docs\n  .filter((doc) => doc && typeof doc === 'object')\n  .map((doc) => ({ json: doc }));",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "81d1389b-7c85-432e-a427-7da0eaebef4b",
+      "name": "Explode Articles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -704,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const bodyBlocks = Array.isArray($json.body) ? $json.body : [];\nconst bodyText = bodyBlocks\n  .flatMap((block) => (Array.isArray(block.children) ? block.children : []))\n  .map((child) => child.text || '')\n  .join(' ');\n\nconst wordCount = bodyText.split(/\\s+/).filter(Boolean).length;\nlet score = 100;\nconst flags = [];\n\nif (wordCount < 700) {\n  score -= 25;\n  flags.push('body_too_short');\n}\nif (wordCount > 1800) {\n  score -= 10;\n  flags.push('body_too_long');\n}\n\nconst seoTitle = String($json.seoTitle || '');\nconst seoDescription = String($json.seoDescription || '');\n\nif (seoTitle.length < 35 || seoTitle.length > 70) {\n  score -= 8;\n  flags.push('seo_title_length');\n}\nif (seoDescription.length < 90 || seoDescription.length > 170) {\n  score -= 8;\n  flags.push('seo_description_length');\n}\n\nif (!$json.coverImage || !$json.coverImageAlt) {\n  score -= 20;\n  flags.push('image_missing');\n}\n\nconst riskyPatterns = [/guarantee/i, /cure/i, /instant results/i, /structural repair/i, /licensed electrician/i];\nif (riskyPatterns.some((p) => p.test(String($json.title || '') + ' ' + String($json.excerpt || '') + ' ' + bodyText))) {\n  score -= 30;\n  flags.push('risky_claim_language');\n}\n\nconst finalScore = Math.max(0, score);\nconst readTimeMinutes = Math.max(1, Math.round(wordCount / 220));\n\nreturn {\n  json: {\n      ...$json,\n      qaScore: finalScore,\n      qaFlags: flags,\n      qaChecks: {\n        wordCount,\n        seoComplete: Boolean(seoTitle && seoDescription),\n        duplicateScore: 0,\n        readability: 0,\n      },\n      readTimeMinutes,\n    },\n};",
+        "language": "javaScript"
+      },
+      "id": "b5ae6f8d-8f6f-467e-9760-c389fb7d14e9",
+      "name": "Compute QA Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.qaScore}}",
+              "operation": "largerEqual",
+              "value2": 75
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a28b5315-ac89-4859-8b69-12717527f73d",
+      "name": "Score Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  mutations: [\n    {\n      patch: {\n        id: $json._id,\n        set: {\n          status: 'published',\n          publishedAt: new Date().toISOString(),\n          qaPassedAt: $json.qaPassedAt || new Date().toISOString(),\n          qaScore: $json.qaScore,\n          qaFlags: $json.qaFlags,\n          readTimeMinutes: $json.readTimeMinutes || 0,\n          pipelineMode: $json.pipelineMode || $json.aiMeta?.pipelineMode || 'prepopulate_bulk_direct',\n          prepopulateBatchId: $json.prepopulateBatchId || undefined\n        }\n      }\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "f4e4ca46-be7a-48b6-af4d-deea461cc6fd",
+      "name": "Patch + Publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  mutations: [\n    {\n      patch: {\n        id: $json._id,\n        set: {\n          status: 'rejected_auto',\n          qaScore: $json.qaScore,\n          qaFlags: $json.qaFlags,\n          readTimeMinutes: $json.readTimeMinutes || 0,\n          pipelineMode: $json.pipelineMode || $json.aiMeta?.pipelineMode || 'prepopulate_bulk_direct'\n        }\n      }\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "48c9e27e-8077-41d4-8fec-f80822ddb3a6",
+      "name": "Patch rejected_auto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        0,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/revalidate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-revalidate-secret",
+              "value": "={{$env.WEB_REVALIDATE_SECRET}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  type: 'article',\n  slug: $('Compute QA Score').item.json.slug?.current || $('Compute QA Score').item.json.slug\n}) }}",
+        "options": {}
+      },
+      "id": "57155cf3-25fc-4c48-a32b-5ab9f51f67b9",
+      "name": "Call Web Revalidate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        240,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const nf = (typeof fetch === 'function') ? null : require('node-fetch');\nconst fetchFn = (typeof fetch === 'function') ? fetch : (nf.default || nf);\n\nconst source = $('Compute QA Score').item.json;\nconst qaScore = Number(source.qaScore || 0);\nconst qaFlags = Array.isArray(source.qaFlags) ? source.qaFlags : [];\nconst qaChecks = source.qaChecks || {};\nconst pipelineMode = source.pipelineMode || (source.aiMeta && source.aiMeta.pipelineMode) || 'prepopulate_bulk_direct';\nconst decision = qaScore < 75 ? 'reject' : 'publish';\n\nconst apiVersion = $env.SANITY_API_VERSION || '2025-01-01';\nconst projectId = $env.SANITY_PROJECT_ID;\nconst dataset = $env.SANITY_DATASET || 'production';\nconst writeToken = $env.SANITY_WRITE_TOKEN;\n\nif (!projectId || !writeToken) {\n  throw new Error('Missing Sanity env vars for qaLog');\n}\n\nconst mutateUrl = 'https://' + projectId + '.api.sanity.io/v' + apiVersion + '/data/mutate/' + dataset;\nconst body = {\n  mutations: [\n    {\n      create: {\n        _type: 'qaLog',\n        article: source._id ? { _type: 'reference', _ref: source._id } : undefined,\n        workflowRunId: String($execution.id),\n        score: qaScore,\n        decision,\n        flags: qaFlags.concat(pipelineMode === 'steady_scheduled' && qaScore >= 75 ? ['queued_for_scheduler'] : []),\n        checks: {\n          wordCount: qaChecks.wordCount || 0,\n          seoComplete: Boolean(qaChecks.seoComplete),\n          duplicateScore: Number(qaChecks.duplicateScore || 0),\n          readability: Number(qaChecks.readability || 0),\n        },\n        createdAt: new Date().toISOString(),\n      },\n    },\n  ],\n};\n\nconst res = await fetchFn(mutateUrl, {\n  method: 'POST',\n  headers: {\n    Authorization: 'Bearer ' + writeToken,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify(body),\n});\n\nif (!res.ok) {\n  const text = await res.text();\n  throw new Error('qaLog create failed (' + res.status + '): ' + text);\n}\n\nconst json = await res.json();\nreturn { json: { ...$json, qaLogDecision: decision, qaLogScore: qaScore, qaLogResult: json } };",
+        "language": "javaScript"
+      },
+      "id": "f37a1526-9198-4460-b138-97da12725676",
+      "name": "Write QA Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        192
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ ($json.pipelineMode || $json.aiMeta?.pipelineMode || 'prepopulate_bulk_direct') }}",
+              "operation": "equal",
+              "value2": "steady_scheduled"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "publish-mode-gate",
+      "name": "Publish Mode Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        280,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  mutations: [\n    {\n      patch: {\n        id: $json._id,\n        set: {\n          status: 'ready_to_publish',\n          qaPassedAt: new Date().toISOString(),\n          qaScore: $json.qaScore,\n          qaFlags: $json.qaFlags,\n          readTimeMinutes: $json.readTimeMinutes || 0,\n          pipelineMode: 'steady_scheduled'\n        }\n      }\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "patch-ready-to-publish",
+      "name": "Patch ready_to_publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        520,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch drafts_with_image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch drafts_with_image": {
+      "main": [
+        [
+          {
+            "node": "Explode Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Explode Articles": {
+      "main": [
+        [
+          {
+            "node": "Compute QA Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute QA Score": {
+      "main": [
+        [
+          {
+            "node": "Score Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Gate": {
+      "main": [
+        [
+          {
+            "node": "Publish Mode Gate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Patch rejected_auto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patch + Publish": {
+      "main": [
+        [
+          {
+            "node": "Call Web Revalidate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write QA Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patch rejected_auto": {
+      "main": [
+        [
+          {
+            "node": "Write QA Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Web Revalidate": {
+      "main": [
+        []
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Fetch drafts_with_image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish Mode Gate": {
+      "main": [
+        [
+          {
+            "node": "Patch ready_to_publish",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Patch + Publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patch ready_to_publish": {
+      "main": [
+        [
+          {
+            "node": "Write QA Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "c1b0c821-0fd2-4497-8db7-5bba60ebab12",
+  "meta": {
+    "instanceId": "cebe4ce12c17c9f22f40139f61ea1316109f5a06e53544a97428cf8c1031b675"
+  },
+  "id": "6f0gfZAsQQILFj1U",
+  "tags": []
+}

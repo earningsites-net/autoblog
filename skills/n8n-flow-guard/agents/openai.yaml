@@ -1,0 +1,4 @@
+interface:
+  display_name: "Crea skill controllo flussi"
+  short_description: "Import e test dei workflow n8n"
+  default_prompt: "Quando comunico modifiche ai workflow n8n, importa automaticamente i flow changed-only. Quando chiedo un test, esegui import + smoke check e riporta i risultati dal report."

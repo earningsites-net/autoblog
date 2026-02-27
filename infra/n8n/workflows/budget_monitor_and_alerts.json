@@ -1,0 +1,20 @@
+{
+  "name": "budget_monitor_and_alerts",
+  "active": false,
+  "nodes": [
+    {"id": "schedule", "name": "Daily Trigger", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1, "position": [220, 240], "parameters": {"rule": {"interval": [{"field": "hours", "hoursInterval": 24}]}}},
+    {"id": "fetchRuns", "name": "Fetch generationRun metrics", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [470, 240], "parameters": {"method": "GET", "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/query/{{$env.SANITY_DATASET || 'production'}}?query=*[_type==\"generationRun\" && dateTime(startedAt) >= dateTime(string::split(now(),\"T\")[0] + \"T00:00:00Z\")]", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{$env.SANITY_READ_TOKEN}}"}]}}},
+    {"id": "computeBudget", "name": "Compute Burn Rate + Quota", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [730, 240], "parameters": {"language": "JavaScript", "jsCode": "const runs = $json.result || []; const spent = runs.reduce((sum, r) => sum + Number(r.costEstimateUsd || 0), 0); const cap = Number($env.MONTHLY_BUDGET_USD || 100); const ratio = cap ? spent / cap : 0; let budgetMode = 'normal'; let publishQuota = Number($env.PUBLISH_QUOTA_MAX || 8); if (ratio >= 1) { budgetMode = 'stop'; publishQuota = 0; } else if (ratio >= 0.85) { budgetMode = 'throttle'; publishQuota = Number($env.PUBLISH_QUOTA_MIN || 4); } else if (ratio >= 0.60) { budgetMode = 'economy'; publishQuota = Math.max(Number($env.PUBLISH_QUOTA_MIN || 4), Number($env.PUBLISH_QUOTA_MAX || 8) - 2); } return [{ json: { spentUsd: spent, capUsd: cap, ratio, budgetMode, publishQuota } }];"}},
+    {"id": "alertGate", "name": "Need Alert?", "type": "n8n-nodes-base.if", "typeVersion": 1, "position": [990, 240], "parameters": {"conditions": {"string": [{"value1": "={{$json.budgetMode}}", "operation": "notEqual", "value2": "normal"}]}}},
+    {"id": "telegram", "name": "Telegram Alert", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1260, 160], "parameters": {"method": "POST", "url": "=https://api.telegram.org/bot{{$env.TELEGRAM_BOT_TOKEN}}/sendMessage", "sendBody": true, "specifyBody": "json", "jsonBody": "={\"chat_id\": $env.TELEGRAM_CHAT_ID, \"text\": `AutoBlog budget mode: ${$json.budgetMode} | spent $${$json.spentUsd.toFixed(2)} / $${$json.capUsd} | quota ${$json.publishQuota}/day`}"}},
+    {"id": "storeMode", "name": "Persist budget_mode (Settings/Run)", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1260, 320], "parameters": {"language": "JavaScript", "jsCode": "// TODO: write budget mode to Sanity siteSettings or KV used by worker workflows\nreturn items;"}}
+  ],
+  "connections": {
+    "Daily Trigger": {"main": [[{"node": "Fetch generationRun metrics", "type": "main", "index": 0}]]},
+    "Fetch generationRun metrics": {"main": [[{"node": "Compute Burn Rate + Quota", "type": "main", "index": 0}]]},
+    "Compute Burn Rate + Quota": {"main": [[{"node": "Need Alert?", "type": "main", "index": 0}]]},
+    "Need Alert?": {"main": [[{"node": "Telegram Alert", "type": "main", "index": 0}], [{"node": "Persist budget_mode (Settings/Run)", "type": "main", "index": 0}]]},
+    "Telegram Alert": {"main": [[{"node": "Persist budget_mode (Settings/Run)", "type": "main", "index": 0}]]}
+  },
+  "meta": {"template": true, "pipelineStage": "budget_monitor"}
+}

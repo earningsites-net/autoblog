@@ -1,0 +1,18 @@
+{
+  "name": "brief_generation_worker",
+  "active": false,
+  "nodes": [
+    {"id": "schedule", "name": "Schedule Trigger", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1, "position": [240, 240], "parameters": {"rule": {"interval": [{"field": "minutes", "minutesInterval": 10}]}}},
+    {"id": "fetchTopics", "name": "Fetch queued topics (Sanity)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [480, 240], "parameters": {"method": "GET", "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/query/{{$env.SANITY_DATASET || 'production'}}?query=*[_type==\"topicCandidate\" && status==\"queued\"]|order(_updatedAt asc)[0...5]", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{$env.SANITY_READ_TOKEN}}"}]}}},
+    {"id": "explodeResults", "name": "Explode Results", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [720, 240], "parameters": {"language": "JavaScript", "jsCode": "const docs = $json.result || []; return docs.map(doc => ({ json: doc }));"}},
+    {"id": "generateBrief", "name": "Generate Brief", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [960, 240], "parameters": {"method": "POST", "url": "https://api.openai.com/v1/responses", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{$env.OPENAI_API_KEY}}"}]}, "sendBody": true, "specifyBody": "json", "jsonBody": "={\"model\": \"{{$env.TEXT_MODEL_DRAFT || 'gpt-4.1-mini'}}\", \"input\": [{\"role\":\"system\",\"content\":\"Return JSON brief with angle, audience, H2/H3 outline, faq ideas, entities. Home & DIY informational only.\"},{\"role\":\"user\",\"content\":\"Topic: {{$json.query}} | keyword: {{$json.targetKeyword}}\"}]}"}},
+    {"id": "patchTopic", "name": "Patch topic -> brief_ready", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1210, 240], "parameters": {"method": "POST", "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"}]}, "sendBody": true, "specifyBody": "json", "jsonBody": "={\"mutations\":[{\"patch\":{\"id\":$json._id,\"set\":{\"status\":\"brief_ready\",\"workflowRunId\":$execution.id,\"brief\":$json.brief || {} }}}]}"}}
+  ],
+  "connections": {
+    "Schedule Trigger": {"main": [[{"node": "Fetch queued topics (Sanity)", "type": "main", "index": 0}]]},
+    "Fetch queued topics (Sanity)": {"main": [[{"node": "Explode Results", "type": "main", "index": 0}]]},
+    "Explode Results": {"main": [[{"node": "Generate Brief", "type": "main", "index": 0}]]},
+    "Generate Brief": {"main": [[{"node": "Patch topic -> brief_ready", "type": "main", "index": 0}]]}
+  },
+  "meta": {"template": true, "pipelineStage": "brief_generation"}
+}

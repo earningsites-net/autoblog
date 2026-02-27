@@ -1,0 +1,96 @@
+{
+  "name": "topic_discovery_daily",
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 260],
+      "parameters": {
+        "rule": {"interval": [{"field": "hours", "hoursInterval": 12}]}
+      }
+    },
+    {
+      "id": "setRuntime",
+      "name": "Set Runtime Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [460, 260],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"name": "workflowRunId", "value": "={{$now.toISO() + '-topic-discovery'}}", "type": "string"},
+            {"name": "locale", "value": "en-US", "type": "string"},
+            {"name": "targetPerDay", "value": "={{Number($env.TOPIC_DISCOVERY_TARGET_PER_DAY || 20)}}", "type": "number"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "seedTopics",
+      "name": "Seed Topics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 260],
+      "parameters": {
+        "language": "JavaScript",
+        "jsCode": "const seeds = ['entryway organization','weekly kitchen reset','spring patio cleanup checklist','small garden bed layout'];\nreturn seeds.map((query, i) => ({ json: { ...$json, seedIndex: i, query } }));"
+      }
+    },
+    {
+      "id": "expandKeywords",
+      "name": "Expand Keywords (LLM/Search)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [920, 260],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{$env.OPENAI_API_KEY}}"}]},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\": \"{{$env.TEXT_MODEL_DRAFT || 'gpt-4.1-mini'}}\", \"input\": [{\"role\":\"system\",\"content\":\"Return JSON with keyword suggestions, evergreen score, and risk score for Home & DIY informational topics. Exclude YMYL and hazardous tasks.\"},{\"role\":\"user\",\"content\":\"Topic seed: {{$json.query}}\"}]}"
+      }
+    },
+    {
+      "id": "normalizeCandidates",
+      "name": "Normalize + Dedup + Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 260],
+      "parameters": {
+        "language": "JavaScript",
+        "jsCode": "// TODO: parse provider response and normalize to topicCandidate payloads\n// Emit queued candidates with targetKeyword, supportingKeywords, evergreenScore, riskScore, templateType\nreturn items;"
+      }
+    },
+    {
+      "id": "writeSanity",
+      "name": "Upsert topicCandidate in Sanity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1410, 260],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"}]},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"mutations\": [{\"createOrReplace\": {\"_type\": \"topicCandidate\", \"_id\": $json._id || `topic-${Date.now()}-${Math.random()}` , ...$json}}]}"
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {"main": [[{"node": "Set Runtime Context", "type": "main", "index": 0}]]},
+    "Set Runtime Context": {"main": [[{"node": "Seed Topics", "type": "main", "index": 0}]]},
+    "Seed Topics": {"main": [[{"node": "Expand Keywords (LLM/Search)", "type": "main", "index": 0}]]},
+    "Expand Keywords (LLM/Search)": {"main": [[{"node": "Normalize + Dedup + Score", "type": "main", "index": 0}]]},
+    "Normalize + Dedup + Score": {"main": [[{"node": "Upsert topicCandidate in Sanity", "type": "main", "index": 0}]]}
+  },
+  "pinData": {},
+  "meta": {"template": true, "pipelineStage": "topic_discovery"}
+}
