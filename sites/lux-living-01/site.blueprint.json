@@ -31,25 +31,25 @@
   "locale": "en-US",
   "theme": {
     "palette": {
-      "paper": "#ece6f9",
-      "ink": "#f4f0ff",
-      "rust": "#ff6633",
-      "sage": "#36c4a3",
-      "coal": "#111422"
+      "paper": "#fefdfb",
+      "ink": "#0c0a09",
+      "rust": "#c3a54b",
+      "sage": "#597d76",
+      "coal": "#211c1c"
     },
     "typography": {
-      "headingFont": "Baloo 2",
-      "bodyFont": "Nunito"
+      "headingFont": "Playfair Display",
+      "bodyFont": "Cormorant Garamond"
     },
-    "visualStyle": "dark playful editorial with neon accents and bold rounded geometry"
+    "visualStyle": "refined luxury editorial with high contrast and restrained accents"
   },
   "themeProfile": {
-    "tone": "playful",
-    "recipe": "arcade_play_dark",
-    "layoutDensity": "balanced",
-    "cardStyle": "soft",
-    "accentIntensity": "vivid",
-    "backgroundStyle": "pattern"
+    "tone": "luxury",
+    "recipe": "editorial_luxury",
+    "layoutDensity": "airy",
+    "cardStyle": "sharp",
+    "accentIntensity": "soft",
+    "backgroundStyle": "grain"
   },
   "niche": {
     "primaryNiche": "Luxury Living",

@@ -11,6 +11,7 @@ import {
   paginateArticles
 } from '@web/lib/content';
 import { absoluteUrl } from '@web/lib/site';
+import { getSiteCopy } from '@web/lib/site-copy';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 type Props = {
@@ -38,6 +39,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function CategoryPage({ params, searchParams }: Props) {
+  const copy = getSiteCopy();
   const theme = getActiveSiteTheme();
   const isDark = theme.isDark;
   const { slug } = await params;
@@ -72,9 +74,9 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
       {pagination.items.length === 0 ? (
         <div className={emptyStateClass}>
-          <p className="font-display text-2xl text-ink">No published guides yet</p>
+          <p className="font-display text-2xl text-ink">{copy.category.emptyTitle}</p>
           <p className="mt-2 text-sm leading-6 text-ink/75">
-            The automation pipeline can publish to this category as soon as topic candidates pass QA and image generation.
+            {copy.category.emptyDescription}
           </p>
         </div>
       ) : (

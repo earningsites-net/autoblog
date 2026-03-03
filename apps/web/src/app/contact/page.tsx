@@ -33,7 +33,7 @@ export default function ContactPage() {
       <section className="grid gap-6 lg:grid-cols-2">
         <div className={cardClass}>
           <h2 className={titleClass}>Business Contact</h2>
-          <p className={textClass}>Replace this placeholder with your preferred email address before launch or handoff.</p>
+          <p className={textClass}>Use your preferred email address here so readers can contact you directly.</p>
           <p className={emailClass}>hello@example.com</p>
         </div>
         <div className={cardClass}>

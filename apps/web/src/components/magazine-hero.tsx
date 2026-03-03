@@ -2,6 +2,7 @@ import { ArticleCard } from './article-card';
 import type { Article } from '@web/lib/types';
 import Link from 'next/link';
 import { siteConfig } from '@web/lib/site';
+import { getSiteCopy } from '@web/lib/site-copy';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 export function MagazineHero({ articles }: { articles: Article[] }) {
@@ -9,20 +10,21 @@ export function MagazineHero({ articles }: { articles: Article[] }) {
   const recipe = theme.recipe;
   const isNoirSharp = recipe === 'noir_luxury_dark';
   const isArcadeSoft = recipe === 'arcade_play_dark';
+  const copy = getSiteCopy();
   const [main, ...rest] = articles;
 
   if (!main) {
     return (
       <section className={theme.classes.pageHero}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-rust">Editorial Engine Ready</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-rust">{copy.magazineHeroEmpty.eyebrow}</p>
         <h1 className="mt-4 max-w-2xl font-display text-4xl leading-tight text-ink sm:text-5xl">
-          {`AI-Powered ${siteConfig.niche} Content, Ready to Publish`}
+          {copy.magazineHeroEmpty.title}
         </h1>
         <p className="mt-4 max-w-2xl text-base leading-7 text-ink/75">
-          Connect Sanity + n8n to start publishing automated evergreen guides. This layout already includes SEO metadata, schema, and ad placeholders.
+          {copy.magazineHeroEmpty.description}
         </p>
         <Link href="/categories" className={`mt-8 ${theme.classes.primaryButton}`}>
-          Browse categories
+          {copy.magazineHeroEmpty.ctaLabel}
         </Link>
       </section>
     );

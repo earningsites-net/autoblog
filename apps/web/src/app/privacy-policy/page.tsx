@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import { PageHero } from '@web/components/page-hero';
+import { getSiteCopy } from '@web/lib/site-copy';
+
+const copy = getSiteCopy();
 
 export const metadata: Metadata = {
   title: 'Privacy Policy',
-  description: 'Privacy policy for the AI-assisted Home & DIY content site.'
+  description: copy.privacy.metadataDescription
 };
 
 export default function PrivacyPolicyPage() {

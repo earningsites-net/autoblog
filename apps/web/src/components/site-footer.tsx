@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import { siteConfig } from '@web/lib/site';
+import { getSiteCopy } from '@web/lib/site-copy';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 export function SiteFooter() {
   const theme = getActiveSiteTheme();
   const recipe = theme.recipe;
+  const copy = getSiteCopy();
 
   if (recipe === 'warm_wellness') {
     return (
@@ -15,7 +17,7 @@ export function SiteFooter() {
             <div>
               <p className="font-display text-3xl text-paper">{siteConfig.name}</p>
               <p className="mt-3 max-w-md text-sm leading-7 text-paper/78">
-                Gentle, practical beauty and wellness guidance designed for consistent routines and measurable progress.
+                {copy.footer.wellnessDescription}
               </p>
             </div>
             <div>
@@ -51,7 +53,7 @@ export function SiteFooter() {
             <div>
               <p className="font-display text-xl">{siteConfig.name}</p>
               <p className="mt-2 max-w-md text-sm leading-6 text-paper/75">
-                Automated editorial pipeline with deterministic publishing and low-touch operations.
+                {copy.footer.technicalDescription}
               </p>
             </div>
             <div>
@@ -85,7 +87,7 @@ export function SiteFooter() {
             <div>
               <p className="font-display text-3xl">{siteConfig.name}</p>
               <p className="mt-4 max-w-md text-sm leading-7 text-paper/75">
-                Premium editorial automation designed for elegant, evergreen, and scalable content businesses.
+                {copy.footer.editorialDescription}
               </p>
             </div>
             <div>
@@ -119,8 +121,7 @@ export function SiteFooter() {
         <div>
           <p className="font-display text-2xl">{siteConfig.name}</p>
           <p className="mt-3 max-w-md text-sm leading-6 text-paper/75">
-            AI-assisted editorial publishing for practical, everyday {siteConfig.niche} content. Built for scalable automation,
-            clean UX, and ad-ready monetization.
+            {copy.footer.defaultDescription}
           </p>
         </div>
         <div>

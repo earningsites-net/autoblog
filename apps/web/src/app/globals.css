@@ -206,6 +206,26 @@ html[data-theme-recipe='arcade_play_dark'] body::before {
   will-change: transform, opacity;
 }
 
+.route-loading-overlay {
+  background: rgb(var(--paper));
+}
+
+.route-loading-spinner {
+  color: rgb(var(--ink));
+}
+
+html[data-theme-recipe='noir_luxury_dark'] .route-loading-overlay,
+html[data-theme-recipe='midnight_wellness_dark'] .route-loading-overlay,
+html[data-theme-recipe='arcade_play_dark'] .route-loading-overlay {
+  background: rgb(var(--coal));
+}
+
+html[data-theme-recipe='noir_luxury_dark'] .route-loading-spinner,
+html[data-theme-recipe='midnight_wellness_dark'] .route-loading-spinner,
+html[data-theme-recipe='arcade_play_dark'] .route-loading-spinner {
+  color: rgb(var(--paper));
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

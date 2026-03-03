@@ -8,7 +8,7 @@ export const siteConfig = {
   description:
     process.env.NEXT_PUBLIC_SITE_DESCRIPTION ||
     activeBlueprint?.siteDescription ||
-    'AI-assisted Home & DIY magazine featuring practical, evergreen guides for organization, maintenance, decor, and seasonal prep.',
+    'A practical lifestyle magazine with clear, evergreen guides, ideas, and inspiration for everyday living.',
   url: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
   locale: process.env.NEXT_PUBLIC_DEFAULT_LOCALE || activeBlueprint?.locale || 'en-US',
   niche: activeBlueprint?.niche?.primaryNiche || 'Home & DIY',

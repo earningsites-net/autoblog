@@ -16,6 +16,7 @@ import {
 import './globals.css';
 import { SiteHeader } from '@web/components/site-header';
 import { SiteFooter } from '@web/components/site-footer';
+import { RouteLoadingOverlay } from '@web/components/route-loading-overlay';
 import { defaultMetadata } from '@web/lib/seo';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
@@ -124,6 +125,7 @@ gtag('config', '${gaId}');`}
           <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
           <SiteFooter />
         </div>
+        <RouteLoadingOverlay />
       </body>
     </html>
   );

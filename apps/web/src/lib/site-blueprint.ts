@@ -61,6 +61,7 @@ type SiteBlueprintLite = {
     allowedSubtopics?: string[];
     excludedSubtopics?: string[];
   };
+  uiCopy?: Record<string, unknown>;
 };
 
 function candidateBlueprintPaths() {

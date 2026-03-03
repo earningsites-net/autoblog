@@ -33,8 +33,8 @@ export function SpotlightCarousel({ articles, subtle = false }: { articles: Arti
     <section className={frameClass}>
       <div className="flex items-center justify-between gap-4 px-5 py-4">
         <div>
-          <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentClass}`}>Editorial Pulse</p>
-          <p className={`text-xs ${metaClass}`}>{subtle ? 'Low-profile ticker near footer' : 'A subtle motion rail to surface fresh content'}</p>
+          <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentClass}`}>More to Explore</p>
+          <p className={`text-xs ${metaClass}`}>{subtle ? 'Quick picks near the footer to keep browsing' : 'A rotating rail of useful reads to discover next'}</p>
         </div>
       </div>
       <div className="overflow-hidden pb-4">

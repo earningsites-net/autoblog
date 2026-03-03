@@ -2,7 +2,7 @@
   "version": 1,
   "siteSlug": "hammer-hearth",
   "brandName": "Hammer & Hearth",
-  "siteDescription": "AI-assisted Home & DIY magazine featuring practical, evergreen guides for organization, maintenance, decor, and seasonal prep.",
+  "siteDescription": "A practical lifestyle magazine with evergreen guides for organization, maintenance, decor, and seasonal projects.",
   "businessMode": "transfer_first",
   "delivery": {
     "handoffEnabled": true,

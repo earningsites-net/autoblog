@@ -18,11 +18,15 @@ function splitInThreeLanes(items: Article[]) {
 export function ArticleCarouselColumns({
   articles,
   isDark,
-  recipe
+  recipe,
+  carouselEyebrow,
+  carouselTitle
 }: {
   articles: Article[];
   isDark: boolean;
   recipe: string;
+  carouselEyebrow: string;
+  carouselTitle: string;
 }) {
   const source = articles.slice(0, 12);
   const lanes = useMemo(() => splitInThreeLanes(source), [source]);
@@ -59,8 +63,8 @@ export function ArticleCarouselColumns({
   return (
     <section className="space-y-5">
       <div>
-        <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentClass}`}>Trending Lanes</p>
-        <h2 className="mt-2 font-display text-3xl text-ink sm:text-4xl">Live article carousel</h2>
+        <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentClass}`}>{carouselEyebrow}</p>
+        <h2 className="mt-2 font-display text-3xl text-ink sm:text-4xl">{carouselTitle}</h2>
       </div>
       <div className="grid gap-5 lg:grid-cols-3">
         {lanes.map((lane, laneIndex) => {

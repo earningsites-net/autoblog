@@ -123,9 +123,9 @@ export function PageHero({ eyebrow, title, description, subtitle, actions, backg
           </div>
           <div className="space-y-2 rounded-lg border border-black/10 bg-paper/60 p-4 text-xs text-ink/70">
             <p className="font-semibold uppercase tracking-[0.12em] text-ink/60">Pipeline</p>
-            <p>Discovery → Generation → Image → QA → Publish</p>
-            <p className="font-semibold uppercase tracking-[0.12em] text-ink/60">Mode</p>
-            <p>Budget-aware, low-touch operations</p>
+            <p>Discover → Learn → Apply</p>
+            <p className="font-semibold uppercase tracking-[0.12em] text-ink/60">Focus</p>
+            <p>Practical guides and clear next steps</p>
           </div>
         </div>
       </section>

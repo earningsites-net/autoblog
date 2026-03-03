@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import type { Article } from '@web/lib/types';
 import { formatDate } from '@web/lib/site';
+import { getSiteCopy } from '@web/lib/site-copy';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 export function LatestDuoSection({ articles }: { articles: Article[] }) {
@@ -10,6 +11,7 @@ export function LatestDuoSection({ articles }: { articles: Article[] }) {
   const recipe = theme.recipe;
   const isNoirSharp = recipe === 'noir_luxury_dark';
   const isArcadeSoft = recipe === 'arcade_play_dark';
+  const copy = getSiteCopy();
   const picks = articles.slice(0, 2);
   if (!picks.length) return null;
 
@@ -32,8 +34,8 @@ export function LatestDuoSection({ articles }: { articles: Article[] }) {
     <section className="space-y-5">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentClass}`}>Latest</p>
-          <h2 className="mt-2 font-display text-3xl text-ink sm:text-4xl">Fresh evergreen guides</h2>
+          <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentClass}`}>{copy.home.latestEyebrow}</p>
+          <h2 className="mt-2 font-display text-3xl text-ink sm:text-4xl">{copy.home.latestTitle}</h2>
         </div>
         <Link href="/categories" className={viewAllClass}>
           View all categories →

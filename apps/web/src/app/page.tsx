@@ -9,6 +9,7 @@ import { PageHero } from '@web/components/page-hero';
 import { SpotlightCarousel } from '@web/components/spotlight-carousel';
 import { getAllCategories, getFeaturedArticles, getPublishedArticles } from '@web/lib/content';
 import { siteConfig } from '@web/lib/site';
+import { getSiteCopy } from '@web/lib/site-copy';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 const HERO_BANNER_FALLBACK: Record<string, string> = {
@@ -28,6 +29,7 @@ export default async function HomePage() {
   const isDark = theme.isDark;
   const isNoirSharp = recipe === 'noir_luxury_dark';
   const isArcadeSoft = recipe === 'arcade_play_dark';
+  const copy = getSiteCopy();
   const [featured, articles, categories] = await Promise.all([
     getFeaturedArticles(),
     getPublishedArticles(),
@@ -128,7 +130,7 @@ export default async function HomePage() {
                 Explore categories
               </Link>
               <Link href="/about" className={heroSecondaryButtonClass}>
-                How the site works
+                About this magazine
               </Link>
             </div>
           }
@@ -194,14 +196,20 @@ export default async function HomePage() {
 
       <AdSlot name="Home Hero In-feed" minHeight={180} />
 
-      <ArticleCarouselColumns articles={laneCarouselItems} isDark={isDark} recipe={recipe} />
+      <ArticleCarouselColumns
+        articles={laneCarouselItems}
+        isDark={isDark}
+        recipe={recipe}
+        carouselEyebrow={copy.home.carouselEyebrow}
+        carouselTitle={copy.home.carouselTitle}
+      />
 
       <section className="space-y-5">
         <div>
-          <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentLabelClass}`}>Topical Clusters</p>
-          <h2 className="mt-2 font-display text-3xl text-ink sm:text-4xl">{`Built for scalable ${siteConfig.niche} publishing`}</h2>
+          <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentLabelClass}`}>{copy.home.clustersEyebrow}</p>
+          <h2 className="mt-2 font-display text-3xl text-ink sm:text-4xl">{copy.home.clustersTitle}</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/75">
-            Categories are structured for evergreen coverage, internal linking, and automated article routing via CMS and n8n workflows.
+            {copy.home.clustersDescription}
           </p>
         </div>
         <CategoryGrid categories={categories} />
@@ -213,8 +221,8 @@ export default async function HomePage() {
 
       <section className="space-y-5">
         <div>
-          <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentLabelClass}`}>More Stories</p>
-          <h2 className="mt-2 font-display text-3xl text-ink sm:text-4xl">Editorial picks in grid</h2>
+          <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentLabelClass}`}>{copy.home.moreStoriesEyebrow}</p>
+          <h2 className="mt-2 font-display text-3xl text-ink sm:text-4xl">{copy.home.moreStoriesTitle}</h2>
         </div>
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {latestGrid.map((article) => (
@@ -226,20 +234,20 @@ export default async function HomePage() {
       <section className={notePanelClass}>
         <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
           <div>
-            <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentLabelClass}`}>Operational Note</p>
-            <h2 className="mt-2 font-display text-2xl text-ink">Budget-aware automation mode</h2>
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentLabelClass}`}>{copy.home.noteEyebrow}</p>
+            <h2 className="mt-2 font-display text-2xl text-ink">{copy.home.noteTitle}</h2>
             <p className="mt-3 text-sm leading-6 text-ink/75">
-              The publishing engine is designed for 20+ topic candidates/day, but the initial publish quota is throttled to preserve sub-$100 monthly operating cost.
+              {copy.home.noteDescription}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className={metricTileClass}>
-              <p className={metricLabelClass}>Target quota</p>
-              <p className="font-display text-xl text-ink">4-8/day</p>
+              <p className={metricLabelClass}>{copy.home.metricPrimaryLabel}</p>
+              <p className="font-display text-xl text-ink">{categories.length}</p>
             </div>
             <div className={metricTileClass}>
-              <p className={metricLabelClass}>Locale</p>
-              <p className="font-display text-xl text-ink">{siteConfig.locale}</p>
+              <p className={metricLabelClass}>{copy.home.metricSecondaryLabel}</p>
+              <p className="font-display text-xl text-ink">{articles.length}</p>
             </div>
           </div>
         </div>
