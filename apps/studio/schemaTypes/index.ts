@@ -4,6 +4,7 @@ import { internalLinkType } from './objects/internalLink';
 import { articleType } from './documents/article';
 import { categoryType } from './documents/category';
 import { generationRunType } from './documents/generationRun';
+import { legalPageType } from './documents/legalPage';
 import { promptPresetType } from './documents/promptPreset';
 import { qaLogType } from './documents/qaLog';
 import { siteSettingsType } from './documents/siteSettings';
@@ -21,5 +22,6 @@ export const schemaTypes = [
   articleType,
   promptPresetType,
   qaLogType,
-  generationRunType
+  generationRunType,
+  legalPageType
 ];

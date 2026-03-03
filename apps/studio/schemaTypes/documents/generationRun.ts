@@ -5,6 +5,7 @@ export const generationRunType = defineType({
   title: 'Generation Run',
   type: 'document',
   fields: [
+    defineField({ name: 'siteSlug', type: 'string', validation: (Rule) => Rule.required() }),
     defineField({ name: 'workflowRunId', type: 'string', validation: (Rule) => Rule.required() }),
     defineField({ name: 'workflowName', type: 'string', validation: (Rule) => Rule.required() }),
     defineField({ name: 'status', type: 'string', options: { list: ['success', 'partial', 'failed'] }, validation: (Rule) => Rule.required() }),
@@ -27,7 +28,10 @@ export const generationRunType = defineType({
     defineField({ name: 'rawPayload', type: 'text', rows: 12 })
   ],
   preview: {
-    select: { title: 'workflowName', subtitle: 'status', run: 'workflowRunId' },
-    prepare: ({ title, subtitle, run }) => ({ title, subtitle: `${subtitle ?? 'status'} • ${run ?? ''}` })
+    select: { title: 'workflowName', subtitle: 'status', run: 'workflowRunId', siteSlug: 'siteSlug' },
+    prepare: ({ title, subtitle, run, siteSlug }) => ({
+      title,
+      subtitle: `${siteSlug || 'no-site'} • ${subtitle ?? 'status'} • ${run ?? ''}`
+    })
   }
 });

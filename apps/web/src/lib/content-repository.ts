@@ -2,6 +2,7 @@ import groq from 'groq';
 import { articles as mockArticles, mockCategories } from './mock-data';
 import { hasSanityConfig, sanityClient } from './sanity';
 import { getSiteBlueprint } from './site-blueprint';
+import { siteConfig } from './site';
 import type { Article, Category } from './types';
 
 export type ContentRepositoryDriver = 'auto' | 'mock' | 'sanity' | 'api';
@@ -48,6 +49,18 @@ function normalizeArticle(article: Article): Article {
   };
 }
 
+const blueprint = getSiteBlueprint();
+const siteSlug = siteConfig.slug;
+const blueprintCategoriesFallback: Category[] = Array.isArray(blueprint?.categories)
+  ? blueprint.categories.map((category) => ({
+      _id: `category-${siteSlug}-${category.slug}`,
+      title: category.title,
+      slug: category.slug,
+      description: category.description,
+      accent: category.accent
+    }))
+  : [];
+
 class MockContentRepository implements ContentRepository {
   driver: ContentRepositoryDriver = 'mock';
 
@@ -71,26 +84,27 @@ class SanityContentRepository implements ContentRepository {
   async getPublishedArticles() {
     try {
       const data = await this.fetchSanity<Article[]>(
-        groq`*[_type == "article" && status == "published"] | order(publishedAt desc) ${articleProjection}`
+        groq`*[_type == "article" && siteSlug == $siteSlug && status == "published"] | order(publishedAt desc) ${articleProjection}`,
+        { siteSlug }
       );
-      return data?.length ? data.map(normalizeArticle) : mockArticles;
+      return data?.length ? data.map(normalizeArticle) : [];
     } catch {
-      return mockArticles;
+      return [];
     }
   }
 
   async getAllCategories() {
     try {
-      const data = await this.fetchSanity<Category[]>(groq`*[_type == "category"] | order(title asc) {
+      const data = await this.fetchSanity<Category[]>(groq`*[_type == "category" && siteSlug == $siteSlug] | order(title asc) {
         _id,
         title,
         "slug": slug.current,
         description,
         accent
-      }`);
-      return data?.length ? data : mockCategories;
+      }`, { siteSlug });
+      return data?.length ? data : blueprintCategoriesFallback;
     } catch {
-      return mockCategories;
+      return blueprintCategoriesFallback;
     }
   }
 }
@@ -100,36 +114,32 @@ class ApiContentRepository implements ContentRepository {
   private readonly baseUrl = (process.env.CONTENT_API_BASE_URL || process.env.CONTENT_ENGINE_URL || '').replace(/\/$/, '');
 
   async getPublishedArticles() {
-    if (!this.baseUrl) return mockArticles;
+    if (!this.baseUrl) return [];
 
     try {
-      const blueprint = getSiteBlueprint();
-      const siteSlug = blueprint?.siteSlug || 'default';
       const res = await fetch(`${this.baseUrl}/v1/content/articles?siteSlug=${encodeURIComponent(siteSlug)}`, {
         next: { revalidate: 300 }
       });
       if (!res.ok) throw new Error(`API ${res.status}`);
       const json = (await res.json()) as { items?: Article[] };
-      return json.items?.length ? json.items.map(normalizeArticle) : mockArticles;
+      return json.items?.length ? json.items.map(normalizeArticle) : [];
     } catch {
-      return mockArticles;
+      return [];
     }
   }
 
   async getAllCategories() {
-    if (!this.baseUrl) return mockCategories;
+    if (!this.baseUrl) return blueprintCategoriesFallback;
 
     try {
-      const blueprint = getSiteBlueprint();
-      const siteSlug = blueprint?.siteSlug || 'default';
       const res = await fetch(`${this.baseUrl}/v1/content/categories?siteSlug=${encodeURIComponent(siteSlug)}`, {
         next: { revalidate: 300 }
       });
       if (!res.ok) throw new Error(`API ${res.status}`);
       const json = (await res.json()) as { items?: Category[] };
-      return json.items?.length ? json.items : mockCategories;
+      return json.items?.length ? json.items : blueprintCategoriesFallback;
     } catch {
-      return mockCategories;
+      return blueprintCategoriesFallback;
     }
   }
 }

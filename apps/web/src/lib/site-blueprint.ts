@@ -28,6 +28,33 @@ type SiteBlueprintLite = {
   };
   theme?: {
     palette?: Partial<Record<'paper' | 'ink' | 'rust' | 'sage' | 'coal', string>>;
+    typography?: {
+      headingFont?: string;
+      bodyFont?: string;
+    };
+    visualStyle?: string;
+  };
+  brandAssets?: {
+    logoUrl?: string;
+    logoAlt?: string;
+    heroImageUrl?: string;
+    heroImageAlt?: string;
+  };
+  themeProfile?: {
+    tone?: 'editorial' | 'luxury' | 'wellness' | 'playful' | 'technical';
+    recipe?:
+      | 'bold_magazine'
+      | 'editorial_luxury'
+      | 'warm_wellness'
+      | 'playful_kids'
+      | 'technical_minimal'
+      | 'noir_luxury_dark'
+      | 'midnight_wellness_dark'
+      | 'arcade_play_dark';
+    layoutDensity?: 'airy' | 'balanced' | 'compact';
+    cardStyle?: 'soft' | 'sharp' | 'mixed';
+    accentIntensity?: 'soft' | 'medium' | 'vivid';
+    backgroundStyle?: 'grain' | 'gradient' | 'pattern';
   };
   niche?: {
     primaryNiche?: string;

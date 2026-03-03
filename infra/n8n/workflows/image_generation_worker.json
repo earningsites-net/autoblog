@@ -34,7 +34,7 @@
     },
     {
       "parameters": {
-        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && status==\\\"draft\\\" && !defined(coverImage)]|order(_createdAt asc)[0...' + Number($env.IMAGE_BATCH_SIZE || 3) + ']') }}",
+        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || 'hammer-hearth') + '\\\" && status==\\\"draft\\\" && !defined(coverImage)]|order(_createdAt asc)[0...' + Number($env.IMAGE_BATCH_SIZE || 3) + ']') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

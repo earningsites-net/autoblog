@@ -3,20 +3,53 @@
   "siteSlug": "hammer-hearth",
   "brandName": "Hammer & Hearth",
   "siteDescription": "AI-assisted Home & DIY magazine featuring practical, evergreen guides for organization, maintenance, decor, and seasonal prep.",
+  "businessMode": "transfer_first",
+  "delivery": {
+    "handoffEnabled": true,
+    "managedEligible": true
+  },
+  "opsDefaults": {
+    "publishEnabled": true,
+    "maxPublishesPerRun": 1,
+    "cadenceRules": [
+      {
+        "label": "Launch burst (1 per 3 minutes)",
+        "startAt": "2026-01-01T00:00:00.000Z",
+        "endAt": "2026-01-02T00:00:00.000Z",
+        "maxPublishes": 1,
+        "perMinutes": 3
+      },
+      {
+        "label": "Steady cadence (1 per day)",
+        "startAt": "2026-01-02T00:00:00.000Z",
+        "endAt": null,
+        "maxPublishes": 1,
+        "perDays": 1
+      }
+    ]
+  },
   "locale": "en-US",
   "theme": {
     "palette": {
-      "paper": "#F6F1E9",
-      "ink": "#1F1B16",
-      "rust": "#E08748",
-      "sage": "#829975",
-      "coal": "#221F1B"
+      "paper": "#f4efe6",
+      "ink": "#1f1914",
+      "rust": "#ac6a35",
+      "sage": "#537467",
+      "coal": "#2f2923"
     },
     "typography": {
-      "headingFont": "Sora",
+      "headingFont": "Space Grotesk",
       "bodyFont": "Source Serif 4"
     },
-    "visualStyle": "warm-industrial magazine editorial"
+    "visualStyle": "bold editorial magazine with warm contrast"
+  },
+  "themeProfile": {
+    "tone": "editorial",
+    "recipe": "bold_magazine",
+    "layoutDensity": "balanced",
+    "cardStyle": "mixed",
+    "accentIntensity": "medium",
+    "backgroundStyle": "gradient"
   },
   "niche": {
     "primaryNiche": "Home & DIY",
@@ -35,7 +68,10 @@
       "Health/medical claims",
       "Legal/financial advice"
     ],
-    "disclaimerVariants": ["general", "safety"]
+    "disclaimerVariants": [
+      "general",
+      "safety"
+    ]
   },
   "categories": [
     {
@@ -73,7 +109,7 @@
     "thresholds": {
       "normalMaxRatio": 0.6,
       "economyMaxRatio": 0.85,
-      "throttleMaxRatio": 1.0
+      "throttleMaxRatio": 1
     }
   },
   "promptPresetVersions": {

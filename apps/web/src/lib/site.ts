@@ -15,6 +15,13 @@ export const siteConfig = {
   budgetPolicy: activeBlueprint?.budgetPolicy,
   categories: activeBlueprint?.categories || [],
   themePalette: activeBlueprint?.theme?.palette || {},
+  themeProfile: activeBlueprint?.themeProfile,
+  brandAssets: {
+    logoUrl: process.env.NEXT_PUBLIC_SITE_LOGO_URL || activeBlueprint?.brandAssets?.logoUrl || '',
+    logoAlt: process.env.NEXT_PUBLIC_SITE_LOGO_ALT || activeBlueprint?.brandAssets?.logoAlt || '',
+    heroImageUrl: process.env.NEXT_PUBLIC_HOME_HERO_IMAGE_URL || activeBlueprint?.brandAssets?.heroImageUrl || '',
+    heroImageAlt: process.env.NEXT_PUBLIC_HOME_HERO_IMAGE_ALT || activeBlueprint?.brandAssets?.heroImageAlt || ''
+  },
   defaultOgImage:
     'https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=1600&q=80'
 } as const;

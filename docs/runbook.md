@@ -5,6 +5,8 @@
 - Check `budget_monitor_and_alerts` mode and publish quota.
 - Verify new articles appear on homepage/category pages.
 - Spot-check one published article for image, metadata, and disclaimer.
+- Confirm `sites/registry.json` reflects actual ownership/mode for active sites.
+- For newly launched sites, verify `themeProfile` exists in `sites/<slug>/site.blueprint.json` and frontend renders with expected recipe/tone.
 
 ## Weekly Checks
 - Review `rejected_auto` patterns (common QA flags).
@@ -26,6 +28,11 @@
 - Check `WEB_REVALIDATE_SECRET` and `WEB_APP_URL`.
 - Test with `curl` to `/api/revalidate`.
 - Fallback: full redeploy on Vercel.
+
+### Factory provisioning issues
+- Use `node scripts/autoblog.mjs doctor <site-slug>` to validate generated assets.
+- Use engine endpoint `GET /api/factory/site/:siteSlug/status` for quick diagnostics.
+- If using API trigger for prepopulate, verify `PREPOPULATE_TRIGGER_URL` is configured.
 
 ## Backups
 - Postgres volume snapshot daily.

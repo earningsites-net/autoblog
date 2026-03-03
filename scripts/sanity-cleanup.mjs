@@ -8,7 +8,9 @@ function parseArgs(argv) {
   const out = {
     dryRun: false,
     includeTopics: false,
-    chunkSize: 200
+    allSiteContent: false,
+    chunkSize: 200,
+    siteSlug: ''
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -21,6 +23,10 @@ function parseArgs(argv) {
       out.includeTopics = true;
       continue;
     }
+    if (token === '--all-site-content') {
+      out.allSiteContent = true;
+      continue;
+    }
     if (token === '--chunk-size') {
       const next = argv[i + 1];
       if (next && !next.startsWith('--')) {
@@ -29,10 +35,18 @@ function parseArgs(argv) {
       }
       continue;
     }
+    if (token === '--site-slug') {
+      const next = argv[i + 1];
+      if (next && !next.startsWith('--')) {
+        out.siteSlug = String(next).trim();
+        i += 1;
+      }
+      continue;
+    }
     if (token === '--help' || token === '-h') {
       console.log(`
 Usage:
-  node scripts/sanity-cleanup.mjs [--dry-run] [--include-topics] [--chunk-size 200]
+  node scripts/sanity-cleanup.mjs [--dry-run] [--include-topics] [--all-site-content] [--chunk-size 200] [--site-slug hammer-hearth]
 
 Default deletes:
   - article
@@ -41,6 +55,8 @@ Default deletes:
 
 Optional:
   --include-topics  Also delete topicCandidate docs.
+  --all-site-content Delete all documents filtered by siteSlug (all _type values with siteSlug).
+  --site-slug       Restrict cleanup to documents with this siteSlug (default: env SITE_SLUG if set).
 `);
       process.exit(0);
     }
@@ -102,13 +118,16 @@ const mutateUrl = `https://${projectId}.api.sanity.io/v${apiVersion}/data/mutate
 const headersRead = { Authorization: `Bearer ${readToken}` };
 const headersWrite = { Authorization: `Bearer ${writeToken}`, 'Content-Type': 'application/json' };
 
+const effectiveSiteSlug = args.siteSlug || env.SITE_SLUG || '';
+
 async function fetchIdsByType(typeName) {
   const all = [];
   let start = 0;
   const pageSize = 1000;
 
   while (true) {
-    const groq = `*[_type=="${typeName}"][${start}...${start + pageSize}]{_id}`;
+    const siteFilter = effectiveSiteSlug ? ` && siteSlug=="${effectiveSiteSlug.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : '';
+    const groq = `*[_type=="${typeName}"${siteFilter}][${start}...${start + pageSize}]{_id}`;
     const url = `${queryBase}?query=${encodeURIComponent(groq)}`;
     const res = await fetch(url, { headers: headersRead });
     if (!res.ok) {
@@ -125,15 +144,64 @@ async function fetchIdsByType(typeName) {
   return all;
 }
 
-const idsByType = {};
-for (const typeName of targetTypes) {
-  idsByType[typeName] = await fetchIdsByType(typeName);
+async function fetchSiteDocsBySlug(siteSlug) {
+  const all = [];
+  let start = 0;
+  const pageSize = 1000;
+  const escapedSiteSlug = String(siteSlug).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+  while (true) {
+    const groq = `*[_type != "sanity.imageAsset" && _type != "sanity.fileAsset" && siteSlug=="${escapedSiteSlug}"][${start}...${start + pageSize}]{_id,_type}`;
+    const url = `${queryBase}?query=${encodeURIComponent(groq)}`;
+    const res = await fetch(url, { headers: headersRead });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Query failed for all-site-content (${res.status}): ${text}`);
+    }
+    const json = await res.json();
+    const page = Array.isArray(json.result) ? json.result : [];
+    all.push(...page.filter((doc) => doc?._id && doc?._type));
+    if (page.length < pageSize) break;
+    start += pageSize;
+  }
+
+  return all;
 }
 
-const allDeleteIds = targetTypes.flatMap((typeName) => idsByType[typeName]);
+if (args.allSiteContent && !effectiveSiteSlug) {
+  console.error('Missing --site-slug (or SITE_SLUG env) with --all-site-content for safety.');
+  process.exit(1);
+}
+
+const idsByType = {};
+let allDeleteIds = [];
+
+if (args.allSiteContent) {
+  const docs = await fetchSiteDocsBySlug(effectiveSiteSlug);
+  for (const doc of docs) {
+    if (!idsByType[doc._type]) idsByType[doc._type] = [];
+    idsByType[doc._type].push(doc._id);
+  }
+  allDeleteIds = docs.map((doc) => doc._id);
+} else {
+  for (const typeName of targetTypes) {
+    idsByType[typeName] = await fetchIdsByType(typeName);
+  }
+  allDeleteIds = targetTypes.flatMap((typeName) => idsByType[typeName]);
+}
+
+// Deduplicate defensivey in case of overlapping sources.
+allDeleteIds = [...new Set(allDeleteIds)];
+const reportTypes = Object.keys(idsByType).sort();
 
 console.log('Sanity cleanup plan:');
-for (const typeName of targetTypes) {
+if (effectiveSiteSlug) {
+  console.log(`- siteSlug filter: ${effectiveSiteSlug}`);
+}
+if (args.allSiteContent) {
+  console.log('- mode: all-site-content');
+}
+for (const typeName of reportTypes) {
   console.log(`- ${typeName}: ${idsByType[typeName].length}`);
 }
 console.log(`Total docs to delete: ${allDeleteIds.length}`);

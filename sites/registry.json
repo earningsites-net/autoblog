@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "updatedAt": "2026-02-27T00:00:00.000Z",
+  "sites": [
+    {
+      "siteSlug": "hammer-hearth",
+      "ownerType": "internal",
+      "mode": "transfer",
+      "sanityProjectId": "",
+      "sanityDataset": "production",
+      "tokenRefs": {
+        "read": "SANITY_READ_TOKEN",
+        "write": "SANITY_WRITE_TOKEN"
+      },
+      "webBaseUrl": "",
+      "domainStatus": "pending",
+      "automationStatus": "inactive",
+      "billingStatus": "n/a",
+      "updatedAt": "2026-02-27T00:00:00.000Z"
+    }
+  ]
+}

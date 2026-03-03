@@ -5,6 +5,7 @@ export const siteSettingsType = defineType({
   title: 'Site Settings',
   type: 'document',
   fields: [
+    defineField({ name: 'siteSlug', type: 'string', validation: (Rule) => Rule.required() }),
     defineField({ name: 'siteName', type: 'string', initialValue: 'Hammer & Hearth' }),
     defineField({ name: 'siteDescription', type: 'text', rows: 3 }),
     defineField({ name: 'defaultLocale', type: 'string', initialValue: 'en-US' }),

@@ -3,6 +3,17 @@ export type DeploymentTargetKind = 'vercel' | 'netlify' | 'none';
 export type WorkflowRunnerKind = 'n8n' | 'bullmq' | 'direct';
 export type BudgetMode = 'normal' | 'economy' | 'throttle' | 'stop';
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
+export type BusinessMode = 'transfer_first' | 'managed';
+export type ThemeTone = 'editorial' | 'luxury' | 'wellness' | 'playful' | 'technical';
+export type ThemeRecipe =
+  | 'bold_magazine'
+  | 'editorial_luxury'
+  | 'warm_wellness'
+  | 'playful_kids'
+  | 'technical_minimal'
+  | 'noir_luxury_dark'
+  | 'midnight_wellness_dark'
+  | 'arcade_play_dark';
 
 export type BrandThemeConfig = {
   palette: {
@@ -17,6 +28,15 @@ export type BrandThemeConfig = {
     bodyFont: string;
   };
   visualStyle: string;
+};
+
+export type ThemeProfileConfig = {
+  tone: ThemeTone;
+  recipe: ThemeRecipe;
+  layoutDensity: 'airy' | 'balanced' | 'compact';
+  cardStyle: 'soft' | 'sharp' | 'mixed';
+  accentIntensity: 'soft' | 'medium' | 'vivid';
+  backgroundStyle: 'grain' | 'gradient' | 'pattern';
 };
 
 export type NichePolicyConfig = {
@@ -90,6 +110,17 @@ export type PublishingCadenceConfig = {
   cadenceRules: CadenceRuleConfig[];
 };
 
+export type DeliveryConfig = {
+  handoffEnabled: boolean;
+  managedEligible: boolean;
+};
+
+export type OpsDefaultsConfig = {
+  publishEnabled: boolean;
+  maxPublishesPerRun: number;
+  cadenceRules: CadenceRuleConfig[];
+};
+
 export type PublishingTargetConfig =
   | {
       kind: 'sanity';
@@ -126,8 +157,12 @@ export type SiteBlueprint = {
   siteSlug: string;
   brandName: string;
   siteDescription: string;
+  businessMode?: BusinessMode;
+  delivery?: DeliveryConfig;
+  opsDefaults?: OpsDefaultsConfig;
   locale: string;
   theme: BrandThemeConfig;
+  themeProfile?: ThemeProfileConfig;
   niche: NichePolicyConfig;
   categories: CategorySeed[];
   seedTopics: string[];
@@ -142,6 +177,23 @@ export type SiteBlueprint = {
   featureFlags: {
     adSlotsDefault: boolean;
   };
+};
+
+export type SiteRegistryEntry = {
+  siteSlug: string;
+  ownerType: 'internal' | 'client';
+  mode: 'transfer' | 'managed';
+  sanityProjectId?: string;
+  sanityDataset?: string;
+  tokenRefs?: {
+    read?: string;
+    write?: string;
+  };
+  webBaseUrl?: string;
+  domainStatus: 'pending' | 'active' | 'transferred';
+  automationStatus: 'inactive' | 'active' | 'paused';
+  billingStatus?: 'n/a' | 'trial' | 'active' | 'overdue' | 'canceled';
+  updatedAt: string;
 };
 
 export type GenerationStage = 'topics' | 'brief' | 'articles' | 'images' | 'qa' | 'publish' | 'pipeline';

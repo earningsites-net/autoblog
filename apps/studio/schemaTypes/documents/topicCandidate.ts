@@ -5,6 +5,7 @@ export const topicCandidateType = defineType({
   title: 'Topic Candidate',
   type: 'document',
   fields: [
+    defineField({ name: 'siteSlug', type: 'string', validation: (Rule) => Rule.required() }),
     defineField({ name: 'query', type: 'string', validation: (Rule) => Rule.required() }),
     defineField({ name: 'targetKeyword', type: 'string', validation: (Rule) => Rule.required() }),
     defineField({
@@ -34,7 +35,10 @@ export const topicCandidateType = defineType({
     defineField({ name: 'workflowRunId', type: 'string' })
   ],
   preview: {
-    select: { title: 'query', subtitle: 'status', score: 'evergreenScore' },
-    prepare: ({ title, subtitle, score }) => ({ title, subtitle: `${subtitle ?? 'queued'} • evergreen ${score ?? 0}` })
+    select: { title: 'query', subtitle: 'status', score: 'evergreenScore', siteSlug: 'siteSlug' },
+    prepare: ({ title, subtitle, score, siteSlug }) => ({
+      title,
+      subtitle: `${siteSlug || 'no-site'} • ${subtitle ?? 'queued'} • evergreen ${score ?? 0}`
+    })
   }
 });

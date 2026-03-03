@@ -1,0 +1,22 @@
+{
+  "runAt": "2026-02-27T16:34:54.387Z",
+  "mode": "changed-only",
+  "workflowsDir": "/Users/danilociamprone/Documents/Auto blog project/infra/n8n/workflows",
+  "reportDir": "/Users/danilociamprone/Documents/Auto blog project/docs/ops/n8n-flow-checks",
+  "importEnabled": false,
+  "smokeEnabled": false,
+  "importConfigured": true,
+  "importReason": "configured",
+  "overallStatus": "pass",
+  "summary": {
+    "total": 0,
+    "pass": 0,
+    "warn": 0,
+    "fail": 0
+  },
+  "regression": {
+    "count": 0,
+    "items": []
+  },
+  "workflows": []
+}

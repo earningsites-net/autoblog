@@ -6,16 +6,20 @@ import path from 'node:path';
 const WORKSPACE_ROOT = process.cwd();
 const SITES_ROOT = path.join(WORKSPACE_ROOT, 'sites');
 const TEMPLATES_ROOT = path.join(SITES_ROOT, 'templates');
+const SITE_REGISTRY_PATH = path.join(SITES_ROOT, 'registry.json');
 
 function usage() {
   console.log(`
 Usage:
   autoblog new <site-slug> --blueprint <template-id> [--brand-name "Brand"] [--force]
+  autoblog theme-generate <site-slug> [--tone auto|editorial|luxury|wellness|playful|technical] [--recipe bold_magazine|editorial_luxury|warm_wellness|playful_kids|technical_minimal|noir_luxury_dark|midnight_wellness_dark|arcade_play_dark]
   autoblog init-content <site-slug>
   autoblog provision-env <site-slug> [--force]
   autoblog seed-cms <site-slug>
   autoblog seed-topics <site-slug> [--count 30] [--status brief_ready] [--replace] [--source suggest|synthetic]
   autoblog discover-topics <site-slug> [--count 30] [--status brief_ready] [--replace] [--source suggest|synthetic]
+  autoblog launch-site <site-slug> [--blueprint home-diy-magazine] [--brand-name "Brand"] [--topic-count 60] [--source suggest|synthetic] [--theme-tone auto|editorial|luxury|wellness|playful|technical] [--theme-recipe <recipe>] [--apply-sanity]
+  autoblog release-site <site-slug> [--from-sanity]
   autoblog deploy <site-slug>
   autoblog doctor <site-slug>
   autoblog handoff-pack <site-slug>
@@ -80,6 +84,413 @@ function slugify(input) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 96);
+}
+
+function sanitizeSiteSlug(siteSlug) {
+  return slugify(siteSlug || 'default') || 'default';
+}
+
+function scopedDocId(docType, siteSlug, localId) {
+  const safeSiteSlug = sanitizeSiteSlug(siteSlug);
+  const safeLocalId = slugify(localId || docType) || docType;
+  return `${docType}-${safeSiteSlug}-${safeLocalId}`;
+}
+
+const THEME_RECIPES = {
+  bold_magazine: {
+    tone: 'editorial',
+    visualStyle: 'bold editorial magazine with warm contrast',
+    typography: {
+      headingFont: 'Space Grotesk',
+      bodyFont: 'Source Serif 4'
+    },
+    palette: {
+      paper: '#F4EEE3',
+      ink: '#201A15',
+      rust: '#CE6A32',
+      sage: '#5F8E79',
+      coal: '#2C2520'
+    },
+    profile: {
+      layoutDensity: 'balanced',
+      cardStyle: 'mixed',
+      accentIntensity: 'medium',
+      backgroundStyle: 'gradient'
+    }
+  },
+  editorial_luxury: {
+    tone: 'luxury',
+    visualStyle: 'refined luxury editorial with high contrast and restrained accents',
+    typography: {
+      headingFont: 'Playfair Display',
+      bodyFont: 'Cormorant Garamond'
+    },
+    palette: {
+      paper: '#FBF6EE',
+      ink: '#14100E',
+      rust: '#C08B46',
+      sage: '#4E7867',
+      coal: '#181313'
+    },
+    profile: {
+      layoutDensity: 'airy',
+      cardStyle: 'sharp',
+      accentIntensity: 'soft',
+      backgroundStyle: 'grain'
+    }
+  },
+  warm_wellness: {
+    tone: 'wellness',
+    visualStyle: 'calm wellness editorial with warm neutrals and soft gradients',
+    typography: {
+      headingFont: 'Sora',
+      bodyFont: 'Merriweather'
+    },
+    palette: {
+      paper: '#F7FBF5',
+      ink: '#23312D',
+      rust: '#D98D74',
+      sage: '#6CA88A',
+      coal: '#22322B'
+    },
+    profile: {
+      layoutDensity: 'airy',
+      cardStyle: 'soft',
+      accentIntensity: 'medium',
+      backgroundStyle: 'gradient'
+    }
+  },
+  playful_kids: {
+    tone: 'playful',
+    visualStyle: 'playful editorial with bright accents and rounded cards',
+    typography: {
+      headingFont: 'Baloo 2',
+      bodyFont: 'Nunito'
+    },
+    palette: {
+      paper: '#FFF7D8',
+      ink: '#2F2A45',
+      rust: '#FF7A45',
+      sage: '#2DB79A',
+      coal: '#2C2F4A'
+    },
+    profile: {
+      layoutDensity: 'balanced',
+      cardStyle: 'soft',
+      accentIntensity: 'vivid',
+      backgroundStyle: 'pattern'
+    }
+  },
+  technical_minimal: {
+    tone: 'technical',
+    visualStyle: 'minimal technical publication with clean geometry and subtle accents',
+    typography: {
+      headingFont: 'Manrope',
+      bodyFont: 'IBM Plex Sans'
+    },
+    palette: {
+      paper: '#F5F7F8',
+      ink: '#172126',
+      rust: '#2576B8',
+      sage: '#42A58A',
+      coal: '#131C21'
+    },
+    profile: {
+      layoutDensity: 'compact',
+      cardStyle: 'sharp',
+      accentIntensity: 'soft',
+      backgroundStyle: 'grain'
+    }
+  },
+  noir_luxury_dark: {
+    tone: 'luxury',
+    visualStyle: 'dark luxury editorial with cinematic contrast and elegant metallic accents',
+    typography: {
+      headingFont: 'Playfair Display',
+      bodyFont: 'Cormorant Garamond'
+    },
+    palette: {
+      paper: '#EFE6D8',
+      ink: '#F4EDE3',
+      rust: '#C49753',
+      sage: '#5E8A78',
+      coal: '#121112'
+    },
+    profile: {
+      layoutDensity: 'airy',
+      cardStyle: 'sharp',
+      accentIntensity: 'soft',
+      backgroundStyle: 'grain'
+    }
+  },
+  midnight_wellness_dark: {
+    tone: 'wellness',
+    visualStyle: 'dark wellness editorial with calm gradients and low-contrast depth',
+    typography: {
+      headingFont: 'Sora',
+      bodyFont: 'Merriweather'
+    },
+    palette: {
+      paper: '#E8F0EA',
+      ink: '#E4EFE9',
+      rust: '#C9836A',
+      sage: '#6BA688',
+      coal: '#121815'
+    },
+    profile: {
+      layoutDensity: 'airy',
+      cardStyle: 'soft',
+      accentIntensity: 'medium',
+      backgroundStyle: 'gradient'
+    }
+  },
+  arcade_play_dark: {
+    tone: 'playful',
+    visualStyle: 'dark playful editorial with neon accents and bold rounded geometry',
+    typography: {
+      headingFont: 'Baloo 2',
+      bodyFont: 'Nunito'
+    },
+    palette: {
+      paper: '#EFEAFA',
+      ink: '#F2ECFF',
+      rust: '#FF7E4F',
+      sage: '#3DD2B0',
+      coal: '#15182B'
+    },
+    profile: {
+      layoutDensity: 'balanced',
+      cardStyle: 'soft',
+      accentIntensity: 'vivid',
+      backgroundStyle: 'pattern'
+    }
+  }
+};
+
+const DEFAULT_THEME_RECIPE = 'bold_magazine';
+const VALID_THEME_RECIPES = Object.keys(THEME_RECIPES);
+const VALID_THEME_TONES = ['editorial', 'luxury', 'wellness', 'playful', 'technical'];
+
+const THEME_TONE_KEYWORDS = {
+  luxury: ['luxury', 'premium', 'high-end', 'elite', 'upscale', 'elegant', 'designer', 'interior styling', 'fine living'],
+  wellness: ['wellness', 'self-care', 'self care', 'relationship', 'couple', 'intimacy', 'mindful', 'calm', 'balance', 'emotional'],
+  playful: ['kids', 'children', 'child', 'family fun', 'toys', 'games', 'classroom', 'learning', 'playroom', 'parents'],
+  technical: ['technical', 'workflow', 'automation', 'software', 'systems', 'engineering', 'analysis', 'optimization', 'data', 'productivity']
+};
+
+const TONE_TO_RECIPE = {
+  editorial: 'bold_magazine',
+  luxury: 'editorial_luxury',
+  wellness: 'warm_wellness',
+  playful: 'playful_kids',
+  technical: 'technical_minimal'
+};
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function hashString(input) {
+  const str = String(input || '');
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function channelFromSeed(seed, channel, maxAbs) {
+  if (maxAbs <= 0) return 0;
+  const base = hashString(`${seed}:${channel}`);
+  const span = maxAbs * 2 + 1;
+  return (base % span) - maxAbs;
+}
+
+function hexToRgb(hexColor) {
+  const normalized = String(hexColor || '').replace('#', '').trim();
+  if (!/^[\da-fA-F]{6}$/.test(normalized)) return null;
+  const intValue = Number.parseInt(normalized, 16);
+  return {
+    r: (intValue >> 16) & 255,
+    g: (intValue >> 8) & 255,
+    b: intValue & 255
+  };
+}
+
+function rgbToHex({ r, g, b }) {
+  const value = ((clamp(r, 0, 255) << 16) | (clamp(g, 0, 255) << 8) | clamp(b, 0, 255)).toString(16).padStart(6, '0');
+  return `#${value}`;
+}
+
+function rgbToHsl({ r, g, b }) {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const delta = max - min;
+  let h = 0;
+  if (delta !== 0) {
+    if (max === rn) {
+      h = ((gn - bn) / delta) % 6;
+    } else if (max === gn) {
+      h = (bn - rn) / delta + 2;
+    } else {
+      h = (rn - gn) / delta + 4;
+    }
+  }
+  h = Math.round(h * 60);
+  if (h < 0) h += 360;
+  const l = (max + min) / 2;
+  const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+  return {
+    h,
+    s: Math.round(s * 100),
+    l: Math.round(l * 100)
+  };
+}
+
+function hslToRgb({ h, s, l }) {
+  const hn = ((h % 360) + 360) % 360;
+  const sn = clamp(s, 0, 100) / 100;
+  const ln = clamp(l, 0, 100) / 100;
+  const c = (1 - Math.abs(2 * ln - 1)) * sn;
+  const x = c * (1 - Math.abs(((hn / 60) % 2) - 1));
+  const m = ln - c / 2;
+  let rn = 0;
+  let gn = 0;
+  let bn = 0;
+
+  if (hn < 60) {
+    rn = c; gn = x; bn = 0;
+  } else if (hn < 120) {
+    rn = x; gn = c; bn = 0;
+  } else if (hn < 180) {
+    rn = 0; gn = c; bn = x;
+  } else if (hn < 240) {
+    rn = 0; gn = x; bn = c;
+  } else if (hn < 300) {
+    rn = x; gn = 0; bn = c;
+  } else {
+    rn = c; gn = 0; bn = x;
+  }
+
+  return {
+    r: Math.round((rn + m) * 255),
+    g: Math.round((gn + m) * 255),
+    b: Math.round((bn + m) * 255)
+  };
+}
+
+function shiftHexColor(hexColor, seed, channelRanges) {
+  const rgb = hexToRgb(hexColor);
+  if (!rgb) return hexColor;
+  const hsl = rgbToHsl(rgb);
+  const hueShift = channelFromSeed(seed, 'h', channelRanges.h || 0);
+  const satShift = channelFromSeed(seed, 's', channelRanges.s || 0);
+  const lightShift = channelFromSeed(seed, 'l', channelRanges.l || 0);
+
+  return rgbToHex(
+    hslToRgb({
+      h: hsl.h + hueShift,
+      s: hsl.s + satShift,
+      l: hsl.l + lightShift
+    })
+  );
+}
+
+function inferThemeTone(blueprint) {
+  const text = [
+    blueprint.brandName,
+    blueprint.siteDescription,
+    blueprint.niche?.primaryNiche,
+    ...(Array.isArray(blueprint.niche?.allowedSubtopics) ? blueprint.niche.allowedSubtopics : []),
+    ...(Array.isArray(blueprint.categories) ? blueprint.categories.flatMap((category) => [category.title, category.description]) : []),
+    ...(Array.isArray(blueprint.seedTopics) ? blueprint.seedTopics : [])
+  ].join(' ').toLowerCase();
+
+  const scores = {
+    editorial: 1,
+    luxury: 0,
+    wellness: 0,
+    playful: 0,
+    technical: 0
+  };
+
+  if (/(home|diy|garden|decor|household|lifestyle)/i.test(text)) {
+    scores.editorial += 4;
+  }
+  if (/(kids|children|family|parent)/i.test(text)) {
+    scores.playful += 2;
+  }
+  if (/(relationship|wellness|self-care|self care|mindful)/i.test(text)) {
+    scores.wellness += 2;
+  }
+  if (/(luxury|premium|designer|upscale)/i.test(text)) {
+    scores.luxury += 2;
+  }
+
+  for (const tone of Object.keys(THEME_TONE_KEYWORDS)) {
+    const keywords = THEME_TONE_KEYWORDS[tone];
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) {
+        scores[tone] += 1;
+      }
+    }
+  }
+
+  if (scores.technical > 0 && scores.editorial > scores.technical) {
+    scores.technical = Math.max(0, scores.technical - 1);
+  }
+
+  let bestTone = 'editorial';
+  let bestScore = scores.editorial;
+  for (const tone of VALID_THEME_TONES) {
+    const score = scores[tone] || 0;
+    if (score > bestScore) {
+      bestTone = tone;
+      bestScore = score;
+    }
+  }
+  return bestTone;
+}
+
+function buildThemeFromBlueprint(blueprint, options = {}) {
+  const requestedTone = String(options.tone || 'auto').toLowerCase();
+  const requestedRecipe = String(options.recipe || '').toLowerCase();
+
+  const inferredTone = inferThemeTone(blueprint);
+  const tone = requestedTone === 'auto'
+    ? inferredTone
+    : (VALID_THEME_TONES.includes(requestedTone) ? requestedTone : inferredTone);
+
+  const recipe = VALID_THEME_RECIPES.includes(requestedRecipe) ? requestedRecipe : (TONE_TO_RECIPE[tone] || DEFAULT_THEME_RECIPE);
+  const preset = THEME_RECIPES[recipe] || THEME_RECIPES[DEFAULT_THEME_RECIPE];
+
+  const seed = `${blueprint.siteSlug}:${blueprint.brandName}:${recipe}`;
+  const palette = {
+    paper: shiftHexColor(preset.palette.paper, `${seed}:paper`, { h: 4, s: 4, l: 3 }),
+    ink: shiftHexColor(preset.palette.ink, `${seed}:ink`, { h: 5, s: 3, l: 3 }),
+    rust: shiftHexColor(preset.palette.rust, `${seed}:rust`, { h: 12, s: 10, l: 7 }),
+    sage: shiftHexColor(preset.palette.sage, `${seed}:sage`, { h: 12, s: 10, l: 7 }),
+    coal: shiftHexColor(preset.palette.coal, `${seed}:coal`, { h: 6, s: 4, l: 4 })
+  };
+
+  return {
+    theme: {
+      palette,
+      typography: {
+        headingFont: preset.typography.headingFont,
+        bodyFont: preset.typography.bodyFont
+      },
+      visualStyle: preset.visualStyle
+    },
+    themeProfile: {
+      tone: preset.tone,
+      recipe,
+      ...preset.profile
+    }
+  };
 }
 
 function uniqueStrings(values) {
@@ -423,7 +834,7 @@ async function discoverTopicQueriesByCategory({
   return output.slice(0, targetCount);
 }
 
-function buildTopicCandidateDoc(query, index, status, workflowRunId, categorySlug) {
+function buildTopicCandidateDoc(siteSlug, query, index, status, workflowRunId, categorySlug) {
   const normalizedQuery = String(query).trim();
   const templateType = inferTemplateType(normalizedQuery);
   const targetKeyword = normalizedQuery;
@@ -434,8 +845,9 @@ function buildTopicCandidateDoc(query, index, status, workflowRunId, categorySlu
   ]).slice(0, 3);
 
   return {
-    _id: `topicCandidate-${slugify(normalizedQuery) || index + 1}`,
+    _id: scopedDocId('topicCandidate', siteSlug, slugify(normalizedQuery) || String(index + 1)),
     _type: 'topicCandidate',
+    siteSlug: sanitizeSiteSlug(siteSlug),
     query: normalizedQuery,
     targetKeyword,
     supportingKeywords,
@@ -480,6 +892,30 @@ function loadSiteBlueprint(siteSlug) {
   return readJson(filePath);
 }
 
+function ensureBusinessDefaults(blueprint) {
+  const next = { ...blueprint };
+  if (!next.businessMode) next.businessMode = 'transfer_first';
+  if (!next.delivery) {
+    next.delivery = {
+      handoffEnabled: true,
+      managedEligible: true
+    };
+  }
+  if (!next.opsDefaults) {
+    next.opsDefaults = {
+      publishEnabled: true,
+      maxPublishesPerRun: Number(next.publishing?.maxPublishesPerRun || 1),
+      cadenceRules: Array.isArray(next.publishing?.cadenceRules) ? next.publishing.cadenceRules : []
+    };
+  }
+  if (!next.themeProfile) {
+    const generated = buildThemeFromBlueprint(next, { tone: 'auto' });
+    next.theme = generated.theme;
+    next.themeProfile = generated.themeProfile;
+  }
+  return next;
+}
+
 function parseEnvFile(filePath) {
   if (!exists(filePath)) return {};
   const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
@@ -493,6 +929,104 @@ function parseEnvFile(filePath) {
     env[key] = value;
   }
   return env;
+}
+
+function loadWorkspaceEnv() {
+  return {
+    ...parseEnvFile(path.join(WORKSPACE_ROOT, 'infra', 'n8n', '.env')),
+    ...parseEnvFile(path.join(WORKSPACE_ROOT, '.env')),
+    ...process.env
+  };
+}
+
+function loadSiteRegistry() {
+  if (!exists(SITE_REGISTRY_PATH)) {
+    return { version: 1, updatedAt: new Date().toISOString(), sites: [] };
+  }
+  try {
+    const parsed = readJson(SITE_REGISTRY_PATH);
+    if (!Array.isArray(parsed?.sites)) {
+      return { version: 1, updatedAt: new Date().toISOString(), sites: [] };
+    }
+    return parsed;
+  } catch {
+    return { version: 1, updatedAt: new Date().toISOString(), sites: [] };
+  }
+}
+
+function saveSiteRegistry(registry) {
+  writeJson(SITE_REGISTRY_PATH, registry);
+}
+
+function upsertSiteRegistryEntry(siteSlug, blueprint, envOverrides = {}) {
+  const registry = loadSiteRegistry();
+  const index = registry.sites.findIndex((site) => site.siteSlug === siteSlug);
+  const mode = blueprint.businessMode === 'managed' ? 'managed' : 'transfer';
+  const entry = {
+    siteSlug,
+    ownerType: envOverrides.ownerType || 'internal',
+    mode,
+    sanityProjectId: envOverrides.sanityProjectId || '',
+    sanityDataset: envOverrides.sanityDataset || blueprint.publishingTarget?.dataset || 'production',
+    tokenRefs: {
+      read: blueprint.providerRefs?.cmsReadKeyRef || 'SANITY_READ_TOKEN',
+      write: blueprint.providerRefs?.cmsWriteKeyRef || 'SANITY_WRITE_TOKEN'
+    },
+    webBaseUrl: envOverrides.webBaseUrl || '',
+    domainStatus: envOverrides.domainStatus || 'pending',
+    automationStatus: envOverrides.automationStatus || 'inactive',
+    billingStatus: mode === 'managed' ? (envOverrides.billingStatus || 'trial') : 'n/a',
+    updatedAt: new Date().toISOString()
+  };
+
+  if (index >= 0) {
+    registry.sites[index] = { ...registry.sites[index], ...entry };
+  } else {
+    registry.sites.push(entry);
+  }
+  registry.updatedAt = new Date().toISOString();
+  saveSiteRegistry(registry);
+  return entry;
+}
+
+async function applySanityMutationsFile(mutationsPath) {
+  const env = loadWorkspaceEnv();
+  const projectId = env.SANITY_PROJECT_ID;
+  const dataset = env.SANITY_DATASET || 'production';
+  const apiVersion = env.SANITY_API_VERSION || '2025-01-01';
+  const writeToken = env.SANITY_WRITE_TOKEN;
+  if (!projectId || !writeToken) {
+    throw new Error('Missing SANITY_PROJECT_ID or SANITY_WRITE_TOKEN to apply mutations.');
+  }
+
+  const absolutePath = path.resolve(WORKSPACE_ROOT, mutationsPath);
+  if (!exists(absolutePath)) {
+    throw new Error(`Mutations file not found: ${absolutePath}`);
+  }
+  const payload = readJson(absolutePath);
+  if (!Array.isArray(payload?.mutations) || payload.mutations.length === 0) {
+    throw new Error(`Mutations payload invalid/empty: ${absolutePath}`);
+  }
+
+  const response = await fetch(`https://${projectId}.api.sanity.io/v${apiVersion}/data/mutate/${dataset}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${writeToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Sanity mutate failed (${response.status}) for ${mutationsPath}: ${text}`);
+  }
+  const result = await response.json();
+  return {
+    file: mutationsPath,
+    mutationCount: payload.mutations.length,
+    transactionId: result?.transactionId || 'n/a'
+  };
 }
 
 function serializeEnv(envMap) {
@@ -515,10 +1049,25 @@ function commandNew(siteSlug, flags) {
     throw new Error(`Site already exists: ${targetBlueprintPath} (use --force to overwrite)`);
   }
 
-  const blueprint = readJson(templatePath);
+  const blueprint = ensureBusinessDefaults(readJson(templatePath));
   blueprint.siteSlug = siteSlug;
   blueprint.brandName = String(flags['brand-name'] || blueprint.brandName || toTitleCaseFromSlug(siteSlug));
   if (typeof flags.locale === 'string') blueprint.locale = flags.locale;
+  if (typeof flags['business-mode'] === 'string' && ['transfer_first', 'managed'].includes(flags['business-mode'])) {
+    blueprint.businessMode = flags['business-mode'];
+  }
+  if (flags.managed === true) blueprint.businessMode = 'managed';
+  if (flags.transfer === true) blueprint.businessMode = 'transfer_first';
+  if (!blueprint.delivery) {
+    blueprint.delivery = { handoffEnabled: true, managedEligible: true };
+  }
+  if (!blueprint.opsDefaults) {
+    blueprint.opsDefaults = {
+      publishEnabled: true,
+      maxPublishesPerRun: Number(blueprint.publishing?.maxPublishesPerRun || 1),
+      cadenceRules: Array.isArray(blueprint.publishing?.cadenceRules) ? blueprint.publishing.cadenceRules : []
+    };
+  }
 
   ensureDir(targetDir);
   writeJson(targetBlueprintPath, blueprint);
@@ -536,14 +1085,54 @@ function commandNew(siteSlug, flags) {
   console.log(`Blueprint: ${targetBlueprintPath}`);
 }
 
+function commandThemeGenerate(siteSlug, flags = {}) {
+  if (!siteSlug) throw new Error('Missing <site-slug>');
+  const blueprintPath = resolveSiteBlueprintPath(siteSlug);
+  const blueprint = ensureBusinessDefaults(loadSiteBlueprint(siteSlug));
+
+  if (flags['preserve-existing'] && blueprint.themeProfile?.recipe) {
+    console.log(JSON.stringify({
+      siteSlug,
+      preserved: true,
+      reason: 'themeProfile already present and --preserve-existing enabled',
+      recipe: blueprint.themeProfile.recipe,
+      tone: blueprint.themeProfile.tone
+    }, null, 2));
+    return;
+  }
+
+  const generated = buildThemeFromBlueprint(blueprint, {
+    tone: flags.tone || 'auto',
+    recipe: flags.recipe
+  });
+
+  blueprint.theme = generated.theme;
+  blueprint.themeProfile = generated.themeProfile;
+  writeJson(blueprintPath, blueprint);
+
+  console.log(JSON.stringify({
+    siteSlug,
+    updated: true,
+    blueprintPath,
+    recipe: blueprint.themeProfile.recipe,
+    tone: blueprint.themeProfile.tone,
+    layoutDensity: blueprint.themeProfile.layoutDensity,
+    cardStyle: blueprint.themeProfile.cardStyle,
+    typography: blueprint.theme.typography,
+    palette: blueprint.theme.palette
+  }, null, 2));
+}
+
 function commandInitContent(siteSlug) {
   const blueprint = loadSiteBlueprint(siteSlug);
+  const safeSiteSlug = sanitizeSiteSlug(siteSlug);
   const seedDir = path.join(resolveSiteDir(siteSlug), 'seed-content');
   ensureDir(seedDir);
 
   const categories = (blueprint.categories || []).map((category) => ({
-    _id: `category-${category.slug}`,
+    _id: scopedDocId('category', safeSiteSlug, category.slug),
     _type: 'category',
+    siteSlug: safeSiteSlug,
     title: category.title,
     slug: { current: category.slug },
     description: category.description,
@@ -551,15 +1140,16 @@ function commandInitContent(siteSlug) {
   }));
 
   const tags = [
-    { _id: 'tag-small-spaces', _type: 'tag', title: 'Small Spaces', slug: { current: 'small-spaces' } },
-    { _id: 'tag-checklists', _type: 'tag', title: 'Checklists', slug: { current: 'checklists' } },
-    { _id: 'tag-seasonal', _type: 'tag', title: 'Seasonal', slug: { current: 'seasonal' } },
-    { _id: 'tag-beginner', _type: 'tag', title: 'Beginner', slug: { current: 'beginner' } }
+    { _id: scopedDocId('tag', safeSiteSlug, 'small-spaces'), _type: 'tag', siteSlug: safeSiteSlug, title: 'Small Spaces', slug: { current: 'small-spaces' } },
+    { _id: scopedDocId('tag', safeSiteSlug, 'checklists'), _type: 'tag', siteSlug: safeSiteSlug, title: 'Checklists', slug: { current: 'checklists' } },
+    { _id: scopedDocId('tag', safeSiteSlug, 'seasonal'), _type: 'tag', siteSlug: safeSiteSlug, title: 'Seasonal', slug: { current: 'seasonal' } },
+    { _id: scopedDocId('tag', safeSiteSlug, 'beginner'), _type: 'tag', siteSlug: safeSiteSlug, title: 'Beginner', slug: { current: 'beginner' } }
   ];
 
   const promptPresets = Object.entries(blueprint.promptPresetVersions || {}).map(([stageKey, version]) => ({
-    _id: `prompt-${String(stageKey)}-${String(version)}`,
+    _id: scopedDocId('prompt', safeSiteSlug, `${String(stageKey)}-${String(version)}`),
     _type: 'promptPreset',
+    siteSlug: safeSiteSlug,
     name: `${stageKey} ${version}`,
     stage: normalizePromptStage(stageKey),
     version,
@@ -609,9 +1199,10 @@ function buildPublishingSettingsFromBlueprint(blueprint) {
   ];
 
   const blueprintPublishing = blueprint.publishing || {};
+  const opsDefaults = blueprint.opsDefaults || {};
   const sourceRules = Array.isArray(blueprintPublishing.cadenceRules) && blueprintPublishing.cadenceRules.length > 0
     ? blueprintPublishing.cadenceRules
-    : fallbackRules;
+    : (Array.isArray(opsDefaults.cadenceRules) && opsDefaults.cadenceRules.length > 0 ? opsDefaults.cadenceRules : fallbackRules);
 
   // For the first seed of a new site, make cadence rules immediately usable by anchoring
   // the first "launch" phase to now if the provided timestamps are missing/invalid/outdated.
@@ -627,11 +1218,11 @@ function buildPublishingSettingsFromBlueprint(blueprint) {
   }
 
   return {
-    mode: blueprintPublishing.strategy === 'steady_scheduled' ? 'steady_scheduled' : 'bulk_direct',
+    mode: (opsDefaults.publishEnabled === false) ? 'bulk_direct' : (blueprintPublishing.strategy === 'steady_scheduled' ? 'steady_scheduled' : 'bulk_direct'),
     defaultTimezone: blueprintPublishing.timezone || 'Europe/Rome',
     revalidateEnabled: blueprintPublishing.revalidateEnabled !== false,
     revalidateContinueOnFail: blueprintPublishing.revalidateContinueOnFail !== false,
-    maxPublishesPerRun: Number(blueprintPublishing.maxPublishesPerRun || 1),
+    maxPublishesPerRun: Number(opsDefaults.maxPublishesPerRun || blueprintPublishing.maxPublishesPerRun || 1),
     cadenceRules: resolvedRules.map((rule, index) => ({
       _key: `cadence-${index + 1}-${slugify(rule.label || 'rule')}`.slice(0, 96),
       label: rule.label || 'Cadence rule',
@@ -650,6 +1241,9 @@ function commandProvisionEnv(siteSlug, flags) {
   const envPath = path.join(siteDir, '.env.generated');
   const existing = parseEnvFile(envPath);
   const defaults = {
+    SITE_SLUG: siteSlug,
+    SANITY_STUDIO_SITE_SLUG: siteSlug,
+    NEXT_PUBLIC_SITE_SLUG: siteSlug,
     NEXT_PUBLIC_SITE_NAME: blueprint.brandName,
     NEXT_PUBLIC_DEFAULT_LOCALE: blueprint.locale || 'en-US',
     NEXT_PUBLIC_SITE_URL: `https://${siteSlug}.example.com`,
@@ -691,6 +1285,7 @@ function commandProvisionEnv(siteSlug, flags) {
 
 function commandSeedCms(siteSlug) {
   const blueprint = loadSiteBlueprint(siteSlug);
+  const safeSiteSlug = sanitizeSiteSlug(siteSlug);
   const siteDir = resolveSiteDir(siteSlug);
   const outputDir = path.join(siteDir, 'seed-content');
   ensureDir(outputDir);
@@ -710,8 +1305,9 @@ function commandSeedCms(siteSlug) {
 
   mutations.push({
     createOrReplace: {
-      _id: 'siteSettings',
+      _id: scopedDocId('siteSettings', safeSiteSlug, 'root'),
       _type: 'siteSettings',
+      siteSlug: safeSiteSlug,
       siteName: blueprint.brandName,
       siteDescription: blueprint.siteDescription || '',
       defaultLocale: blueprint.locale || 'en-US',
@@ -725,8 +1321,9 @@ function commandSeedCms(siteSlug) {
   for (const category of blueprint.categories || []) {
     mutations.push({
       createOrReplace: {
-        _id: `category-${category.slug}`,
+        _id: scopedDocId('category', safeSiteSlug, category.slug),
         _type: 'category',
+        siteSlug: safeSiteSlug,
         title: category.title,
         slug: { current: category.slug },
         description: category.description,
@@ -737,11 +1334,31 @@ function commandSeedCms(siteSlug) {
     });
   }
 
+  const defaultTags = [
+    { slug: 'small-spaces', title: 'Small Spaces' },
+    { slug: 'checklists', title: 'Checklists' },
+    { slug: 'seasonal', title: 'Seasonal' },
+    { slug: 'beginner', title: 'Beginner' }
+  ];
+
+  for (const tag of defaultTags) {
+    mutations.push({
+      createOrReplace: {
+        _id: scopedDocId('tag', safeSiteSlug, tag.slug),
+        _type: 'tag',
+        siteSlug: safeSiteSlug,
+        title: tag.title,
+        slug: { current: tag.slug }
+      }
+    });
+  }
+
   for (const [stageKey, version] of Object.entries(blueprint.promptPresetVersions || {})) {
     mutations.push({
       createOrReplace: {
-        _id: `prompt-${stageKey}-${version}`,
+        _id: scopedDocId('prompt', safeSiteSlug, `${stageKey}-${version}`),
         _type: 'promptPreset',
+        siteSlug: safeSiteSlug,
         name: `${stageKey} ${version}`,
         stage: normalizePromptStage(stageKey),
         version,
@@ -805,8 +1422,9 @@ async function commandSeedTopics(siteSlug, flags) {
   }
 
   const workflowRunId = `seed-topics-${new Date().toISOString()}`;
+  const safeSiteSlug = sanitizeSiteSlug(siteSlug);
   const docs = discovered
-    .map((item, index) => buildTopicCandidateDoc(item.query, index, status, workflowRunId, item.categorySlug))
+    .map((item, index) => buildTopicCandidateDoc(safeSiteSlug, item.query, index, status, workflowRunId, item.categorySlug))
     .slice(0, count);
 
   const mutationOp = flags.replace ? 'createOrReplace' : 'createIfNotExists';
@@ -848,6 +1466,216 @@ async function commandSeedTopics(siteSlug, flags) {
   console.log(`Mutation strategy: ${mutationOp}`);
   console.log(`Preview: ${previewPath}`);
   console.log(`Sanity mutations: ${mutationsPath}`);
+}
+
+async function commandLaunchSite(siteSlug, flags) {
+  if (!siteSlug) throw new Error('Missing <site-slug>');
+
+  const blueprint = String(flags.blueprint || 'home-diy-magazine');
+  const topicCount = Math.max(1, Number(flags['topic-count'] || 60));
+  const source = String(flags.source || 'suggest');
+  const applySanity = Boolean(flags['apply-sanity']);
+  const replaceTopics = flags.replace !== false;
+
+  commandNew(siteSlug, {
+    ...flags,
+    blueprint,
+    force: Boolean(flags.force),
+    'business-mode': String(flags['business-mode'] || 'transfer_first')
+  });
+  commandThemeGenerate(siteSlug, {
+    tone: flags['theme-tone'] || 'auto',
+    recipe: flags['theme-recipe']
+  });
+  commandProvisionEnv(siteSlug, { force: true });
+  commandInitContent(siteSlug);
+  commandSeedCms(siteSlug);
+  await commandSeedTopics(siteSlug, {
+    count: topicCount,
+    status: String(flags.status || 'brief_ready'),
+    replace: replaceTopics,
+    source,
+    locale: flags.locale
+  });
+  commandHandoffPack(siteSlug);
+
+  const siteDir = resolveSiteDir(siteSlug);
+  const cmsMutations = path.join(siteDir, 'seed-content', 'sanity.mutations.json');
+  const topicMutations = path.join(siteDir, 'seed-content', 'topic-candidates.mutations.json');
+  const applied = [];
+  if (applySanity) {
+    applied.push(await applySanityMutationsFile(path.relative(WORKSPACE_ROOT, cmsMutations)));
+    applied.push(await applySanityMutationsFile(path.relative(WORKSPACE_ROOT, topicMutations)));
+  }
+
+  const normalizedBlueprint = ensureBusinessDefaults(loadSiteBlueprint(siteSlug));
+  const envGenerated = parseEnvFile(path.join(siteDir, '.env.generated'));
+  const registryEntry = upsertSiteRegistryEntry(siteSlug, normalizedBlueprint, {
+    sanityProjectId: envGenerated.SANITY_PROJECT_ID || '',
+    sanityDataset: envGenerated.SANITY_DATASET || normalizedBlueprint.publishingTarget?.dataset || 'production',
+    webBaseUrl: envGenerated.NEXT_PUBLIC_SITE_URL || '',
+    automationStatus: 'inactive',
+    domainStatus: 'pending',
+    ownerType: 'internal'
+  });
+
+  const summary = {
+    siteSlug,
+    blueprint,
+    topicCount,
+    source,
+    theme: {
+      recipe: normalizedBlueprint.themeProfile?.recipe || DEFAULT_THEME_RECIPE,
+      tone: normalizedBlueprint.themeProfile?.tone || 'editorial'
+    },
+    applySanity,
+    outputs: {
+      blueprintPath: resolveSiteBlueprintPath(siteSlug),
+      envPath: path.join(siteDir, '.env.generated'),
+      cmsMutations: path.relative(WORKSPACE_ROOT, cmsMutations),
+      topicMutations: path.relative(WORKSPACE_ROOT, topicMutations),
+      handoffManifest: path.join(siteDir, 'handoff', 'manifest.json'),
+      registry: path.relative(WORKSPACE_ROOT, SITE_REGISTRY_PATH)
+    },
+    applied,
+    registryEntry,
+    nextSteps: [
+      'Import/update n8n workflows for this site context',
+      'Run prepopulate_bulk_runner in n8n',
+      'Deploy apps/web and connect domain DNS',
+      'Transfer credentials using docs/credentials-transfer-template.md'
+    ]
+  };
+
+  console.log(JSON.stringify(summary, null, 2));
+}
+
+function stripSanitySystemFields(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripSanitySystemFields(item));
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const next = {};
+  for (const [key, nested] of Object.entries(value)) {
+    if (key === '_rev' || key === '_createdAt' || key === '_updatedAt') continue;
+    if (nested === undefined) continue;
+    next[key] = stripSanitySystemFields(nested);
+  }
+  return next;
+}
+
+async function fetchSanitySiteDocuments(siteSlug) {
+  const env = loadWorkspaceEnv();
+  const projectId = env.SANITY_PROJECT_ID;
+  const dataset = env.SANITY_DATASET || 'production';
+  const apiVersion = env.SANITY_API_VERSION || '2025-01-01';
+  const readToken = env.SANITY_READ_TOKEN || env.SANITY_WRITE_TOKEN;
+
+  if (!projectId || !readToken) {
+    throw new Error('Missing SANITY_PROJECT_ID or SANITY_READ_TOKEN for release export.');
+  }
+
+  const docTypes = [
+    'siteSettings',
+    'category',
+    'tag',
+    'promptPreset',
+    'topicCandidate',
+    'article',
+    'qaLog',
+    'generationRun',
+    'legalPage'
+  ];
+
+  const escapedSiteSlug = String(siteSlug).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const query = `*[_type in ${JSON.stringify(docTypes)} && siteSlug=="${escapedSiteSlug}"]|order(_type asc,_updatedAt asc)`;
+  const url = `https://${projectId}.api.sanity.io/v${apiVersion}/data/query/${dataset}?query=${encodeURIComponent(query)}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${readToken}`
+    }
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Sanity query failed (${response.status}): ${text}`);
+  }
+
+  const payload = await response.json();
+  const docs = Array.isArray(payload?.result) ? payload.result : [];
+  return docs;
+}
+
+async function commandReleaseSite(siteSlug, flags = {}) {
+  if (!siteSlug) throw new Error('Missing <site-slug>');
+  const blueprint = ensureBusinessDefaults(loadSiteBlueprint(siteSlug));
+  const safeSiteSlug = sanitizeSiteSlug(siteSlug);
+  const siteDir = resolveSiteDir(siteSlug);
+  const releaseDir = path.join(siteDir, 'handoff', 'release');
+  ensureDir(releaseDir);
+
+  commandHandoffPack(siteSlug);
+
+  const summary = {
+    siteSlug: safeSiteSlug,
+    generatedAt: new Date().toISOString(),
+    fromSanity: Boolean(flags['from-sanity']),
+    files: {
+      handoffManifest: path.join(siteDir, 'handoff', 'manifest.json')
+    },
+    counts: {},
+    warnings: []
+  };
+
+  if (flags['from-sanity']) {
+    const rawDocs = await fetchSanitySiteDocuments(safeSiteSlug);
+    const docs = rawDocs.map((doc) => stripSanitySystemFields(doc));
+    const byType = docs.reduce((acc, doc) => {
+      const key = doc?._type || 'unknown';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const mutations = { mutations: docs.map((doc) => ({ createOrReplace: doc })) };
+    const docDumpPath = path.join(releaseDir, 'sanity-site.documents.json');
+    const mutationsPath = path.join(releaseDir, 'sanity-site.mutations.json');
+    writeJson(docDumpPath, {
+      siteSlug: safeSiteSlug,
+      count: docs.length,
+      docs
+    });
+    writeJson(mutationsPath, mutations);
+
+    const imageAssetRefs = Array.from(
+      new Set(
+        docs
+          .filter((doc) => doc?._type === 'article')
+          .map((doc) => doc?.coverImage?.asset?._ref)
+          .filter(Boolean)
+      )
+    );
+
+    summary.files.documents = docDumpPath;
+    summary.files.mutations = mutationsPath;
+    summary.counts = byType;
+    summary.imageAssetRefs = imageAssetRefs;
+    if (imageAssetRefs.length > 0) {
+      summary.warnings.push(
+        'Image asset refs point to source Sanity project assets; for full transfer across projects, re-upload assets or run an asset migration step.'
+      );
+    }
+  } else {
+    summary.warnings.push('Sanity export skipped. Run again with --from-sanity to include live content export.');
+  }
+
+  summary.deliveryMode = blueprint.businessMode || 'transfer_first';
+  const summaryPath = path.join(releaseDir, 'release-summary.json');
+  writeJson(summaryPath, summary);
+  console.log(JSON.stringify(summary, null, 2));
 }
 
 function commandDeploy(siteSlug) {
@@ -904,6 +1732,15 @@ function commandDoctor(siteSlug) {
       checks.push({ name: 'blueprint_json_parse', ok: true });
       checks.push({ name: 'blueprint_required_siteSlug', ok: typeof blueprint.siteSlug === 'string' && blueprint.siteSlug.length > 0 });
       checks.push({ name: 'blueprint_required_brandName', ok: typeof blueprint.brandName === 'string' && blueprint.brandName.length > 0 });
+      checks.push({ name: 'blueprint_business_mode', ok: ['transfer_first', 'managed'].includes(String(blueprint.businessMode || 'transfer_first')) });
+      checks.push({
+        name: 'blueprint_theme_profile',
+        ok: typeof blueprint.themeProfile?.recipe === 'string' && typeof blueprint.themeProfile?.tone === 'string'
+      });
+      checks.push({
+        name: 'blueprint_theme_palette',
+        ok: Boolean(blueprint.theme?.palette?.paper && blueprint.theme?.palette?.ink && blueprint.theme?.palette?.rust && blueprint.theme?.palette?.sage && blueprint.theme?.palette?.coal)
+      });
       checks.push({ name: 'blueprint_categories', ok: Array.isArray(blueprint.categories) && blueprint.categories.length > 0 });
       checks.push({ name: 'blueprint_seedTopics', ok: Array.isArray(blueprint.seedTopics) && blueprint.seedTopics.length > 0 });
     } catch (error) {
@@ -916,6 +1753,7 @@ function commandDoctor(siteSlug) {
 
   const seedPayload = path.join(siteDir, 'seed-content', 'sanity.mutations.json');
   checks.push({ name: 'seed_payload_exists', ok: exists(seedPayload), path: seedPayload });
+  checks.push({ name: 'site_registry_exists', ok: exists(SITE_REGISTRY_PATH), path: SITE_REGISTRY_PATH });
 
   const failed = checks.filter((check) => !check.ok);
   const result = {
@@ -929,7 +1767,7 @@ function commandDoctor(siteSlug) {
 }
 
 function commandHandoffPack(siteSlug) {
-  const blueprint = loadSiteBlueprint(siteSlug);
+  const blueprint = ensureBusinessDefaults(loadSiteBlueprint(siteSlug));
   const siteDir = resolveSiteDir(siteSlug);
   const handoffDir = path.join(siteDir, 'handoff');
   ensureDir(handoffDir);
@@ -939,20 +1777,27 @@ function commandHandoffPack(siteSlug) {
     createdAt: new Date().toISOString(),
     blueprintPath: `sites/${siteSlug}/site.blueprint.json`,
     brandName: blueprint.brandName,
+    businessMode: blueprint.businessMode,
+    delivery: blueprint.delivery,
     publishingTarget: blueprint.publishingTarget?.kind,
     files: [
       `sites/${siteSlug}/site.blueprint.json`,
       `sites/${siteSlug}/.env.generated`,
       `sites/${siteSlug}/seed-content/sanity.mutations.json`,
+      `sites/${siteSlug}/seed-content/topic-candidates.mutations.json`,
+      `sites/registry.json`,
       'docs/handoff-buyer-checklist.md',
       'docs/credentials-transfer-template.md',
       'docs/runbook.md',
-      'docs/architecture.md'
+      'docs/architecture.md',
+      'docs/factory.md',
+      'docs/cost-tiers.md'
     ],
     notes: [
       'Replace placeholder contact/legal details before sale.',
       'Transfer secrets via password manager, not plaintext files.',
-      'If using shared engine mode, include migration/export steps to isolated resources before handoff.'
+      'Sanity should be dedicated per sold site before final transfer.',
+      'If using managed add-on, document SLA, fee, and exit/export process explicitly.'
     ]
   };
 
@@ -984,6 +1829,9 @@ async function main() {
       case 'new':
         commandNew(positional[0], flags);
         break;
+      case 'theme-generate':
+        commandThemeGenerate(positional[0], flags);
+        break;
       case 'init-content':
         commandInitContent(positional[0]);
         break;
@@ -998,6 +1846,12 @@ async function main() {
         break;
       case 'discover-topics':
         await commandSeedTopics(positional[0], flags);
+        break;
+      case 'launch-site':
+        await commandLaunchSite(positional[0], flags);
+        break;
+      case 'release-site':
+        await commandReleaseSite(positional[0], flags);
         break;
       case 'deploy':
         commandDeploy(positional[0]);

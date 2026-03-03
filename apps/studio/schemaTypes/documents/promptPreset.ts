@@ -5,6 +5,7 @@ export const promptPresetType = defineType({
   title: 'Prompt Preset',
   type: 'document',
   fields: [
+    defineField({ name: 'siteSlug', type: 'string', validation: (Rule) => Rule.required() }),
     defineField({ name: 'name', type: 'string', validation: (Rule) => Rule.required() }),
     defineField({ name: 'stage', type: 'string', options: { list: ['topic', 'brief', 'article', 'image', 'qa'] }, validation: (Rule) => Rule.required() }),
     defineField({ name: 'version', type: 'string', validation: (Rule) => Rule.required() }),
@@ -13,7 +14,10 @@ export const promptPresetType = defineType({
     defineField({ name: 'active', type: 'boolean', initialValue: true })
   ],
   preview: {
-    select: { title: 'name', subtitle: 'version', stage: 'stage' },
-    prepare: ({ title, subtitle, stage }) => ({ title, subtitle: `${stage ?? 'stage'} • ${subtitle ?? 'v?'}` })
+    select: { title: 'name', subtitle: 'version', stage: 'stage', siteSlug: 'siteSlug' },
+    prepare: ({ title, subtitle, stage, siteSlug }) => ({
+      title,
+      subtitle: `${siteSlug || 'no-site'} • ${stage ?? 'stage'} • ${subtitle ?? 'v?'}`
+    })
   }
 });

@@ -25,7 +25,7 @@
       "parameters": {
         "language": "javaScript",
         "mode": "runOnceForEachItem",
-        "jsCode": "const targetPublishedCount = Number($env.PREPOPULATE_TARGET_PUBLISHED || 20);\nconst batchSize = Math.max(1, Number($env.PREPOPULATE_BATCH_SIZE || 3));\nconst maxRunMinutes = Math.max(1, Number($env.PREPOPULATE_MAX_RUN_MINUTES || 90));\nconst maxCostUsd = Math.max(1, Number($env.PREPOPULATE_MAX_COST_USD || 15));\nconst batchId = 'prepop-' + new Date().toISOString().replace(/[:.]/g, '-');\nreturn { json: { targetPublishedCount, batchSize, maxRunMinutes, maxCostUsd, pipelineMode: 'prepopulate_bulk_direct', prepopulateBatchId: batchId } };"
+        "jsCode": "const root = (typeof $json === 'object' && $json) ? $json : {};\nconst input = (root.body && typeof root.body === 'object') ? root.body : root;\n\nconst targetPublishedCount = Math.max(1, Number(input.targetPublishedCount || input.prepopulateTargetPublishedCount || $env.PREPOPULATE_TARGET_PUBLISHED || 20));\nconst batchSize = Math.max(1, Number(input.batchSize || input.prepopulateBatchSize || $env.PREPOPULATE_BATCH_SIZE || 3));\nconst maxRunMinutes = Math.max(1, Number(input.maxRunMinutes || input.prepopulateMaxRunMinutes || $env.PREPOPULATE_MAX_RUN_MINUTES || 90));\nconst maxCostUsd = Math.max(1, Number(input.maxCostUsd || input.prepopulateMaxCostUsd || $env.PREPOPULATE_MAX_COST_USD || 15));\nconst siteSlug = String(input.siteSlug || $env.SITE_SLUG || 'hammer-hearth').toLowerCase().trim();\nconst pipelineMode = String(input.pipelineMode || 'prepopulate_bulk_direct');\nconst batchId = String(input.prepopulateBatchId || ('prepop-' + new Date().toISOString().replace(/[:.]/g, '-')));\n\nreturn {\n  json: {\n    targetPublishedCount,\n    batchSize,\n    maxRunMinutes,\n    maxCostUsd,\n    pipelineMode,\n    prepopulateBatchId: batchId,\n    siteSlug,\n  }\n};"
       }
     },
     {
@@ -39,7 +39,7 @@
       ],
       "parameters": {
         "method": "GET",
-        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('count(*[_type==\\\"article\\\" && status==\\\"published\\\"])') }}",
+        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('count(*[_type==\\\"article\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || 'hammer-hearth') + '\\\" && status==\\\"published\\\"])') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -108,10 +108,11 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "pipelineMode": "={{$json.pipelineMode}}",
-            "prepopulateBatchId": "={{$json.prepopulateBatchId}}",
+            "pipelineMode": "={{ $('Load Prepopulate Config').item.json.pipelineMode }}",
+            "prepopulateBatchId": "={{ $('Load Prepopulate Config').item.json.prepopulateBatchId }}",
             "cycleIndex": "={{$json.cycleIndex}}",
-            "plannedCycles": "={{$json.plannedCycles}}"
+            "plannedCycles": "={{$json.plannedCycles}}",
+            "siteSlug": "={{ $('Load Prepopulate Config').item.json.siteSlug }}"
           },
           "matchingColumns": [],
           "schema": [],
@@ -126,6 +127,7 @@
       "name": "Run image_generation_worker",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
+      "alwaysOutputData": true,
       "position": [
         1790,
         140
@@ -141,10 +143,11 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "pipelineMode": "={{$json.pipelineMode}}",
-            "prepopulateBatchId": "={{$json.prepopulateBatchId}}",
+            "pipelineMode": "={{ $('Load Prepopulate Config').item.json.pipelineMode }}",
+            "prepopulateBatchId": "={{ $('Load Prepopulate Config').item.json.prepopulateBatchId }}",
             "cycleIndex": "={{$json.cycleIndex}}",
-            "plannedCycles": "={{$json.plannedCycles}}"
+            "plannedCycles": "={{$json.plannedCycles}}",
+            "siteSlug": "={{ $('Load Prepopulate Config').item.json.siteSlug }}"
           },
           "matchingColumns": [],
           "schema": [],
@@ -159,6 +162,7 @@
       "name": "Run qa_scoring_and_publish_worker",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
+      "alwaysOutputData": true,
       "position": [
         2040,
         140
@@ -174,10 +178,11 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "pipelineMode": "={{$json.pipelineMode}}",
-            "prepopulateBatchId": "={{$json.prepopulateBatchId}}",
+            "pipelineMode": "={{ $('Load Prepopulate Config').item.json.pipelineMode }}",
+            "prepopulateBatchId": "={{ $('Load Prepopulate Config').item.json.prepopulateBatchId }}",
             "cycleIndex": "={{$json.cycleIndex}}",
-            "plannedCycles": "={{$json.plannedCycles}}"
+            "plannedCycles": "={{$json.plannedCycles}}",
+            "siteSlug": "={{ $('Load Prepopulate Config').item.json.siteSlug }}"
           },
           "matchingColumns": [],
           "schema": [],
@@ -199,7 +204,7 @@
       "parameters": {
         "language": "javaScript",
         "mode": "runOnceForAllItems",
-        "jsCode": "const cfg = $('Load Prepopulate Config').item.json;\nconst allItems = (typeof $input !== 'undefined' && $input && typeof $input.all === 'function')\n  ? $input.all()\n  : (typeof items !== 'undefined' ? items : []);\nconst cycleItems = allItems.map((item) => item.json || {});\nconst executedCycles = cycleItems.filter((item) => !item.noWorkNeeded).length;\nconst plannedFromNode = Number(($('Plan prepopulate cycles').item.json || {}).plannedCycles || 0);\nconst plannedCycles = plannedFromNode || cycleItems.length || 0;\nreturn [{\n  json: {\n    workflowName: 'prepopulate_bulk_runner',\n    batchId: cfg.prepopulateBatchId,\n    targetPublishedCount: cfg.targetPublishedCount,\n    batchSize: cfg.batchSize,\n    maxRunMinutes: cfg.maxRunMinutes,\n    maxCostUsd: cfg.maxCostUsd,\n    pipelineMode: cfg.pipelineMode,\n    plannedCycles,\n    executedCycles,\n    note: 'This runner orchestrates existing worker workflows. Configure N8N_WORKFLOW_ID_* env vars and keep PIPELINE_MODE_DEFAULT=prepopulate_bulk_direct during launch.'\n  }\n}];"
+        "jsCode": "const cfg = $('Load Prepopulate Config').item.json;\nconst allItems = (typeof $input !== 'undefined' && $input && typeof $input.all === 'function')\n  ? $input.all()\n  : (typeof items !== 'undefined' ? items : []);\nconst cycleItems = allItems.map((item) => item.json || {});\nconst executedCycles = cycleItems.filter((item) => !item.noWorkNeeded).length;\nconst plannedFromNode = Number(($('Plan prepopulate cycles').item.json || {}).plannedCycles || 0);\nconst plannedCycles = plannedFromNode || cycleItems.length || 0;\nreturn [{\n  json: {\n    workflowName: 'prepopulate_bulk_runner',\n    siteSlug: cfg.siteSlug,\n    batchId: cfg.prepopulateBatchId,\n    targetPublishedCount: cfg.targetPublishedCount,\n    batchSize: cfg.batchSize,\n    maxRunMinutes: cfg.maxRunMinutes,\n    maxCostUsd: cfg.maxCostUsd,\n    pipelineMode: cfg.pipelineMode,\n    plannedCycles,\n    executedCycles,\n    note: 'This runner orchestrates existing worker workflows. Configure N8N_WORKFLOW_ID_* env vars and keep PIPELINE_MODE_DEFAULT=prepopulate_bulk_direct during launch.'\n  }\n}];"
       }
     },
     {
@@ -214,7 +219,23 @@
       "parameters": {
         "language": "javaScript",
         "mode": "runOnceForEachItem",
-        "jsCode": "return { json: { workflowName: 'prepopulate_bulk_runner', noWorkNeeded: true, targetPublishedCount: $json.targetPublishedCount, publishedCount: $json.publishedCount, remaining: $json.remaining, message: 'Target already reached' } };"
+        "jsCode": "return { json: { workflowName: 'prepopulate_bulk_runner', siteSlug: $json.siteSlug, noWorkNeeded: true, targetPublishedCount: $json.targetPublishedCount, publishedCount: $json.publishedCount, remaining: $json.remaining, message: 'Target already reached' } };"
+      }
+    },
+    {
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        420
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "factory-prepopulate",
+        "responseMode": "onReceived",
+        "options": {}
       }
     }
   ],
@@ -308,6 +329,17 @@
         [
           {
             "node": "Build Prepopulate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Prepopulate Config",
             "type": "main",
             "index": 0
           }

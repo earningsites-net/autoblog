@@ -424,7 +424,9 @@ function sanitizeWorkflowForApi(workflow) {
   return {
     name: workflow.name,
     nodes: workflow.nodes,
-    connections: workflow.connections
+    connections: workflow.connections,
+    // n8n 2.9.x requires `settings` on create/update payloads.
+    settings: {}
   };
 }
 
@@ -602,11 +604,26 @@ function buildN8nClient(options) {
     const byId = new Map(remoteWorkflows.map((item) => [String(item.id), item]));
     const byName = new Map(remoteWorkflows.map((item) => [String(item.name), item]));
 
+    const candidatesByName = payload.name
+      ? remoteWorkflows.filter((item) => String(item.name) === String(payload.name))
+      : [];
+    const preferredByName =
+      candidatesByName.find((item) => item.archived !== true && item.isArchived !== true) ||
+      (payload.name && byName.has(String(payload.name)) ? byName.get(String(payload.name)) : null);
+
     let target = null;
     if (workflow.id && byId.has(String(workflow.id))) {
-      target = byId.get(String(workflow.id));
-    } else if (payload.name && byName.has(String(payload.name))) {
-      target = byName.get(String(payload.name));
+      const idTarget = byId.get(String(workflow.id));
+      const idIsArchived = idTarget && (idTarget.archived === true || idTarget.isArchived === true);
+
+      // If JSON carries an old archived id, prefer the active workflow with same name to avoid duplicates.
+      if (idIsArchived && preferredByName && preferredByName.id !== idTarget.id) {
+        target = preferredByName;
+      } else {
+        target = idTarget;
+      }
+    } else if (preferredByName) {
+      target = preferredByName;
     }
 
     const createWorkflow = async (reason = '') => {

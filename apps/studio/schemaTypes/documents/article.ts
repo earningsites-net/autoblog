@@ -10,6 +10,7 @@ export const articleType = defineType({
     { name: 'automation', title: 'Automation' }
   ],
   fields: [
+    defineField({ name: 'siteSlug', type: 'string', group: 'automation', validation: (Rule) => Rule.required() }),
     defineField({ name: 'title', type: 'string', group: 'content', validation: (Rule) => Rule.required().max(120) }),
     defineField({
       name: 'slug',
@@ -30,8 +31,24 @@ export const articleType = defineType({
       ]
     }),
     defineField({ name: 'coverImageAlt', type: 'string', group: 'content', validation: (Rule) => Rule.required().max(180) }),
-    defineField({ name: 'category', type: 'reference', to: [{ type: 'category' }], group: 'content', validation: (Rule) => Rule.required() }),
-    defineField({ name: 'tags', type: 'array', of: [defineArrayMember({ type: 'reference', to: [{ type: 'tag' }] })], group: 'content' }),
+    defineField({
+      name: 'category',
+      type: 'reference',
+      to: [{ type: 'category' }],
+      group: 'content',
+      validation: (Rule) => Rule.required()
+    }),
+    defineField({
+      name: 'tags',
+      type: 'array',
+      of: [
+        defineArrayMember({
+          type: 'reference',
+          to: [{ type: 'tag' }]
+        })
+      ],
+      group: 'content'
+    }),
     defineField({
       name: 'body',
       type: 'array',
@@ -85,12 +102,13 @@ export const articleType = defineType({
     select: {
       title: 'title',
       subtitle: 'status',
+      siteSlug: 'siteSlug',
       media: 'coverImage',
       score: 'qaScore'
     },
-    prepare: ({ title, subtitle, media, score }) => ({
+    prepare: ({ title, subtitle, media, score, siteSlug }) => ({
       title,
-      subtitle: `${subtitle ?? 'draft'} • QA ${score ?? 0}`,
+      subtitle: `${siteSlug || 'no-site'} • ${subtitle ?? 'draft'} • QA ${score ?? 0}`,
       media
     })
   },

@@ -12,10 +12,9 @@ Monorepo MVP for an AI-autopopulated Home & DIY editorial site with:
 ## Quick Start (local)
 1. Copy `.env.example` to `.env` and fill values.
 2. Install dependencies (network required): `npm install`
-3. Run web: `npm run dev:web`
-4. Run Sanity Studio: `npm run dev:studio`
-5. Run engine API scaffold: `npm run dev:engine`
-6. Start n8n infra from `infra/n8n` (optional if using engine-direct mode)
+3. Start all local services with one command: `./scripts/dev-up.sh`
+4. Stop all local services: `./scripts/dev-down.sh`
+5. Full step-by-step command reference: `docs/start-local.md`
 
 ## Notes
 - The frontend includes a mock content fallback when Sanity credentials are not set.

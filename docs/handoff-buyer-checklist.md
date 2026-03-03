@@ -13,6 +13,7 @@
 - Git repository (this repo)
 - n8n exported workflows
 - `.env` templates and current key mapping (without secrets in plaintext email)
+- Site registry snapshot (`sites/registry.json`) with final ownership/mode status
 - Runbook and SOP docs
 - Cost model and current monthly spend estimate
 

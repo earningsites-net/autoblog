@@ -4,8 +4,10 @@ export type BudgetMode = 'normal' | 'economy' | 'throttle' | 'stop';
 export type TextBlock = {
   _key: string;
   _type: 'block';
-  style?: 'normal' | 'h2' | 'h3';
-  children: Array<{ _key: string; _type: 'span'; text: string }>;
+  style?: 'normal' | 'h2' | 'h3' | 'h4';
+  listItem?: 'bullet' | 'number';
+  children: Array<{ _key: string; _type: 'span'; text: string; marks?: string[] }>;
+  markDefs?: Array<{ _key: string; _type: string; href?: string }>;
 };
 
 export type FAQItem = {

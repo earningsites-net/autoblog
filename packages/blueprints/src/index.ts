@@ -6,6 +6,31 @@ export const homeDiyMagazineBlueprint: SiteBlueprint = {
   brandName: 'Hammer & Hearth',
   siteDescription:
     'AI-assisted Home & DIY magazine featuring practical, evergreen guides for organization, maintenance, decor, and seasonal prep.',
+  businessMode: 'transfer_first',
+  delivery: {
+    handoffEnabled: true,
+    managedEligible: true
+  },
+  opsDefaults: {
+    publishEnabled: true,
+    maxPublishesPerRun: 1,
+    cadenceRules: [
+      {
+        label: 'Launch burst (1 per 3 minutes)',
+        startAt: '2026-01-01T00:00:00.000Z',
+        endAt: '2026-01-02T00:00:00.000Z',
+        maxPublishes: 1,
+        perMinutes: 3
+      },
+      {
+        label: 'Steady cadence (1 per day)',
+        startAt: '2026-01-02T00:00:00.000Z',
+        endAt: null,
+        maxPublishes: 1,
+        perDays: 1
+      }
+    ]
+  },
   locale: 'en-US',
   theme: {
     palette: {
@@ -20,6 +45,14 @@ export const homeDiyMagazineBlueprint: SiteBlueprint = {
       bodyFont: 'Source Serif 4'
     },
     visualStyle: 'warm-industrial magazine editorial'
+  },
+  themeProfile: {
+    tone: 'editorial',
+    recipe: 'bold_magazine',
+    layoutDensity: 'balanced',
+    cardStyle: 'mixed',
+    accentIntensity: 'medium',
+    backgroundStyle: 'gradient'
   },
   niche: {
     primaryNiche: 'Home & DIY',

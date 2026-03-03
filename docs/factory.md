@@ -21,12 +21,21 @@ This repo now includes a factory-ready scaffolding layer to create repeatable AI
 ```bash
 node scripts/autoblog.mjs list-blueprints
 node scripts/autoblog.mjs new my-garden-notes --blueprint home-diy-magazine --brand-name "Garden Notes"
+node scripts/autoblog.mjs theme-generate my-garden-notes --tone auto
 node scripts/autoblog.mjs provision-env my-garden-notes
 node scripts/autoblog.mjs init-content my-garden-notes
 node scripts/autoblog.mjs seed-cms my-garden-notes
+node scripts/autoblog.mjs discover-topics my-garden-notes --count 60 --source suggest --replace
+node scripts/autoblog.mjs launch-site my-garden-notes --blueprint home-diy-magazine --theme-tone auto --topic-count 60 --source suggest --apply-sanity
 node scripts/autoblog.mjs doctor my-garden-notes
 node scripts/autoblog.mjs handoff-pack my-garden-notes
 ```
+
+## Theme Engine
+- Every site can get a one-time generated visual identity (`themeProfile`) from niche/category/seed signals.
+- `theme-generate` writes palette, typography, recipe, and style profile directly into `sites/<slug>/site.blueprint.json`.
+- Supported tones: `editorial`, `luxury`, `wellness`, `playful`, `technical` (+ `auto` detection).
+- Supported recipes: `bold_magazine`, `editorial_luxury`, `warm_wellness`, `playful_kids`, `technical_minimal`.
 
 ## Engine API (scaffold)
 - `POST /v1/generation/topics`
@@ -40,11 +49,30 @@ node scripts/autoblog.mjs handoff-pack my-garden-notes
 - `GET /v1/sites/:siteSlug/health`
 - `GET /v1/content/categories?siteSlug=...` (read-side stub)
 - `GET /v1/content/articles?siteSlug=...` (read-side stub)
+- `POST /api/factory/site/create`
+- `POST /api/factory/site/launch` (one-click orchestration)
+- `POST /api/factory/site/seed-cms`
+- `POST /api/factory/site/discover-topics`
+- `POST /api/factory/site/prepopulate`
+- `POST /api/factory/site/handoff-pack`
+- `GET /api/factory/site/:siteSlug/status`
+- `GET /ops/factory` (internal lightweight form UI)
+
+## One-Click Factory Flow (internal)
+1. Open `GET /ops/factory`.
+2. Fill `siteSlug`, `brandName`, business mode, niche preset, theme options, and topic settings.
+3. Optional toggles:
+   - `Apply Sanity mutations`
+   - `Run prepopulate`
+   - `Replace topic candidates`
+   - `Force overwrite existing site`
+4. Click `Launch Site (One Click)` to run: create -> niche/theme -> provision -> seed -> discover -> optional prepopulate -> handoff.
 
 ## Current State / What is stubbed
 - `apps/engine` returns contract-valid stub outputs via `DirectEngineRunner`.
 - `N8nWorkflowRunner` and publisher adapters are scaffolds ready to be implemented.
-- Factory API provisioning endpoints exist as `501` placeholders; CLI is the active path for now.
+- Factory API provisioning endpoints are wired to CLI-backed operations (`create/seed/discover/handoff`).
+- Prepopulate is still webhook-driven (`PREPOPULATE_TRIGGER_URL`) and should be connected to n8n for full automation.
 
 ## Recommended Evolution Path
 1. Keep `Sanity + n8n` for the first POC/site.

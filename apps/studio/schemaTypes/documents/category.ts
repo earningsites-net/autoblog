@@ -5,6 +5,7 @@ export const categoryType = defineType({
   title: 'Category',
   type: 'document',
   fields: [
+    defineField({ name: 'siteSlug', type: 'string', validation: (Rule) => Rule.required() }),
     defineField({ name: 'title', type: 'string', validation: (Rule) => Rule.required().max(80) }),
     defineField({
       name: 'slug',
@@ -17,5 +18,11 @@ export const categoryType = defineType({
     defineField({ name: 'allowedScopeNotes', type: 'text', rows: 4 }),
     defineField({ name: 'excludedScopeNotes', type: 'text', rows: 4 })
   ],
-  preview: { select: { title: 'title', subtitle: 'description' } }
+  preview: {
+    select: { title: 'title', subtitle: 'description', siteSlug: 'siteSlug' },
+    prepare: ({ title, subtitle, siteSlug }) => ({
+      title,
+      subtitle: `${siteSlug || 'no-site'} • ${subtitle || ''}`
+    })
+  }
 });
