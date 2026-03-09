@@ -199,7 +199,7 @@ export default async function ArticlePage({ params }: Props) {
         </div>
 
         <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
-          <AdSlot name="Article Sidebar Top" minHeight={280} />
+          <AdSlot name="Article Sidebar Top" minHeight={280} slotKey="header" />
 
           <section className={sidebarPanelClass}>
             <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentLabelClass}`}>Internal Links</p>
@@ -230,7 +230,7 @@ export default async function ArticlePage({ params }: Props) {
         </aside>
       </article>
 
-      <AdSlot name="Article In-feed Bottom" minHeight={180} />
+      <AdSlot name="Article In-feed Bottom" minHeight={180} slotKey="footer" />
 
       {related.length > 0 ? (
         <section className="space-y-5">

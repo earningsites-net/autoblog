@@ -149,11 +149,24 @@ export const siteRegistryEntrySchema = z.object({
   siteSlug: z.string().min(1),
   ownerType: z.enum(['internal', 'client']),
   mode: z.enum(['transfer', 'managed']),
+  ownerEmail: z.string().email().optional(),
   sanityProjectId: z.string().optional(),
   sanityDataset: z.string().optional(),
+  sanityApiVersion: z.string().optional(),
   tokenRefs: z.object({
     read: z.string().optional(),
     write: z.string().optional()
+  }).optional(),
+  studioUrl: z.string().url().optional(),
+  adConfig: z.object({
+    provider: z.literal('adsense'),
+    fallbackToPlatform: z.boolean().optional(),
+    publisherId: z.string().optional(),
+    slots: z.object({
+      header: z.string().optional(),
+      inContent: z.string().optional(),
+      footer: z.string().optional()
+    }).optional()
   }).optional(),
   webBaseUrl: z.string().optional(),
   domainStatus: z.enum(['pending', 'active', 'transferred']),

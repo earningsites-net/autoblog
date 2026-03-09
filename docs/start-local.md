@@ -28,12 +28,14 @@ Compila almeno questi valori:
 
 - In `.env`: `SITE_SLUG`, `SANITY_STUDIO_SITE_SLUG`, `SANITY_PROJECT_ID`, `SANITY_DATASET`, `SANITY_API_VERSION`, `SANITY_READ_TOKEN`, `SANITY_WRITE_TOKEN`, `REVALIDATE_SECRET`, `OPENAI_API_KEY`, `REPLICATE_API_TOKEN`
 - In `infra/n8n/.env`: `SITE_SLUG`, `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`, `POSTGRES_PASSWORD`, `SANITY_*`, `WEB_APP_URL`, `WEB_REVALIDATE_SECRET`, provider keys AI
+- In `infra/n8n/.env` per scheduler piano-based: `PLAN_SCHEDULER_TEST_MODE`, `PLAN_SCHEDULER_TICK_MINUTES`, `PLAN_TEST_INTERVAL_MINUTES_BASE`, `PLAN_TEST_INTERVAL_MINUTES_STANDARD`, `PLAN_TEST_INTERVAL_MINUTES_PRO`, `PLAN_TOPIC_REFILL_INTERVAL_MINUTES`, `PLAN_TOPIC_REFILL_COUNT`, `ARTICLE_BATCH_SIZE`, `IMAGE_BATCH_SIZE`, `QA_BATCH_SIZE`
 
 Note utili:
 
 - Per il revalidate da n8n locale verso Next locale, usa `WEB_APP_URL=http://host.docker.internal:3000`.
 - `WEB_REVALIDATE_SECRET` (n8n) deve combaciare con `REVALIDATE_SECRET` (web).
 - Se lavori su un sito diverso, aggiorna `SITE_SLUG` in entrambi i file env prima di lanciare i workflow.
+- Lo scheduler piano-based usa `siteSlug` e quota dal backend engine; se `brief_ready` è vuoto attiva auto-refill topic via API factory.
 
 ## 2) Avvio stack (4 terminali)
 
@@ -121,6 +123,13 @@ Verifica n8n:
 ```bash
 cd "/Users/danilociamprone/Documents/Auto blog project/infra/n8n"
 docker compose logs -f n8n
+```
+
+Controllo rapido env effettive nel container n8n:
+
+```bash
+cd "/Users/danilociamprone/Documents/Auto blog project/infra/n8n"
+docker compose exec -T n8n sh -lc 'echo PLAN_SCHEDULER_TEST_MODE=$PLAN_SCHEDULER_TEST_MODE; echo PLAN_TEST_INTERVAL_MINUTES_BASE=$PLAN_TEST_INTERVAL_MINUTES_BASE; echo PLAN_TEST_INTERVAL_MINUTES_STANDARD=$PLAN_TEST_INTERVAL_MINUTES_STANDARD; echo PLAN_TEST_INTERVAL_MINUTES_PRO=$PLAN_TEST_INTERVAL_MINUTES_PRO; echo PLAN_TOPIC_REFILL_INTERVAL_MINUTES=$PLAN_TOPIC_REFILL_INTERVAL_MINUTES; echo PLAN_TOPIC_REFILL_COUNT=$PLAN_TOPIC_REFILL_COUNT; echo ARTICLE_BATCH_SIZE=$ARTICLE_BATCH_SIZE; echo IMAGE_BATCH_SIZE=$IMAGE_BATCH_SIZE; echo QA_BATCH_SIZE=$QA_BATCH_SIZE'
 ```
 
 ## 4) Creazione nuovo sito (2 modalità)

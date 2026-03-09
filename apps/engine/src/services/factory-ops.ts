@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { SiteRuntimeService } from './site-runtime-service';
 
 type CommandResult = {
   ok: boolean;
@@ -29,6 +30,13 @@ type CreateSiteInput = {
     | 'midnight_wellness_dark'
     | 'arcade_play_dark';
   applyCmsMutations?: boolean;
+  sanityProjectId?: string;
+  sanityDataset?: string;
+  sanityApiVersion?: string;
+  sanityReadToken?: string;
+  sanityWriteToken?: string;
+  studioUrl?: string;
+  ownerEmail?: string;
   force?: boolean;
 };
 
@@ -81,6 +89,13 @@ type LaunchSiteInput = {
   runPrepopulate?: boolean;
   prepopulateTargetPublishedCount?: number;
   prepopulateBatchSize?: number;
+  sanityProjectId?: string;
+  sanityDataset?: string;
+  sanityApiVersion?: string;
+  sanityReadToken?: string;
+  sanityWriteToken?: string;
+  studioUrl?: string;
+  ownerEmail?: string;
   force?: boolean;
 };
 
@@ -298,10 +313,12 @@ const NICHE_PRESETS: Record<NichePresetId, NichePreset> = {
 export class FactoryOpsService {
   private readonly autoblogScript: string;
   private readonly sanityApplyScript: string;
+  private readonly siteRuntime: SiteRuntimeService;
 
   constructor(private readonly workspaceRoot: string) {
     this.autoblogScript = path.join(this.workspaceRoot, 'scripts', 'autoblog.mjs');
     this.sanityApplyScript = path.join(this.workspaceRoot, 'scripts', 'sanity-apply-mutations.mjs');
+    this.siteRuntime = new SiteRuntimeService(this.workspaceRoot);
   }
 
   listNichePresets() {
@@ -322,14 +339,17 @@ export class FactoryOpsService {
     }
   }
 
-  private runNodeScript(scriptPath: string, args: string[]): Promise<CommandResult> {
+  private runNodeScript(scriptPath: string, args: string[], envOverrides?: Record<string, string>): Promise<CommandResult> {
     return new Promise((resolve) => {
       const stdoutChunks: Buffer[] = [];
       const stderrChunks: Buffer[] = [];
 
       const child = spawn(process.execPath, [scriptPath, ...args], {
         cwd: this.workspaceRoot,
-        env: process.env
+        env: {
+          ...process.env,
+          ...(envOverrides || {})
+        }
       });
 
       child.stdout.on('data', (chunk) => stdoutChunks.push(Buffer.from(chunk)));
@@ -354,8 +374,61 @@ export class FactoryOpsService {
     return this.runNodeScript(this.autoblogScript, args);
   }
 
-  private runSanityApply(filePath: string) {
-    return this.runNodeScript(this.sanityApplyScript, ['--file', filePath]);
+  private runSanityApply(filePath: string, envOverrides?: Record<string, string>) {
+    return this.runNodeScript(this.sanityApplyScript, ['--file', filePath], envOverrides);
+  }
+
+  private async resolveSiteSanityEnv(input: {
+    siteSlug: string;
+    sanityProjectId?: string;
+    sanityDataset?: string;
+    sanityApiVersion?: string;
+    sanityReadToken?: string;
+    sanityWriteToken?: string;
+  }) {
+    const fromSiteEnv = await this.siteRuntime.getSiteSanityConnection(input.siteSlug);
+    return {
+      SANITY_PROJECT_ID: String(input.sanityProjectId || fromSiteEnv.projectId || '').trim(),
+      SANITY_DATASET: String(input.sanityDataset || fromSiteEnv.dataset || 'production').trim(),
+      SANITY_API_VERSION: String(input.sanityApiVersion || fromSiteEnv.apiVersion || '2025-01-01').trim(),
+      SANITY_READ_TOKEN: String(input.sanityReadToken || fromSiteEnv.readToken || '').trim(),
+      SANITY_WRITE_TOKEN: String(input.sanityWriteToken || fromSiteEnv.writeToken || '').trim()
+    };
+  }
+
+  private async applySiteRuntimeOverrides(input: {
+    siteSlug: string;
+    businessMode?: 'transfer_first' | 'managed';
+    sanityProjectId?: string;
+    sanityDataset?: string;
+    sanityApiVersion?: string;
+    sanityReadToken?: string;
+    sanityWriteToken?: string;
+    studioUrl?: string;
+    ownerEmail?: string;
+  }) {
+    const normalizedMode = input.businessMode === 'managed' ? 'managed' : 'transfer';
+    const siteSlug = String(input.siteSlug || '').trim().toLowerCase();
+    if (!siteSlug) return;
+
+    const envUpdates: Record<string, string> = {};
+    if (input.sanityProjectId) envUpdates.SANITY_PROJECT_ID = input.sanityProjectId;
+    if (input.sanityDataset) envUpdates.SANITY_DATASET = input.sanityDataset;
+    if (input.sanityApiVersion) envUpdates.SANITY_API_VERSION = input.sanityApiVersion;
+    if (input.sanityReadToken) envUpdates.SANITY_READ_TOKEN = input.sanityReadToken;
+    if (input.sanityWriteToken) envUpdates.SANITY_WRITE_TOKEN = input.sanityWriteToken;
+    if (input.studioUrl) envUpdates.SANITY_STUDIO_URL = input.studioUrl;
+
+    await this.siteRuntime.patchSiteEnv(siteSlug, envUpdates);
+    await this.siteRuntime.upsertRegistrySite(siteSlug, {
+      mode: normalizedMode,
+      sanityProjectId: input.sanityProjectId,
+      sanityDataset: input.sanityDataset,
+      sanityApiVersion: input.sanityApiVersion,
+      ownerEmail: input.ownerEmail,
+      studioUrl: input.studioUrl,
+      billingStatus: normalizedMode === 'managed' ? 'trial' : 'n/a'
+    });
   }
 
   private async applyNichePreset(siteSlug: string, nichePreset?: NichePresetId) {
@@ -417,6 +490,18 @@ export class FactoryOpsService {
     const provision = await this.runAutoblog(['provision-env', input.siteSlug, '--force']);
     if (!provision.ok) return { ok: false, step: 'provision-env', create, niche, theme, provision };
 
+    await this.applySiteRuntimeOverrides({
+      siteSlug: input.siteSlug,
+      businessMode: input.businessMode,
+      sanityProjectId: input.sanityProjectId,
+      sanityDataset: input.sanityDataset,
+      sanityApiVersion: input.sanityApiVersion,
+      sanityReadToken: input.sanityReadToken,
+      sanityWriteToken: input.sanityWriteToken,
+      studioUrl: input.studioUrl,
+      ownerEmail: input.ownerEmail
+    });
+
     const initContent = await this.runAutoblog(['init-content', input.siteSlug]);
     if (!initContent.ok) return { ok: false, step: 'init-content', create, niche, theme, provision, initContent };
 
@@ -426,7 +511,21 @@ export class FactoryOpsService {
     const cmsMutationsFile = `sites/${input.siteSlug}/seed-content/sanity.mutations.json`;
     let cmsApplied: CommandResult | null = null;
     if (input.applyCmsMutations) {
-      cmsApplied = await this.runSanityApply(cmsMutationsFile);
+      const sanityEnv = await this.resolveSiteSanityEnv(input);
+      if (!sanityEnv.SANITY_PROJECT_ID || !sanityEnv.SANITY_WRITE_TOKEN) {
+        return {
+          ok: false,
+          step: 'sanity-apply-cms',
+          error: 'Missing SANITY_PROJECT_ID or SANITY_WRITE_TOKEN for this site',
+          create,
+          niche,
+          theme,
+          provision,
+          initContent,
+          seedCms
+        };
+      }
+      cmsApplied = await this.runSanityApply(cmsMutationsFile, sanityEnv);
       if (!cmsApplied.ok) {
         return {
           ok: false,
@@ -456,7 +555,16 @@ export class FactoryOpsService {
     const mutationFile = `sites/${input.siteSlug}/seed-content/sanity.mutations.json`;
     let applied: CommandResult | null = null;
     if (input.apply) {
-      applied = await this.runSanityApply(mutationFile);
+      const sanityEnv = await this.resolveSiteSanityEnv({ siteSlug: input.siteSlug });
+      if (!sanityEnv.SANITY_PROJECT_ID || !sanityEnv.SANITY_WRITE_TOKEN) {
+        return {
+          ok: false,
+          step: 'sanity-apply',
+          error: 'Missing SANITY_PROJECT_ID or SANITY_WRITE_TOKEN for this site',
+          seed
+        };
+      }
+      applied = await this.runSanityApply(mutationFile, sanityEnv);
       if (!applied.ok) return { ok: false, step: 'sanity-apply', seed, applied };
     }
 
@@ -482,7 +590,16 @@ export class FactoryOpsService {
     const mutationFile = `sites/${input.siteSlug}/seed-content/topic-candidates.mutations.json`;
     let applied: CommandResult | null = null;
     if (input.apply) {
-      applied = await this.runSanityApply(mutationFile);
+      const sanityEnv = await this.resolveSiteSanityEnv({ siteSlug: input.siteSlug });
+      if (!sanityEnv.SANITY_PROJECT_ID || !sanityEnv.SANITY_WRITE_TOKEN) {
+        return {
+          ok: false,
+          step: 'sanity-apply-topics',
+          error: 'Missing SANITY_PROJECT_ID or SANITY_WRITE_TOKEN for this site',
+          discover
+        };
+      }
+      applied = await this.runSanityApply(mutationFile, sanityEnv);
       if (!applied.ok) return { ok: false, step: 'sanity-apply-topics', discover, applied };
     }
 
@@ -542,6 +659,13 @@ export class FactoryOpsService {
       themeTone: input.themeTone,
       themeRecipe: input.themeRecipe,
       applyCmsMutations: input.applySanity,
+      sanityProjectId: input.sanityProjectId,
+      sanityDataset: input.sanityDataset,
+      sanityApiVersion: input.sanityApiVersion,
+      sanityReadToken: input.sanityReadToken,
+      sanityWriteToken: input.sanityWriteToken,
+      studioUrl: input.studioUrl,
+      ownerEmail: input.ownerEmail,
       force: input.force
     });
     if (!create.ok) return { ok: false, step: 'create-site', create };

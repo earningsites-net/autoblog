@@ -18,6 +18,7 @@ import { SiteHeader } from '@web/components/site-header';
 import { SiteFooter } from '@web/components/site-footer';
 import { RouteLoadingOverlay } from '@web/components/route-loading-overlay';
 import { defaultMetadata } from '@web/lib/seo';
+import { getPublicSiteSettings, resolveAdPublisherId } from '@web/lib/site-settings';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 const sora = Sora({
@@ -82,10 +83,15 @@ const ibmPlexSans = IBM_Plex_Sans({
 
 export const metadata: Metadata = defaultMetadata();
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   const gaId = process.env.GA_MEASUREMENT_ID;
   const theme = getActiveSiteTheme();
   const bodyStyle = theme.cssVars as CSSProperties;
+  const siteSettings = await getPublicSiteSettings();
+  const adsPublisherId = resolveAdPublisherId(siteSettings);
+  const adsEnabled = siteSettings.adSlotsEnabled && (Boolean(adsPublisherId) || process.env.NODE_ENV !== 'production');
+  const adsMode = siteSettings.adsMode || 'auto';
+  const adsPreviewEnabled = process.env.NODE_ENV !== 'production' ? true : siteSettings.adsPreviewEnabled;
 
   const fontVars = [
     spaceGrotesk.variable,
@@ -106,9 +112,33 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       className={fontVars}
       data-theme-recipe={theme.recipe}
       data-theme-tone={theme.tone}
+      data-ads-enabled={adsEnabled ? 'true' : 'false'}
+      data-ads-mode={adsMode}
+      data-ads-preview-enabled={adsPreviewEnabled ? 'true' : 'false'}
+      data-adsense-publisher={adsPublisherId}
+      data-ads-slot-header={siteSettings.adsenseSlotHeader}
+      data-ads-slot-in-content={siteSettings.adsenseSlotInContent}
+      data-ads-slot-footer={siteSettings.adsenseSlotFooter}
       suppressHydrationWarning
     >
       <body style={bodyStyle} className="font-body antialiased [font-family:var(--font-body)]">
+        {adsEnabled && adsPublisherId ? (
+          <Script
+            id="adsbygoogle-script"
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(adsPublisherId)}`}
+            strategy="afterInteractive"
+            crossOrigin="anonymous"
+          />
+        ) : null}
+        {adsEnabled && adsPublisherId && (adsMode === 'auto' || adsMode === 'hybrid') ? (
+          <Script id="adsbygoogle-auto-ads-init" strategy="afterInteractive">
+            {`window.adsbygoogle = window.adsbygoogle || [];
+window.adsbygoogle.push({
+  google_ad_client: '${adsPublisherId.replace(/'/g, "\\'")}',
+  enable_page_level_ads: true
+});`}
+          </Script>
+        ) : null}
         {gaId ? (
           <>
             <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} strategy="afterInteractive" />

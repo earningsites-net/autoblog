@@ -70,7 +70,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     <div className="space-y-8 py-6">
       <PageHero eyebrow="Category" title={category.title} description={category.description} />
 
-      <AdSlot name={`Category Top - ${category.title}`} minHeight={160} />
+      <AdSlot name={`Category Top - ${category.title}`} minHeight={160} slotKey="header" />
 
       {pagination.items.length === 0 ? (
         <div className={emptyStateClass}>

@@ -10,6 +10,19 @@ export const siteSettingsType = defineType({
     defineField({ name: 'siteDescription', type: 'text', rows: 3 }),
     defineField({ name: 'defaultLocale', type: 'string', initialValue: 'en-US' }),
     defineField({ name: 'adSlotsEnabled', type: 'boolean', initialValue: false }),
+    defineField({
+      name: 'adsMode',
+      type: 'string',
+      initialValue: 'auto',
+      options: { list: ['auto', 'manual', 'hybrid'] }
+    }),
+    defineField({ name: 'adsPreviewEnabled', type: 'boolean', initialValue: true }),
+    defineField({ name: 'adsensePublisherId', type: 'string' }),
+    defineField({ name: 'adsenseSlotHeader', type: 'string' }),
+    defineField({ name: 'adsenseSlotInContent', type: 'string' }),
+    defineField({ name: 'adsenseSlotFooter', type: 'string' }),
+    defineField({ name: 'fallbackToPlatform', type: 'boolean', initialValue: true }),
+    defineField({ name: 'studioUrl', type: 'url' }),
     defineField({ name: 'gaMeasurementId', type: 'string' }),
     defineField({ name: 'searchConsoleVerification', type: 'string' }),
     defineField({ name: 'brandPrimaryColor', type: 'string', initialValue: '#E08748' }),
@@ -28,6 +41,10 @@ export const siteSettingsType = defineType({
         defineField({ name: 'revalidateEnabled', type: 'boolean', initialValue: true }),
         defineField({ name: 'revalidateContinueOnFail', type: 'boolean', initialValue: true }),
         defineField({ name: 'maxPublishesPerRun', type: 'number', initialValue: 1 }),
+        defineField({ name: 'planMonthlyQuota', type: 'number', initialValue: 0 }),
+        defineField({ name: 'publishedThisMonth', type: 'number', initialValue: 0 }),
+        defineField({ name: 'quotaPeriodStart', type: 'datetime' }),
+        defineField({ name: 'quotaPeriodEnd', type: 'datetime' }),
         defineField({
           name: 'cadenceRules',
           type: 'array',
@@ -59,6 +76,34 @@ export const siteSettingsType = defineType({
               }
             })
           ]
+        })
+      ]
+    }),
+    defineField({
+      name: 'entitlement',
+      type: 'object',
+      fields: [
+        defineField({
+          name: 'plan',
+          type: 'string',
+          options: { list: ['base', 'standard', 'pro'] },
+          initialValue: 'base'
+        }),
+        defineField({ name: 'monthlyQuota', type: 'number', initialValue: 3 }),
+        defineField({ name: 'publishedThisMonth', type: 'number', initialValue: 0 }),
+        defineField({ name: 'periodStart', type: 'datetime' }),
+        defineField({ name: 'periodEnd', type: 'datetime' }),
+        defineField({
+          name: 'status',
+          type: 'string',
+          options: { list: ['active', 'paused', 'stopped'] },
+          initialValue: 'active'
+        }),
+        defineField({
+          name: 'billingStatus',
+          type: 'string',
+          options: { list: ['n/a', 'trial', 'active', 'overdue', 'canceled'] },
+          initialValue: 'trial'
         })
       ]
     })

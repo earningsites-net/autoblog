@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-02-27T00:00:00.000Z",
+  "updatedAt": "2026-03-05T10:32:47.158Z",
   "sites": [
     {
       "siteSlug": "hammer-hearth",
@@ -17,6 +17,36 @@
       "automationStatus": "inactive",
       "billingStatus": "n/a",
       "updatedAt": "2026-02-27T00:00:00.000Z"
+    },
+    {
+      "siteSlug": "lux-living-01",
+      "ownerType": "internal",
+      "mode": "transfer",
+      "sanityProjectId": "",
+      "sanityDataset": "production",
+      "sanityApiVersion": "2025-01-01",
+      "tokenRefs": {
+        "read": "SITE_SANITY_READ_TOKEN",
+        "write": "SITE_SANITY_WRITE_TOKEN"
+      },
+      "webBaseUrl": "",
+      "domainStatus": "pending",
+      "automationStatus": "inactive",
+      "billingStatus": "trial",
+      "ownerEmail": "",
+      "studioUrl": "",
+      "adConfig": {
+        "provider": "adsense",
+        "mode": "manual",
+        "fallbackToPlatform": true,
+        "publisherId": "",
+        "slots": {
+          "header": "",
+          "inContent": "",
+          "footer": ""
+        }
+      },
+      "updatedAt": "2026-03-05T10:32:47.158Z"
     }
   ]
 }

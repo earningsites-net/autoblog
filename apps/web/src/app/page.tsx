@@ -194,7 +194,7 @@ export default async function HomePage() {
         </section>
       ) : null}
 
-      <AdSlot name="Home Hero In-feed" minHeight={180} />
+      <AdSlot name="Home Hero In-feed" minHeight={180} slotKey="header" />
 
       <ArticleCarouselColumns
         articles={laneCarouselItems}
@@ -217,7 +217,7 @@ export default async function HomePage() {
 
       <LatestDuoSection articles={latest} />
 
-      <AdSlot name="Home Mid In-feed" minHeight={220} />
+      <AdSlot name="Home Mid In-feed" minHeight={220} slotKey="inContent" />
 
       <section className="space-y-5">
         <div>

@@ -25,7 +25,7 @@
       "parameters": {
         "language": "javaScript",
         "mode": "runOnceForEachItem",
-        "jsCode": "const root = (typeof $json === 'object' && $json) ? $json : {};\nconst input = (root.body && typeof root.body === 'object') ? root.body : root;\n\nconst targetPublishedCount = Math.max(1, Number(input.targetPublishedCount || input.prepopulateTargetPublishedCount || $env.PREPOPULATE_TARGET_PUBLISHED || 20));\nconst batchSize = Math.max(1, Number(input.batchSize || input.prepopulateBatchSize || $env.PREPOPULATE_BATCH_SIZE || 3));\nconst maxRunMinutes = Math.max(1, Number(input.maxRunMinutes || input.prepopulateMaxRunMinutes || $env.PREPOPULATE_MAX_RUN_MINUTES || 90));\nconst maxCostUsd = Math.max(1, Number(input.maxCostUsd || input.prepopulateMaxCostUsd || $env.PREPOPULATE_MAX_COST_USD || 15));\nconst siteSlug = String(input.siteSlug || $env.SITE_SLUG || 'hammer-hearth').toLowerCase().trim();\nconst pipelineMode = String(input.pipelineMode || 'prepopulate_bulk_direct');\nconst batchId = String(input.prepopulateBatchId || ('prepop-' + new Date().toISOString().replace(/[:.]/g, '-')));\n\nreturn {\n  json: {\n    targetPublishedCount,\n    batchSize,\n    maxRunMinutes,\n    maxCostUsd,\n    pipelineMode,\n    prepopulateBatchId: batchId,\n    siteSlug,\n  }\n};"
+        "jsCode": "const root = (typeof $json === 'object' && $json) ? $json : {};\nconst input = (root.body && typeof root.body === 'object') ? root.body : root;\n\nconst targetPublishedCount = Math.max(1, Number(input.targetPublishedCount || input.prepopulateTargetPublishedCount || $env.PREPOPULATE_TARGET_PUBLISHED || 20));\nconst batchSize = Math.max(1, Number(input.batchSize || input.prepopulateBatchSize || $env.PREPOPULATE_BATCH_SIZE || 3));\nconst maxRunMinutes = Math.max(1, Number(input.maxRunMinutes || input.prepopulateMaxRunMinutes || $env.PREPOPULATE_MAX_RUN_MINUTES || 90));\nconst maxCostUsd = Math.max(1, Number(input.maxCostUsd || input.prepopulateMaxCostUsd || $env.PREPOPULATE_MAX_COST_USD || 15));\nconst siteSlug = String(input.siteSlug || $env.SITE_SLUG || '').toLowerCase().trim();\nif (!siteSlug) throw new Error('Missing siteSlug (payload or SITE_SLUG env) for prepopulate');\nconst pipelineMode = String(input.pipelineMode || 'prepopulate_bulk_direct');\nconst batchId = String(input.prepopulateBatchId || ('prepop-' + new Date().toISOString().replace(/[:.]/g, '-')));\n\nreturn {\n  json: {\n    targetPublishedCount,\n    batchSize,\n    maxRunMinutes,\n    maxCostUsd,\n    pipelineMode,\n    prepopulateBatchId: batchId,\n    siteSlug,\n  }\n};"
       }
     },
     {
@@ -39,7 +39,7 @@
       ],
       "parameters": {
         "method": "GET",
-        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('count(*[_type==\\\"article\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || 'hammer-hearth') + '\\\" && status==\\\"published\\\"])') }}",
+        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('count(*[_type==\\\"article\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || '') + '\\\" && status==\\\"published\\\"])') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

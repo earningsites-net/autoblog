@@ -69,10 +69,10 @@ node scripts/autoblog.mjs handoff-pack my-garden-notes
 4. Click `Launch Site (One Click)` to run: create -> niche/theme -> provision -> seed -> discover -> optional prepopulate -> handoff.
 
 ## Current State / What is stubbed
-- `apps/engine` returns contract-valid stub outputs via `DirectEngineRunner`.
-- `N8nWorkflowRunner` and publisher adapters are scaffolds ready to be implemented.
 - Factory API provisioning endpoints are wired to CLI-backed operations (`create/seed/discover/handoff`).
-- Prepopulate is still webhook-driven (`PREPOPULATE_TRIGGER_URL`) and should be connected to n8n for full automation.
+- One-click flow supports passing per-site Sanity credentials and persisting to site env/registry.
+- Plan-based n8n scheduler is integrated with engine entitlements and supports topic auto-refill when queue is empty.
+- Prepopulate remains webhook-driven (`PREPOPULATE_TRIGGER_URL`) and can be kept as bootstrap mode.
 
 ## Recommended Evolution Path
 1. Keep `Sanity + n8n` for the first POC/site.

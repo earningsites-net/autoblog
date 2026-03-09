@@ -22,6 +22,42 @@ Options:
 EOF
 }
 
+ensure_node_version() {
+  local nvm_sh
+  if [[ -n "${NVM_DIR:-}" && -f "${NVM_DIR}/nvm.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "${NVM_DIR}/nvm.sh" >/dev/null 2>&1 || true
+  else
+    for nvm_sh in "$HOME/.nvm/nvm.sh" "/opt/homebrew/opt/nvm/nvm.sh" "/usr/local/opt/nvm/nvm.sh"; do
+      if [[ -f "$nvm_sh" ]]; then
+        # shellcheck source=/dev/null
+        source "$nvm_sh" >/dev/null 2>&1 || true
+        break
+      fi
+    done
+  fi
+
+  if command -v nvm >/dev/null 2>&1; then
+    nvm use --silent >/dev/null 2>&1 || true
+  fi
+
+  local node_version_raw
+  local node_major
+  node_version_raw="$(node -v 2>/dev/null || true)"
+  if [[ -z "$node_version_raw" ]]; then
+    echo "[error] Node.js is not available in PATH." >&2
+    echo "        Install Node.js 22+ and retry." >&2
+    exit 1
+  fi
+
+  node_major="$(echo "$node_version_raw" | sed -E 's/^v([0-9]+).*/\1/')"
+  if [[ -z "$node_major" || "$node_major" -lt 22 ]]; then
+    echo "[error] Node.js ${node_version_raw} detected. This project requires Node.js 22+." >&2
+    echo "        Run your version manager (for example: nvm use 22) and retry." >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-docker)
@@ -45,6 +81,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 mkdir -p "$RUNTIME_DIR" "$LOG_DIR"
+ensure_node_version
 
 if [[ -f "$N8N_ENV_FILE" ]]; then
   parsed_port="$(grep -E '^N8N_PORT=' "$N8N_ENV_FILE" | tail -n 1 | cut -d '=' -f 2- | tr -d '"' | tr -d "'" | tr -d '[:space:]' || true)"
@@ -107,6 +144,13 @@ start_service() {
   local command="$2"
   local pid_file="${RUNTIME_DIR}/${name}.pid"
   local log_file="${LOG_DIR}/${name}.log"
+  local node_bin
+  local node_dir
+  local wrapped_command
+
+  node_bin="$(command -v node 2>/dev/null || true)"
+  node_dir="$(dirname "$node_bin")"
+  wrapped_command="export PATH=\"${node_dir}:\$PATH\"; hash -r; ${command}"
 
   if cleanup_stale_pid "$pid_file"; then
     echo "[skip] ${name} already running (pid $(cat "$pid_file"))"
@@ -116,7 +160,7 @@ start_service() {
   echo "[start] ${name}"
   (
     cd "$ROOT_DIR"
-    nohup /bin/zsh -lc "$command" >"$log_file" 2>&1 &
+    nohup /bin/zsh -lc "$wrapped_command" >"$log_file" 2>&1 &
     echo "$!" >"$pid_file"
   )
 

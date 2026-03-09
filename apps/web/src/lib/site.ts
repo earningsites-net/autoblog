@@ -30,7 +30,7 @@ export const featureFlags = {
   adSlots:
     process.env.ENABLE_AD_SLOTS !== undefined
       ? process.env.ENABLE_AD_SLOTS === 'true'
-      : Boolean(activeBlueprint?.featureFlags?.adSlotsDefault)
+      : true
 };
 
 export function absoluteUrl(path = '/') {

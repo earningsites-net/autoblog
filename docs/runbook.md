@@ -3,6 +3,10 @@
 ## Daily Checks (5-10 min)
 - Confirm n8n is reachable and workflows ran in the last 24h.
 - Check `budget_monitor_and_alerts` mode and publish quota.
+- Check `plan_generation_scheduler_worker`:
+  - no runaway loops
+  - expected cadence for current plan
+  - no persistent refill/no-op when `brief_ready > 0`
 - Verify new articles appear on homepage/category pages.
 - Spot-check one published article for image, metadata, and disclaimer.
 - Confirm `sites/registry.json` reflects actual ownership/mode for active sites.
@@ -24,6 +28,16 @@
 - Rotate token, update n8n env, restart container.
 - Re-run backlog workers (`brief`, `article`, `image`, `qa`).
 
+### Scheduler keeps returning no-op
+- Verify entitlement endpoint responds for target site (`/api/internal/sites/:siteSlug/entitlement`).
+- Verify `topicCandidate` queue for that site:
+  - `brief_ready` count
+  - unexpected `generated` accumulation
+- Verify refill config:
+  - `PLAN_TOPIC_REFILL_INTERVAL_MINUTES`
+  - `PLAN_TOPIC_REFILL_COUNT`
+- If needed, trigger manual discovery from factory API/UI before re-running scheduler.
+
 ### Frontend revalidate errors
 - Check `WEB_REVALIDATE_SECRET` and `WEB_APP_URL`.
 - Test with `curl` to `/api/revalidate`.
@@ -38,3 +52,4 @@
 - Postgres volume snapshot daily.
 - Export n8n workflows weekly.
 - Keep Sanity schema repo under git (this repo).
+- Backup `apps/engine/data/portal.db` (auth, entitlement, billing state).

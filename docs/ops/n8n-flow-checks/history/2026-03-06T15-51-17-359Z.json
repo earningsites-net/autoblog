@@ -1,0 +1,308 @@
+{
+  "runAt": "2026-03-06T15:51:17.359Z",
+  "mode": "changed-only",
+  "workflowsDir": "/Users/danilociamprone/Documents/Auto blog project/infra/n8n/workflows",
+  "reportDir": "/Users/danilociamprone/Documents/Auto blog project/docs/ops/n8n-flow-checks",
+  "importEnabled": true,
+  "smokeEnabled": false,
+  "importConfigured": true,
+  "importReason": "configured",
+  "overallStatus": "warn",
+  "summary": {
+    "total": 9,
+    "pass": 8,
+    "warn": 1,
+    "fail": 0
+  },
+  "regression": {
+    "count": 0,
+    "items": []
+  },
+  "workflows": [
+    {
+      "path": "infra/n8n/workflows/article_generation_worker.json",
+      "name": "article_generation_worker",
+      "status": "pass",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "ARTICLE_BATCH_SIZE",
+        "BUDGET_MODE",
+        "OPENAI_API_KEY",
+        "PIPELINE_MODE_DEFAULT",
+        "PREPOPULATE_BATCH_ID",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN",
+        "SITE_SLUG",
+        "TEXT_MODEL_DRAFT"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "pass",
+        "action": "update",
+        "remoteId": "q9jmiptYYBq6ieFd",
+        "details": "Updated workflow \"article_generation_worker\" (id: q9jmiptYYBq6ieFd)"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/brief_generation_worker.json",
+      "name": "brief_generation_worker",
+      "status": "pass",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "OPENAI_API_KEY",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN",
+        "SITE_SLUG",
+        "TEXT_MODEL_DRAFT"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "pass",
+        "action": "update",
+        "remoteId": "wXEiU2LVUe8VKH1B",
+        "details": "Updated workflow \"brief_generation_worker\" (id: wXEiU2LVUe8VKH1B)"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/engine_pipeline_trigger.json",
+      "name": "engine_pipeline_trigger",
+      "status": "pass",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "CONTENT_ENGINE_URL",
+        "SITE_SLUG"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "pass",
+        "action": "update",
+        "remoteId": "BRHYtnr8g2rnmRD6",
+        "details": "Updated workflow \"engine_pipeline_trigger\" (id: BRHYtnr8g2rnmRD6)"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/image_generation_worker.json",
+      "name": "image_generation_worker",
+      "status": "pass",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "IMAGE_BATCH_SIZE",
+        "IMAGE_MODEL",
+        "REPLICATE_API_TOKEN",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN",
+        "SITE_SLUG"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "pass",
+        "action": "update",
+        "remoteId": "DJO82hLkI6S6wg0v",
+        "details": "Updated workflow \"image_generation_worker\" (id: DJO82hLkI6S6wg0v)"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/plan_generation_scheduler_worker.json",
+      "name": "plan_generation_scheduler_worker",
+      "status": "pass",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "CONTENT_ENGINE_URL",
+        "INTERNAL_API_TOKEN",
+        "N8N_WORKFLOW_ID_ARTICLE_GENERATION",
+        "N8N_WORKFLOW_ID_BRIEF_GENERATION",
+        "N8N_WORKFLOW_ID_IMAGE_GENERATION",
+        "N8N_WORKFLOW_ID_QA_PUBLISH",
+        "N8N_WORKFLOW_ID_TOPIC_DISCOVERY",
+        "PLAN_SCHEDULER_DAILY_CAP_BASE",
+        "PLAN_SCHEDULER_DAILY_CAP_PRO",
+        "PLAN_SCHEDULER_DAILY_CAP_STANDARD",
+        "PLAN_SCHEDULER_MAX_RUNS_PER_TICK",
+        "PLAN_SCHEDULER_TEST_MODE",
+        "PLAN_SCHEDULER_TICK_MINUTES",
+        "PLAN_TEST_INTERVAL_MINUTES_BASE",
+        "PLAN_TEST_INTERVAL_MINUTES_PRO",
+        "PLAN_TEST_INTERVAL_MINUTES_STANDARD",
+        "PLAN_TOPIC_REFILL_INTERVAL_MINUTES",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SITE_SLUG"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "pass",
+        "action": "update",
+        "remoteId": "qT8r42FJx1tjCsR2",
+        "details": "Updated workflow \"plan_generation_scheduler_worker\" (id: qT8r42FJx1tjCsR2)"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/prepopulate_bulk_runner.json",
+      "name": "prepopulate_bulk_runner",
+      "status": "pass",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "N8N_WORKFLOW_ID_ARTICLE_GENERATION",
+        "N8N_WORKFLOW_ID_IMAGE_GENERATION",
+        "N8N_WORKFLOW_ID_QA_PUBLISH",
+        "PREPOPULATE_BATCH_SIZE",
+        "PREPOPULATE_MAX_COST_USD",
+        "PREPOPULATE_MAX_RUN_MINUTES",
+        "PREPOPULATE_TARGET_PUBLISHED",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SITE_SLUG"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "pass",
+        "action": "update",
+        "remoteId": "IK5hWdMSdBZKr51n",
+        "details": "Updated workflow \"prepopulate_bulk_runner\" (id: IK5hWdMSdBZKr51n)"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/publish_scheduler_worker.json",
+      "name": "publish_scheduler_worker",
+      "status": "pass",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "CONTENT_ENGINE_URL",
+        "INTERNAL_API_TOKEN",
+        "PUBLISH_REVALIDATE_ENABLED",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN",
+        "SITE_SLUG",
+        "WEB_APP_URL",
+        "WEB_REVALIDATE_SECRET"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "pass",
+        "action": "update",
+        "remoteId": "5oaSXgkhGeUjlJyc",
+        "details": "Updated workflow \"publish_scheduler_worker\" (id: 5oaSXgkhGeUjlJyc)"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/qa_scoring_and_publish_worker.json",
+      "name": "qa_scoring_and_publish_worker",
+      "status": "pass",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "CONTENT_ENGINE_URL",
+        "INTERNAL_API_TOKEN",
+        "QA_BATCH_SIZE",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN",
+        "SITE_SLUG",
+        "WEB_REVALIDATE_SECRET"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "pass",
+        "action": "update",
+        "remoteId": "6f0gfZAsQQILFj1U",
+        "details": "Updated workflow \"qa_scoring_and_publish_worker\" (id: 6f0gfZAsQQILFj1U)"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    },
+    {
+      "path": "infra/n8n/workflows/topic_discovery_daily.json",
+      "name": "topic_discovery_daily",
+      "status": "warn",
+      "errors": [],
+      "warnings": [
+        "node \"Normalize + Dedup + Score\" still contains TODO/placeholder text"
+      ],
+      "envVars": [
+        "OPENAI_API_KEY",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_WRITE_TOKEN",
+        "SITE_SLUG",
+        "TEXT_MODEL_DRAFT",
+        "TOPIC_DISCOVERY_TARGET_PER_DAY"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "pass",
+        "action": "update",
+        "remoteId": "97aJSRReUBbQ3ePV",
+        "details": "Updated workflow \"topic_discovery_daily\" (id: 97aJSRReUBbQ3ePV)"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    }
+  ]
+}

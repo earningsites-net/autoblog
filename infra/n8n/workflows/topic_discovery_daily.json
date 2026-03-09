@@ -54,7 +54,7 @@
             },
             {
               "name": "siteSlug",
-              "value": "={{$env.SITE_SLUG || 'hammer-hearth'}}",
+              "value": "={{$json.siteSlug || $env.SITE_SLUG || ''}}",
               "type": "string"
             }
           ]
@@ -140,6 +140,35 @@
         "specifyBody": "json",
         "jsonBody": "={\"mutations\": [{\"createOrReplace\": {\"_type\": \"topicCandidate\", \"_id\": $json._id || `topic-${Date.now()}-${Math.random()}` , ...$json}}]}"
       }
+    },
+    {
+      "id": "executeWorkflowTrigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        80
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "webhookRefill",
+      "name": "Webhook Refill Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        150
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "topic-discovery-refill",
+        "authentication": "none",
+        "responseMode": "onReceived",
+        "options": {},
+        "multipleMethods": false
+      }
     }
   ],
   "connections": {
@@ -192,6 +221,28 @@
         [
           {
             "node": "Upsert topicCandidate in Sanity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Set Runtime Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Refill Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Runtime Context",
             "type": "main",
             "index": 0
           }

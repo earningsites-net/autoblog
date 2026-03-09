@@ -14,27 +14,7 @@
     },
     {
       "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "minutes",
-              "minutesInterval": 10
-            }
-          ]
-        }
-      },
-      "id": "f3cc797e-50be-4881-92ee-f6ea1bda74c7",
-      "name": "Schedule Trigger",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1,
-      "position": [
-        3248,
-        -480
-      ]
-    },
-    {
-      "parameters": {
-        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || 'hammer-hearth') + '\\\" && status==\\\"draft\\\" && !defined(coverImage)]|order(_createdAt asc)[0...' + Number($env.IMAGE_BATCH_SIZE || 3) + ']') }}",
+        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || '') + '\\\" && status==\\\"draft\\\" && !defined(coverImage)]|order(_createdAt asc)[0...' + Number($env.IMAGE_BATCH_SIZE || 3) + ']') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -134,17 +114,6 @@
   ],
   "pinData": {},
   "connections": {
-    "Schedule Trigger": {
-      "main": [
-        [
-          {
-            "node": "Fetch drafts missing image",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Fetch drafts missing image": {
       "main": [
         [

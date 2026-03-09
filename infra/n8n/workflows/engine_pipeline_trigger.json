@@ -19,7 +19,7 @@
       "parameters": {
         "assignments": {
           "assignments": [
-            { "name": "siteSlug", "type": "string", "value": "={{$env.SITE_SLUG || 'hammer-hearth'}}" },
+            { "name": "siteSlug", "type": "string", "value": "={{$env.SITE_SLUG || ''}}" },
             { "name": "stage", "type": "string", "value": "pipeline" },
             { "name": "input", "type": "object", "value": { "trigger": "n8n-schedule" } },
             { "name": "options", "type": "object", "value": { "workflowRunner": "direct", "dryRun": false } }
@@ -35,7 +35,7 @@
       "position": [740, 220],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.CONTENT_ENGINE_URL || 'http://localhost:8787'}}/v1/pipelines/run",
+        "url": "={{$env.CONTENT_ENGINE_URL}}/v1/pipelines/run",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{$json}}"

@@ -33,7 +33,7 @@
       ],
       "parameters": {
         "method": "GET",
-        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"siteSettings\\\" && siteSlug==\\\"' + ($env.SITE_SLUG || 'hammer-hearth') + '\\\"][0]{siteSlug,publishing}') }}",
+        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"siteSettings\\\" && siteSlug==\\\"' + ($env.SITE_SLUG || '') + '\\\"][0]{siteSlug,publishing,entitlement}') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -56,7 +56,7 @@
       ],
       "parameters": {
         "method": "GET",
-        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($env.SITE_SLUG || 'hammer-hearth') + '\\\" && status==\\\"published\\\"]|order(publishedAt desc)[0...500]{_id,publishedAt,publishSequence}') }}",
+        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($env.SITE_SLUG || '') + '\\\" && status==\\\"published\\\"]|order(publishedAt desc)[0...500]{_id,publishedAt,publishSequence}') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -79,7 +79,7 @@
       ],
       "parameters": {
         "method": "GET",
-        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($env.SITE_SLUG || 'hammer-hearth') + '\\\" && status==\\\"ready_to_publish\\\"]|order(qaPassedAt asc)[0...50]{_id,title,slug,qaScore,qaPassedAt,pipelineMode,prepopulateBatchId,siteSlug}') }}",
+        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($env.SITE_SLUG || '') + '\\\" && status==\\\"ready_to_publish\\\"]|order(qaPassedAt asc)[0...50]{_id,title,slug,qaScore,qaPassedAt,pipelineMode,prepopulateBatchId,siteSlug}') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -103,7 +103,7 @@
       "parameters": {
         "language": "javaScript",
         "mode": "runOnceForAllItems",
-        "jsCode": "function parseJsonSafe(value, fallback) {\n  try { return value ? JSON.parse(value) : fallback; } catch { return fallback; }\n}\nfunction toDateMs(value) {\n  if (!value) return null;\n  const d = new Date(value);\n  const ms = d.getTime();\n  return Number.isNaN(ms) ? null : ms;\n}\nconst siteSlug = String($env.SITE_SLUG || 'hammer-hearth').toLowerCase().trim();\nconst settingsDoc = (($('Fetch siteSettings publishing config').item.json || {}).result) || {};\nconst publishing = settingsDoc.publishing || {};\nconst recent = Array.isArray((($('Fetch recent published articles').item.json || {}).result)) ? $('Fetch recent published articles').item.json.result : [];\nconst queue = Array.isArray((($('Fetch ready_to_publish queue').item.json || {}).result)) ? $('Fetch ready_to_publish queue').item.json.result : [];\n\nconst fallbackRules = parseJsonSafe($env.PUBLISH_CADENCE_RULES_JSON, [\n  { label: 'Launch burst', maxPublishes: 1, perMinutes: 3 },\n  { label: 'Steady cadence', maxPublishes: 1, perDays: 1 }\n]);\nconst rules = Array.isArray(publishing.cadenceRules) && publishing.cadenceRules.length ? publishing.cadenceRules : fallbackRules;\nconst now = Date.now();\n\nconst activeRule = rules.find((rule) => {\n  const start = toDateMs(rule.startAt);\n  const end = toDateMs(rule.endAt);\n  const afterStart = start === null ? true : now >= start;\n  const beforeEnd = end === null ? true : now < end;\n  return afterStart && beforeEnd;\n}) || rules[rules.length - 1];\n\nif (!activeRule || !queue.length) return [];\nconst intervalMs = activeRule.perMinutes ? Number(activeRule.perMinutes) * 60_000 : Number(activeRule.perDays || 1) * 86_400_000;\nconst maxPublishes = Math.max(1, Number(activeRule.maxPublishes || 1));\nconst maxPerRun = Math.max(1, Number(publishing.maxPublishesPerRun || 1));\nconst revalidateEnabled = publishing.revalidateEnabled !== false && String($env.PUBLISH_REVALIDATE_ENABLED || 'true') !== 'false';\n\nconst windowStart = now - intervalMs;\nconst publishedInWindow = recent.filter((article) => {\n  const ms = toDateMs(article.publishedAt);\n  return ms !== null && ms >= windowStart && ms <= now;\n}).length;\nconst quotaRemaining = Math.max(0, maxPublishes - publishedInWindow);\nif (quotaRemaining <= 0) return [];\n\nconst selected = queue\n  .slice()\n  .sort((a, b) => {\n    const qaDiff = Number(b.qaScore || 0) - Number(a.qaScore || 0);\n    if (qaDiff !== 0) return qaDiff;\n    return String(a.qaPassedAt || '').localeCompare(String(b.qaPassedAt || ''));\n  })\n  .slice(0, Math.min(quotaRemaining, maxPerRun));\n\nconst existingSeqMax = recent.reduce((max, item) => Math.max(max, Number(item.publishSequence || 0)), 0);\nconst publishedAtIso = new Date().toISOString();\n\nreturn selected.map((article, index) => ({\n  json: {\n    ...article,\n    siteSlug: article.siteSlug || siteSlug,\n    publishedAtIso,\n    publishSequence: existingSeqMax + index + 1,\n    activeCadenceRule: activeRule,\n    quotaRemaining,\n    publishedInWindow,\n    revalidateEnabled,\n  }\n}));"
+        "jsCode": "function parseJsonSafe(value, fallback) {\n  try { return value ? JSON.parse(value) : fallback; } catch { return fallback; }\n}\nfunction toDateMs(value) {\n  if (!value) return null;\n  const d = new Date(value);\n  const ms = d.getTime();\n  return Number.isNaN(ms) ? null : ms;\n}\nfunction inRange(ms, startMs, endMs, nowMs) {\n  if (ms === null) return false;\n  const afterStart = startMs === null ? true : ms >= startMs;\n  const beforeEnd = endMs === null ? ms <= nowMs : ms < endMs;\n  return afterStart && beforeEnd;\n}\n\nconst siteSlug = String($env.SITE_SLUG || '').toLowerCase().trim();\nif (!siteSlug) throw new Error('Missing SITE_SLUG env var for publish scheduler');\nconst settingsDoc = (($('Fetch siteSettings publishing config').item.json || {}).result) || {};\nconst publishing = settingsDoc.publishing || {};\nconst entitlement = settingsDoc.entitlement || {};\nconst recent = Array.isArray((($('Fetch recent published articles').item.json || {}).result)) ? $('Fetch recent published articles').item.json.result : [];\nconst queue = Array.isArray((($('Fetch ready_to_publish queue').item.json || {}).result)) ? $('Fetch ready_to_publish queue').item.json.result : [];\n\nconst rules = Array.isArray(publishing.cadenceRules) ? publishing.cadenceRules : [];\nif (!rules.length) throw new Error('Missing publishing.cadenceRules in siteSettings');\nconst now = Date.now();\n\nconst activeRule = rules.find((rule) => {\n  const start = toDateMs(rule.startAt);\n  const end = toDateMs(rule.endAt);\n  const afterStart = start === null ? true : now >= start;\n  const beforeEnd = end === null ? true : now < end;\n  return afterStart && beforeEnd;\n}) || rules[rules.length - 1];\n\nif (!activeRule || !queue.length) return [];\nconst intervalMs = activeRule.perMinutes ? Number(activeRule.perMinutes) * 60_000 : Number(activeRule.perDays || 1) * 86_400_000;\nconst maxPublishes = Math.max(1, Number(activeRule.maxPublishes || 1));\nconst maxPerRun = Math.max(1, Number(publishing.maxPublishesPerRun || 1));\nconst revalidateEnabled = publishing.revalidateEnabled !== false && String($env.PUBLISH_REVALIDATE_ENABLED || 'true') !== 'false';\n\nconst windowStart = now - intervalMs;\nconst publishedInWindow = recent.filter((article) => {\n  const ms = toDateMs(article.publishedAt);\n  return ms !== null && ms >= windowStart && ms <= now;\n}).length;\n\nconst planStatus = String(entitlement.status || 'active').toLowerCase();\nif (planStatus !== 'active') return [];\nconst planMonthlyQuota = Math.max(0, Number(entitlement.monthlyQuota || publishing.planMonthlyQuota || 0));\nconst planPeriodStartMs = toDateMs(entitlement.periodStart || publishing.quotaPeriodStart);\nconst planPeriodEndMs = toDateMs(entitlement.periodEnd || publishing.quotaPeriodEnd);\nconst publishedInPlanPeriod = recent.filter((article) => {\n  const ms = toDateMs(article.publishedAt);\n  return inRange(ms, planPeriodStartMs, planPeriodEndMs, now);\n}).length;\nconst monthlyRemaining = planMonthlyQuota > 0 ? Math.max(0, planMonthlyQuota - publishedInPlanPeriod) : Number.MAX_SAFE_INTEGER;\nif (monthlyRemaining <= 0) return [];\n\nconst cadenceRemaining = Math.max(0, maxPublishes - publishedInWindow);\nif (cadenceRemaining <= 0) return [];\n\nconst selected = queue\n  .slice()\n  .sort((a, b) => {\n    const qaDiff = Number(b.qaScore || 0) - Number(a.qaScore || 0);\n    if (qaDiff !== 0) return qaDiff;\n    return String(a.qaPassedAt || '').localeCompare(String(b.qaPassedAt || ''));\n  })\n  .slice(0, Math.min(cadenceRemaining, monthlyRemaining, maxPerRun));\n\nconst existingSeqMax = recent.reduce((max, item) => Math.max(max, Number(item.publishSequence || 0)), 0);\nconst publishedAtIso = new Date().toISOString();\n\nreturn selected.map((article, index) => ({\n  json: {\n    ...article,\n    siteSlug: article.siteSlug || siteSlug,\n    publishedAtIso,\n    publishSequence: existingSeqMax + index + 1,\n    activeCadenceRule: activeRule,\n    quotaRemaining: cadenceRemaining,\n    publishedInWindow,\n    revalidateEnabled,\n    planMonthlyQuota,\n    publishedInPlanPeriod,\n    monthlyRemaining\n  }\n}));"
       }
     },
     {
@@ -129,7 +129,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  mutations: [\n    {\n      patch: {\n        id: $json._id,\n        set: {\n          siteSlug: $json.siteSlug || $env.SITE_SLUG || 'hammer-hearth',\n          status: 'published',\n          publishedAt: $json.publishedAtIso,\n          publishScheduledAt: $json.publishedAtIso,\n          publishSequence: $json.publishSequence,\n          pipelineMode: $json.pipelineMode || 'steady_scheduled'\n        }\n      }\n    }\n  ]\n}) }}"
+        "jsonBody": "={{ JSON.stringify({\n  mutations: [\n    {\n      patch: {\n        id: $json._id,\n        set: {\n          siteSlug: $json.siteSlug || $env.SITE_SLUG || '',\n          status: 'published',\n          publishedAt: $json.publishedAtIso,\n          publishScheduledAt: $json.publishedAtIso,\n          publishSequence: $json.publishSequence,\n          pipelineMode: $json.pipelineMode || 'steady_scheduled'\n        }\n      }\n    }\n  ]\n}) }}"
       }
     },
     {
@@ -192,7 +192,34 @@
       "parameters": {
         "language": "javaScript",
         "mode": "runOnceForAllItems",
-        "jsCode": "const publishedItems = items.map((item) => item.json).filter(Boolean);\nreturn [{\n  json: {\n    workflowName: 'publish_scheduler_worker',\n    siteSlug: String($env.SITE_SLUG || 'hammer-hearth').toLowerCase().trim(),\n    timestamp: new Date().toISOString(),\n    publishedCount: publishedItems.length,\n    slugs: publishedItems.map((item) => item.slug?.current || item.slug).filter(Boolean),\n    activeRule: publishedItems[0]?.activeCadenceRule || null,\n  }\n}];"
+        "jsCode": "const publishedItems = items.map((item) => item.json).filter(Boolean);\nreturn [{\n  json: {\n    workflowName: 'publish_scheduler_worker',\n    siteSlug: String($env.SITE_SLUG || '').toLowerCase().trim(),\n    timestamp: new Date().toISOString(),\n    publishedCount: publishedItems.length,\n    slugs: publishedItems.map((item) => item.slug?.current || item.slug).filter(Boolean),\n    activeRule: publishedItems[0]?.activeCadenceRule || null,\n  }\n}];"
+      }
+    },
+    {
+      "id": "notifyQuotaCount",
+      "name": "Notify quota counter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1560,
+        340
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CONTENT_ENGINE_URL.replace(/\\/$/, '') + '/api/internal/sites/' + encodeURIComponent($json.siteSlug || $env.SITE_SLUG || '') + '/publish-count' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-token",
+              "value": "={{$env.INTERNAL_API_TOKEN || \"\"}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ incrementBy: 1 }) }}"
       }
     }
   ],
@@ -264,6 +291,11 @@
             "node": "Build Scheduler Summary",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Notify quota counter",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -277,6 +309,11 @@
             "index": 0
           }
         ],
+        []
+      ]
+    },
+    "Notify quota counter": {
+      "main": [
         []
       ]
     }

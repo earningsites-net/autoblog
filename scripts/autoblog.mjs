@@ -1248,6 +1248,7 @@ function commandProvisionEnv(siteSlug, flags) {
     NEXT_PUBLIC_DEFAULT_LOCALE: blueprint.locale || 'en-US',
     NEXT_PUBLIC_SITE_URL: `https://${siteSlug}.example.com`,
     NEXT_PUBLIC_SITE_DESCRIPTION: blueprint.siteDescription || '',
+    NEXT_PUBLIC_PORTAL_BASE_URL: process.env.PORTAL_BASE_URL || 'http://localhost:8787',
     SITE_BLUEPRINT_PATH: `./sites/${siteSlug}/site.blueprint.json`,
     CONTENT_REPOSITORY_DRIVER: 'sanity',
     CONTENT_ENGINE_URL: 'http://localhost:8787',
@@ -1259,6 +1260,7 @@ function commandProvisionEnv(siteSlug, flags) {
     SANITY_API_VERSION: blueprint.publishingTarget?.apiVersion || '2025-01-01',
     SANITY_READ_TOKEN: '',
     SANITY_WRITE_TOKEN: '',
+    PLATFORM_ADSENSE_PUBLISHER_ID: process.env.PLATFORM_ADSENSE_PUBLISHER_ID || '',
     MONTHLY_BUDGET_USD: String(blueprint.budgetPolicy?.monthlyCapUsd || 100),
     PUBLISH_QUOTA_MIN: String(blueprint.budgetPolicy?.publishQuota?.minPerDay || 4),
     PUBLISH_QUOTA_MAX: String(blueprint.budgetPolicy?.publishQuota?.maxPerDay || 8),
@@ -1312,9 +1314,32 @@ function commandSeedCms(siteSlug) {
       siteDescription: blueprint.siteDescription || '',
       defaultLocale: blueprint.locale || 'en-US',
       adSlotsEnabled: Boolean(blueprint.featureFlags?.adSlotsDefault),
+      adsMode: 'auto',
+      adsPreviewEnabled: true,
+      adsensePublisherId: '',
+      adsenseSlotHeader: '',
+      adsenseSlotInContent: '',
+      adsenseSlotFooter: '',
+      fallbackToPlatform: true,
+      studioUrl: process.env.SANITY_STUDIO_URL || '',
       brandPrimaryColor: blueprint.theme?.palette?.rust || '#E08748',
       brandSecondaryColor: blueprint.theme?.palette?.sage || '#829975',
-      publishing: buildPublishingSettingsFromBlueprint(blueprint)
+      publishing: {
+        ...buildPublishingSettingsFromBlueprint(blueprint),
+        planMonthlyQuota: 3,
+        publishedThisMonth: 0,
+        quotaPeriodStart: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString(),
+        quotaPeriodEnd: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1)).toISOString()
+      },
+      entitlement: {
+        plan: 'base',
+        monthlyQuota: 3,
+        publishedThisMonth: 0,
+        periodStart: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString(),
+        periodEnd: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1)).toISOString(),
+        status: 'active',
+        billingStatus: blueprint.businessMode === 'managed' ? 'trial' : 'n/a'
+      }
     }
   });
 

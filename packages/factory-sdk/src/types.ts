@@ -183,17 +183,42 @@ export type SiteRegistryEntry = {
   siteSlug: string;
   ownerType: 'internal' | 'client';
   mode: 'transfer' | 'managed';
+  ownerEmail?: string;
   sanityProjectId?: string;
   sanityDataset?: string;
+  sanityApiVersion?: string;
   tokenRefs?: {
     read?: string;
     write?: string;
+  };
+  studioUrl?: string;
+  adConfig?: {
+    provider: 'adsense';
+    fallbackToPlatform?: boolean;
+    publisherId?: string;
+    slots?: {
+      header?: string;
+      inContent?: string;
+      footer?: string;
+    };
   };
   webBaseUrl?: string;
   domainStatus: 'pending' | 'active' | 'transferred';
   automationStatus: 'inactive' | 'active' | 'paused';
   billingStatus?: 'n/a' | 'trial' | 'active' | 'overdue' | 'canceled';
   updatedAt: string;
+};
+
+export type SubscriptionPlan = 'base' | 'standard' | 'pro';
+
+export type SiteEntitlement = {
+  plan: SubscriptionPlan;
+  monthlyQuota: number;
+  publishedThisMonth: number;
+  periodStart: string;
+  periodEnd: string;
+  status: 'active' | 'paused' | 'stopped';
+  billingStatus: 'n/a' | 'trial' | 'active' | 'overdue' | 'canceled';
 };
 
 export type GenerationStage = 'topics' | 'brief' | 'articles' | 'images' | 'qa' | 'publish' | 'pipeline';
