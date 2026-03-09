@@ -31,12 +31,20 @@
   - `npm run typecheck` OK
   - readiness/smoke script eseguiti in dry-run locale con output coerente (fallimenti attesi su env non allineato/servizi non up)
 - Preparato avvio guidato step-by-step per rilascio, includendo la fase iniziale di account setup (Vercel, Sanity, Stripe, VPS/DNS) con riferimenti ufficiali aggiornati.
+- Corretto blocco build Vercel sul frontend:
+  - aggiunta dipendenza `react-is` in `apps/web/package.json` (e lockfile aggiornato)
+  - fix Next.js 15 `useSearchParams` su `/disclaimer` con boundary `Suspense` in `apps/web/src/app/layout.tsx`
+- Verifica tecnica post-fix:
+  - `npm --workspace @autoblog/web run build` completato con successo.
 
 ## Decisions
 - Pilot operativo fissato su `lux-living-01`.
 - Il rilascio viene codificato in runbook + script CLI ripetibili (non in passaggi manuali ad-hoc).
 - La promozione stato sito (`domainStatus`, `automationStatus`) resta azione esplicita post go-live, non automatica.
 - Factory smoke supporta modalità preflight sicura (default) e modalità `--execute` per validazione reale del one-click launch.
+- Modello ambienti aggiornato per richiesta utente:
+  - sito cliente `lux-living-01` orientato a solo production
+  - staging mantenuto per dashboard/ops quando necessario.
 
 ## Next
 - Popolare `.env.staging`, `.env.production`, `infra/n8n/.env.staging`, `infra/n8n/.env.production` con segreti reali e domini.
@@ -46,6 +54,8 @@
   - `npm run n8n:test:flows`
 - Eseguire deploy staging, smoke E2E e successivo cutover production seguendo `docs/deploy/pilot-lux-living-01.md`.
 - Dopo go-live, eseguire `npm run release:pilot:activate`.
+- Eseguire redeploy Vercel del progetto web dopo il fix dipendenze/layout.
+- Confermare su Vercel che le env siano production-ready per modello “sito solo prod”.
 
 ## Risks
 - I gate `release:pilot:check:*` assumono file env dedicati (`.env.staging/.env.production` e varianti n8n): senza questi file il check fallisce immediatamente.
