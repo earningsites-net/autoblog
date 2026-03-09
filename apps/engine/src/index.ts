@@ -1,4 +1,5 @@
 import './load-local-env';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import Fastify from 'fastify';
 import { z } from 'zod';
@@ -75,6 +76,15 @@ const loginSchema = z.object({
   password: z.string().min(8)
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email()
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(20).max(512),
+  newPassword: z.string().min(8).max(128)
+});
+
 const patchPublishingSchema = z.object({
   publishingEnabled: z.boolean().optional(),
   maxPublishesPerRun: z.number().int().min(1).max(50).optional()
@@ -111,6 +121,295 @@ function sanitizeSiteSlug(siteSlug: string) {
 
 function getPortalBaseUrl() {
   return String(process.env.PORTAL_BASE_URL || 'http://localhost:8787').replace(/\/$/, '');
+}
+
+type PasswordResetDeliveryMode = 'auto' | 'resend' | 'webhook';
+type PasswordResetDeliveryResult = {
+  delivered: boolean;
+  provider: 'resend' | 'webhook' | 'none';
+  reason?: string;
+  status?: number;
+  id?: string;
+};
+
+function getPasswordResetDeliveryMode(): PasswordResetDeliveryMode {
+  const raw = String(process.env.PORTAL_PASSWORD_RESET_DELIVERY_MODE || 'auto')
+    .trim()
+    .toLowerCase();
+  if (raw === 'resend' || raw === 'webhook') return raw;
+  return 'auto';
+}
+
+function escapeHtmlForEmail(value: string) {
+  return String(value || '').replace(/[&<>"']/g, (char) => {
+    if (char === '&') return '&amp;';
+    if (char === '<') return '&lt;';
+    if (char === '>') return '&gt;';
+    if (char === '"') return '&quot;';
+    return '&#39;';
+  });
+}
+
+function buildPasswordResetEmail(input: { email: string; resetUrl: string; expiresAt: string }) {
+  const subject = 'Reset your AutoBlog Portal password';
+  const expiresAtDate = new Date(input.expiresAt);
+  const expiresAtLabel = Number.isNaN(expiresAtDate.getTime())
+    ? input.expiresAt
+    : expiresAtDate.toUTCString();
+  const replyTo = String(process.env.PORTAL_PASSWORD_RESET_REPLY_TO || '').trim();
+  const supportHtml = replyTo
+    ? `<p style="margin:0 0 12px;color:#334155;">Need help? Reply to ${escapeHtmlForEmail(replyTo)}.</p>`
+    : '';
+  const supportText = replyTo ? `Need help? Reply to ${replyTo}.\n\n` : '';
+  const html = `<!doctype html>
+<html>
+<body style="margin:0;padding:0;background:#f5f8ff;font-family:Arial,sans-serif;color:#0f172a;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border:1px solid #dbe5f7;border-radius:14px;overflow:hidden;">
+          <tr>
+            <td style="padding:24px;">
+              <h1 style="margin:0 0 12px;font-size:22px;line-height:1.2;color:#1d4ed8;">Reset your password</h1>
+              <p style="margin:0 0 12px;color:#334155;">A password reset was requested for <strong>${escapeHtmlForEmail(input.email)}</strong>.</p>
+              <p style="margin:0 0 16px;color:#334155;">Use the button below to set a new password. This link expires on <strong>${escapeHtmlForEmail(expiresAtLabel)}</strong>.</p>
+              <p style="margin:0 0 16px;">
+                <a href="${escapeHtmlForEmail(input.resetUrl)}" style="display:inline-block;padding:10px 16px;background:#1d4ed8;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;">Reset password</a>
+              </p>
+              <p style="margin:0 0 12px;color:#64748b;font-size:12px;">If the button does not work, copy and paste this URL:</p>
+              <p style="margin:0 0 16px;color:#334155;font-size:12px;word-break:break-all;">${escapeHtmlForEmail(input.resetUrl)}</p>
+              ${supportHtml}
+              <p style="margin:0;color:#64748b;font-size:12px;">If you did not request this change, you can ignore this email.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  const text =
+    `Reset your AutoBlog Portal password\n\n` +
+    `A password reset was requested for ${input.email}.\n` +
+    `Reset link: ${input.resetUrl}\n` +
+    `Expires at: ${expiresAtLabel}\n\n` +
+    supportText +
+    `If you did not request this change, you can ignore this email.\n`;
+  return {
+    subject,
+    html,
+    text
+  };
+}
+
+async function sendPasswordResetViaResend(
+  input: { email: string; resetUrl: string; expiresAt: string }
+): Promise<PasswordResetDeliveryResult> {
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  const from = String(process.env.PORTAL_PASSWORD_RESET_FROM || '').trim();
+  const replyTo = String(process.env.PORTAL_PASSWORD_RESET_REPLY_TO || '').trim();
+  if (!apiKey || !from) {
+    return {
+      delivered: false,
+      provider: 'resend',
+      reason: 'resend_not_configured'
+    };
+  }
+
+  const email = buildPasswordResetEmail(input);
+  const idempotencyKey = crypto
+    .createHash('sha256')
+    .update(`password-reset:${input.email.toLowerCase()}:${input.expiresAt}`)
+    .digest('hex');
+
+  const body: Record<string, unknown> = {
+    from,
+    to: [input.email],
+    subject: email.subject,
+    html: email.html,
+    text: email.text
+  };
+  if (replyTo) {
+    body.reply_to = replyTo;
+  }
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey
+      },
+      body: JSON.stringify(body)
+    });
+
+    const rawBody = await response.text();
+    let parsedBody: Record<string, unknown> | null = null;
+    try {
+      parsedBody = rawBody ? (JSON.parse(rawBody) as Record<string, unknown>) : null;
+    } catch {
+      parsedBody = null;
+    }
+
+    if (!response.ok) {
+      app.log.error(
+        {
+          email: input.email,
+          provider: 'resend',
+          status: response.status,
+          body: parsedBody ?? rawBody
+        },
+        'Password reset email send failed'
+      );
+      return {
+        delivered: false,
+        provider: 'resend',
+        reason: 'resend_failed',
+        status: response.status
+      };
+    }
+
+    return {
+      delivered: true,
+      provider: 'resend',
+      id: typeof parsedBody?.id === 'string' ? parsedBody.id : undefined
+    };
+  } catch (error) {
+    app.log.error(
+      {
+        email: input.email,
+        provider: 'resend',
+        error: (error as Error).message
+      },
+      'Password reset email send errored'
+    );
+    return {
+      delivered: false,
+      provider: 'resend',
+      reason: 'resend_error'
+    };
+  }
+}
+
+async function sendPasswordResetViaWebhook(
+  input: { email: string; resetUrl: string; expiresAt: string }
+): Promise<PasswordResetDeliveryResult> {
+  const webhookUrl = String(process.env.PORTAL_PASSWORD_RESET_WEBHOOK_URL || '').trim();
+  if (!webhookUrl) {
+    return {
+      delivered: false,
+      provider: 'webhook',
+      reason: 'webhook_not_configured'
+    };
+  }
+
+  const webhookSecret = String(process.env.PORTAL_PASSWORD_RESET_WEBHOOK_SECRET || '').trim();
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(webhookSecret ? { 'x-password-reset-secret': webhookSecret } : {})
+      },
+      body: JSON.stringify({
+        event: 'portal.password_reset.requested',
+        email: input.email,
+        resetUrl: input.resetUrl,
+        expiresAt: input.expiresAt,
+        requestedAt: new Date().toISOString()
+      })
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      app.log.error(
+        {
+          email: input.email,
+          provider: 'webhook',
+          status: response.status,
+          body
+        },
+        'Password reset notification webhook failed'
+      );
+      return {
+        delivered: false,
+        provider: 'webhook',
+        reason: 'webhook_failed',
+        status: response.status
+      };
+    }
+    return {
+      delivered: true,
+      provider: 'webhook'
+    };
+  } catch (error) {
+    app.log.error(
+      {
+        email: input.email,
+        provider: 'webhook',
+        error: (error as Error).message
+      },
+      'Password reset notification webhook errored'
+    );
+    return {
+      delivered: false,
+      provider: 'webhook',
+      reason: 'webhook_error'
+    };
+  }
+}
+
+async function sendPasswordResetNotification(input: { email: string; resetUrl: string; expiresAt: string }) {
+  const mode = getPasswordResetDeliveryMode();
+  if (mode === 'resend') {
+    const resendResult = await sendPasswordResetViaResend(input);
+    if (!resendResult.delivered && resendResult.reason === 'resend_not_configured') {
+      app.log.warn(
+        {
+          email: input.email
+        },
+        'Password reset delivery mode is resend but RESEND_API_KEY/PORTAL_PASSWORD_RESET_FROM are missing'
+      );
+    }
+    return resendResult;
+  }
+
+  if (mode === 'webhook') {
+    const webhookResult = await sendPasswordResetViaWebhook(input);
+    if (!webhookResult.delivered && webhookResult.reason === 'webhook_not_configured') {
+      app.log.warn(
+        {
+          email: input.email
+        },
+        'Password reset delivery mode is webhook but PORTAL_PASSWORD_RESET_WEBHOOK_URL is missing'
+      );
+    }
+    return webhookResult;
+  }
+
+  const resendResult = await sendPasswordResetViaResend(input);
+  if (resendResult.delivered || resendResult.reason !== 'resend_not_configured') {
+    return resendResult;
+  }
+
+  const webhookResult = await sendPasswordResetViaWebhook(input);
+  if (webhookResult.delivered || webhookResult.reason !== 'webhook_not_configured') {
+    return webhookResult;
+  }
+
+  app.log.warn(
+    {
+      email: input.email,
+      resetUrl: input.resetUrl,
+      expiresAt: input.expiresAt
+    },
+    'Password reset requested but no delivery provider is configured'
+  );
+  return {
+    delivered: false,
+    provider: 'none',
+    reason: 'no_delivery_provider_configured'
+  };
 }
 
 function parseStripeWebhookPayload(body: unknown) {
@@ -196,6 +495,96 @@ function requirePortalAdmin(request: Parameters<AuthService['requireAuth']>[0], 
     return null;
   }
   return auth;
+}
+
+function readHeaderValue(request: Parameters<AuthService['requireAuth']>[0], headerName: string) {
+  const raw = request.headers[String(headerName || '').toLowerCase()];
+  if (Array.isArray(raw)) return String(raw[0] || '').trim();
+  return String(raw || '').trim();
+}
+
+function safeSecretEqual(a: string, b: string) {
+  const left = Buffer.from(String(a || ''), 'utf8');
+  const right = Buffer.from(String(b || ''), 'utf8');
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+}
+
+function parseBasicAuthHeader(request: Parameters<AuthService['requireAuth']>[0]) {
+  const authHeader = readHeaderValue(request, 'authorization');
+  if (!authHeader || !authHeader.toLowerCase().startsWith('basic ')) return null;
+  const encoded = authHeader.slice(6).trim();
+  if (!encoded) return null;
+  try {
+    const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+    const sep = decoded.indexOf(':');
+    if (sep === -1) return null;
+    return {
+      username: decoded.slice(0, sep),
+      password: decoded.slice(sep + 1)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function requireFactoryUiAccess(
+  request: Parameters<AuthService['requireAuth']>[0],
+  reply: Parameters<AuthService['requireAuth']>[1]
+) {
+  const expectedUsername = String(process.env.FACTORY_UI_USERNAME || 'admin').trim();
+  const expectedPassword = String(process.env.FACTORY_UI_PASSWORD || process.env.FACTORY_API_SECRET || '').trim();
+  if (!expectedPassword) {
+    reply.code(503).type('text/plain').send('Factory UI auth not configured');
+    return false;
+  }
+
+  const credentials = parseBasicAuthHeader(request);
+  const valid =
+    credentials &&
+    safeSecretEqual(credentials.username, expectedUsername) &&
+    safeSecretEqual(credentials.password, expectedPassword);
+
+  if (valid) return true;
+
+  reply.header('WWW-Authenticate', 'Basic realm="Factory Ops", charset="UTF-8"');
+  reply.code(401).type('text/plain').send('Unauthorized');
+  return false;
+}
+
+function requireFactoryAccess(
+  request: Parameters<AuthService['requireAuth']>[0],
+  reply: Parameters<AuthService['requireAuth']>[1],
+  options: { allowInternalToken?: boolean } = {}
+) {
+  const allowInternalToken = options.allowInternalToken !== false;
+  const expectedFactorySecret = String(process.env.FACTORY_API_SECRET || '').trim();
+  const expectedInternalToken = String(process.env.INTERNAL_API_TOKEN || '').trim();
+  const providedFactorySecret = readHeaderValue(request, 'x-factory-secret');
+  const providedInternalToken = readHeaderValue(request, 'x-internal-token');
+
+  if (!expectedFactorySecret && !(allowInternalToken && expectedInternalToken)) {
+    reply.code(503).send({
+      ok: false,
+      error: 'Factory auth not configured (set FACTORY_API_SECRET and/or INTERNAL_API_TOKEN)'
+    });
+    return false;
+  }
+
+  if (expectedFactorySecret && providedFactorySecret && safeSecretEqual(providedFactorySecret, expectedFactorySecret)) {
+    return true;
+  }
+
+  if (allowInternalToken && expectedInternalToken && safeSecretEqual(providedInternalToken, expectedInternalToken)) {
+    return true;
+  }
+
+  reply.code(401).send({
+    ok: false,
+    error: 'Unauthorized',
+    requiredHeaders: ['x-factory-secret', ...(allowInternalToken ? ['x-internal-token'] : [])]
+  });
+  return false;
 }
 
 app.get('/healthz', async () => ({ ok: true, service: 'autoblog-engine', now: new Date().toISOString() }));
@@ -435,6 +824,31 @@ app.get('/portal', async (_req, reply) => {
     .auth-form { padding:28px 24px; background:linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); }
     .auth-form h3 { margin:0; font-size:22px; }
     .auth-form .subtitle { margin:8px 0 14px; }
+    .auth-links { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .link-button {
+      width:auto;
+      border:0;
+      background:transparent;
+      padding:0;
+      color:#2458d1;
+      font-size:12px;
+      font-weight:700;
+      text-decoration:underline;
+      text-underline-offset:2px;
+    }
+    .link-button:hover { color:#193f9b; }
+    .auth-secondary {
+      margin-top:14px;
+      border-top:1px solid #e2e9fb;
+      padding-top:12px;
+      display:grid;
+      gap:10px;
+    }
+    .auth-secondary .subtitle {
+      margin:0;
+      font-size:12px;
+      color:#5a6f96;
+    }
 
     .app-shell {
       display:grid;
@@ -622,7 +1036,7 @@ app.get('/portal', async (_req, reply) => {
         <div class="auth-form">
           <h3>Sign in</h3>
           <p class="subtitle">Use your owner credentials to access this site workspace.</p>
-          <div class="stack" style="margin-bottom:12px">
+          <div id="loginFields" class="stack" style="margin-bottom:12px">
             <div class="field">
               <label>Email</label>
               <input id="email" type="email" placeholder="owner@example.com" />
@@ -634,7 +1048,33 @@ app.get('/portal', async (_req, reply) => {
             <p id="loginFeedback" class="field-feedback hidden" role="status" aria-live="polite"></p>
           </div>
           <button id="loginBtn" class="primary">Login</button>
-          <p class="hint" style="margin:10px 0 0">Credentials come from <code>PORTAL_ADMIN_EMAIL</code> and <code>PORTAL_ADMIN_PASSWORD</code>.</p>
+          <div class="auth-links">
+            <button id="showForgotBtn" type="button" class="link-button">Forgot password?</button>
+            <button id="showLoginBtn" type="button" class="link-button hidden">Back to sign in</button>
+          </div>
+          <div id="forgotPasswordPanel" class="auth-secondary hidden">
+            <p class="subtitle">Enter your account email to receive a password reset link.</p>
+            <div class="field">
+              <label>Recovery email</label>
+              <input id="forgotEmail" type="email" placeholder="owner@example.com" />
+            </div>
+            <button id="forgotBtn" type="button">Send reset link</button>
+            <p id="forgotFeedback" class="field-feedback hidden" role="status" aria-live="polite"></p>
+          </div>
+          <div id="resetPasswordPanel" class="auth-secondary hidden">
+            <p class="subtitle">Set a new password from your reset link.</p>
+            <div class="field">
+              <label>New password</label>
+              <input id="newPassword" type="password" placeholder="At least 8 characters" />
+            </div>
+            <div class="field">
+              <label>Confirm new password</label>
+              <input id="confirmNewPassword" type="password" placeholder="Repeat new password" />
+            </div>
+            <p id="resetFeedback" class="field-feedback hidden" role="status" aria-live="polite"></p>
+            <button id="resetBtn" type="button" class="primary">Reset password</button>
+          </div>
+          <p class="hint" style="margin:10px 0 0">Need help signing in? Use “Forgot password” to request a reset link.</p>
         </div>
       </div>
     </div>
@@ -686,11 +1126,22 @@ app.get('/portal', async (_req, reply) => {
     const planConfirmText = document.getElementById('planConfirmText');
     const planConfirmCancel = document.getElementById('planConfirmCancel');
     const planConfirmAccept = document.getElementById('planConfirmAccept');
+    const loginFields = document.getElementById('loginFields');
     const loginFeedback = document.getElementById('loginFeedback');
+    const showForgotBtn = document.getElementById('showForgotBtn');
+    const showLoginBtn = document.getElementById('showLoginBtn');
+    const forgotPasswordPanel = document.getElementById('forgotPasswordPanel');
+    const resetPasswordPanel = document.getElementById('resetPasswordPanel');
+    const forgotFeedback = document.getElementById('forgotFeedback');
+    const resetFeedback = document.getElementById('resetFeedback');
     const portalNotice = document.getElementById('portalNotice');
     const publishingStudioLink = document.getElementById('publishingStudioLink');
-    const selectedSiteSlug = new URLSearchParams(window.location.search).get('siteSlug') || '';
+    const portalSearchParams = new URLSearchParams(window.location.search);
+    const selectedSiteSlug = portalSearchParams.get('siteSlug') || '';
+    const initialResetToken = portalSearchParams.get('resetToken') || '';
+    let activeResetToken = initialResetToken;
     let activeView = 'monetization';
+    let authView = initialResetToken ? 'reset' : 'login';
     let noticeTimer = null;
     let pendingPlanChange = null;
 
@@ -724,14 +1175,31 @@ app.get('/portal', async (_req, reply) => {
       if (typeof error.message === 'string') return error.message;
       return 'Request failed';
     }
+    function isValidEmail(email) {
+      return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(email || '').trim());
+    }
     function validateLoginInput(email, password) {
       const normalizedEmail = String(email || '').trim();
       const pwd = String(password || '');
       if (!normalizedEmail && !pwd) return 'Email and password are required.';
       if (!normalizedEmail) return 'Email is required.';
-      if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalizedEmail)) return 'Enter a valid email address.';
+      if (!isValidEmail(normalizedEmail)) return 'Enter a valid email address.';
       if (!pwd) return 'Password is required.';
       if (pwd.length < 8) return 'Password must be at least 8 characters.';
+      return '';
+    }
+    function validateForgotPasswordInput(email) {
+      const normalizedEmail = String(email || '').trim();
+      if (!normalizedEmail) return 'Email is required.';
+      if (!isValidEmail(normalizedEmail)) return 'Enter a valid email address.';
+      return '';
+    }
+    function validateResetPasswordInput(password, confirmPassword) {
+      const pwd = String(password || '');
+      const confirm = String(confirmPassword || '');
+      if (!pwd) return 'New password is required.';
+      if (pwd.length < 8) return 'New password must be at least 8 characters.';
+      if (pwd !== confirm) return 'Password confirmation does not match.';
       return '';
     }
     function showNotice(message, kind = 'ok', timeoutMs = 4200) {
@@ -760,6 +1228,61 @@ app.get('/portal', async (_req, reply) => {
       loginFeedback.textContent = text;
       loginFeedback.className = 'field-feedback' + (kind ? ' ' + kind : '');
       loginFeedback.classList.remove('hidden');
+    }
+    function setForgotFeedback(message, kind = '') {
+      if (!(forgotFeedback instanceof HTMLElement)) return;
+      const text = String(message || '').trim();
+      if (!text) {
+        forgotFeedback.textContent = '';
+        forgotFeedback.className = 'field-feedback hidden';
+        return;
+      }
+      forgotFeedback.textContent = text;
+      forgotFeedback.className = 'field-feedback' + (kind ? ' ' + kind : '');
+      forgotFeedback.classList.remove('hidden');
+    }
+    function setResetFeedback(message, kind = '') {
+      if (!(resetFeedback instanceof HTMLElement)) return;
+      const text = String(message || '').trim();
+      if (!text) {
+        resetFeedback.textContent = '';
+        resetFeedback.className = 'field-feedback hidden';
+        return;
+      }
+      resetFeedback.textContent = text;
+      resetFeedback.className = 'field-feedback' + (kind ? ' ' + kind : '');
+      resetFeedback.classList.remove('hidden');
+    }
+    function setAuthView(mode) {
+      const normalizedMode = mode === 'forgot' || mode === 'reset' ? mode : 'login';
+      authView = normalizedMode;
+      const loginBtn = document.getElementById('loginBtn');
+      if (loginFields instanceof HTMLElement) {
+        loginFields.classList.toggle('hidden', normalizedMode !== 'login');
+      }
+      if (loginBtn instanceof HTMLElement) {
+        loginBtn.classList.toggle('hidden', normalizedMode !== 'login');
+      }
+      if (showForgotBtn instanceof HTMLElement) {
+        showForgotBtn.classList.toggle('hidden', normalizedMode !== 'login');
+      }
+      if (showLoginBtn instanceof HTMLElement) {
+        showLoginBtn.classList.toggle('hidden', normalizedMode === 'login');
+      }
+      if (forgotPasswordPanel instanceof HTMLElement) {
+        forgotPasswordPanel.classList.toggle('hidden', normalizedMode !== 'forgot');
+      }
+      if (resetPasswordPanel instanceof HTMLElement) {
+        resetPasswordPanel.classList.toggle('hidden', normalizedMode !== 'reset');
+      }
+      if (normalizedMode === 'reset' && !activeResetToken) {
+        setResetFeedback('Open the reset link from your email to continue.', 'warn');
+      }
+    }
+    function removeResetTokenFromUrl() {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete('resetToken');
+      window.history.replaceState({}, '', nextUrl.toString());
     }
     function setButtonBusy(button, busy, busyLabel) {
       if (!(button instanceof HTMLButtonElement)) return;
@@ -946,6 +1469,7 @@ app.get('/portal', async (_req, reply) => {
         loginPanel.classList.remove('hidden');
         loginShell.classList.remove('hidden');
         appPanel.classList.add('hidden');
+        setAuthView(authView);
       }
     }
 
@@ -1101,6 +1625,102 @@ app.get('/portal', async (_req, reply) => {
       }
 
       applyActiveView();
+    }
+
+    setAuthView(authView);
+
+    if (showForgotBtn instanceof HTMLButtonElement) {
+      showForgotBtn.addEventListener('click', () => {
+        const forgotEmailInput = document.getElementById('forgotEmail');
+        if (forgotEmailInput instanceof HTMLInputElement && !forgotEmailInput.value.trim()) {
+          forgotEmailInput.value = getInputValue('email').trim();
+        }
+        setForgotFeedback('');
+        setResetFeedback('');
+        setAuthView('forgot');
+      });
+    }
+    if (showLoginBtn instanceof HTMLButtonElement) {
+      showLoginBtn.addEventListener('click', () => {
+        if (authView === 'reset') {
+          activeResetToken = '';
+          removeResetTokenFromUrl();
+        }
+        setForgotFeedback('');
+        setResetFeedback('');
+        setAuthView('login');
+      });
+    }
+
+    const forgotBtn = document.getElementById('forgotBtn');
+    if (forgotBtn instanceof HTMLButtonElement) {
+      forgotBtn.addEventListener('click', async () => {
+        setButtonBusy(forgotBtn, true, 'Sending link...');
+        setForgotFeedback('Preparing reset instructions...');
+        try {
+          const email = (getInputValue('forgotEmail') || getInputValue('email')).trim();
+          const validationError = validateForgotPasswordInput(email);
+          if (validationError) {
+            setForgotFeedback(validationError, 'error');
+            return;
+          }
+          const res = await api('/api/portal/auth/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ email })
+          });
+          setOutput(res);
+          setForgotFeedback(res.message || 'If an account exists, reset instructions were sent.', 'ok');
+        } catch (error) {
+          setOutput(error);
+          setForgotFeedback(readErrorMessage(error), 'error');
+        } finally {
+          setButtonBusy(forgotBtn, false);
+        }
+      });
+    }
+
+    const resetBtn = document.getElementById('resetBtn');
+    if (resetBtn instanceof HTMLButtonElement) {
+      resetBtn.addEventListener('click', async () => {
+        setButtonBusy(resetBtn, true, 'Resetting...');
+        setResetFeedback('Updating password...');
+        try {
+          const token = String(activeResetToken || '').trim();
+          if (!token) {
+            setResetFeedback('Open the reset link from your email to continue.', 'error');
+            return;
+          }
+          const newPassword = getInputValue('newPassword');
+          const confirmNewPassword = getInputValue('confirmNewPassword');
+          const validationError = validateResetPasswordInput(newPassword, confirmNewPassword);
+          if (validationError) {
+            setResetFeedback(validationError, 'error');
+            return;
+          }
+          const res = await api('/api/portal/auth/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({
+              token,
+              newPassword
+            })
+          });
+          setOutput(res);
+          setResetFeedback('Password reset completed.', 'ok');
+          activeResetToken = '';
+          removeResetTokenFromUrl();
+          const newPasswordInput = document.getElementById('newPassword');
+          const confirmPasswordInput = document.getElementById('confirmNewPassword');
+          if (newPasswordInput instanceof HTMLInputElement) newPasswordInput.value = '';
+          if (confirmPasswordInput instanceof HTMLInputElement) confirmPasswordInput.value = '';
+          setAuthView('login');
+          setLoginFeedback('Password updated. Please sign in with your new password.', 'ok');
+        } catch (error) {
+          setOutput(error);
+          setResetFeedback(readErrorMessage(error), 'error');
+        } finally {
+          setButtonBusy(resetBtn, false);
+        }
+      });
     }
 
     document.getElementById('loginBtn').addEventListener('click', async () => {
@@ -1282,6 +1902,52 @@ app.post('/api/portal/auth/login', async (req, reply) => {
     ok: true,
     user: auth.user,
     expiresAt: auth.session.expiresAt
+  };
+});
+
+app.post('/api/portal/auth/forgot-password', async (req, reply) => {
+  const parsed = forgotPasswordSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const genericMessage = 'If an account exists for this email, reset instructions have been sent.';
+  const resetRequest = authService.requestPasswordReset(parsed.data.email);
+  if (!resetRequest) {
+    return {
+      ok: true,
+      message: genericMessage
+    };
+  }
+
+  const resetUrl = `${getPortalBaseUrl()}/portal?resetToken=${encodeURIComponent(resetRequest.token)}`;
+  await sendPasswordResetNotification({
+    email: resetRequest.user.email,
+    resetUrl,
+    expiresAt: resetRequest.expiresAt
+  });
+
+  return {
+    ok: true,
+    message: genericMessage
+  };
+});
+
+app.post('/api/portal/auth/reset-password', async (req, reply) => {
+  const parsed = resetPasswordSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const auth = authService.resetPasswordWithToken(parsed.data.token, parsed.data.newPassword);
+  if (!auth) {
+    return reply.code(400).send({ ok: false, error: 'Invalid or expired reset token' });
+  }
+
+  authService.clearSessionCookie(reply);
+  return {
+    ok: true,
+    message: 'Password updated. Please sign in with your new password.'
   };
 });
 
@@ -2028,7 +2694,8 @@ app.get('/v1/content/articles', async (req, reply) => {
   };
 });
 
-app.get('/v1/factory/sites', async () => {
+app.get('/v1/factory/sites', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const sites = await siteRegistry.listSites();
   return {
     count: sites.length,
@@ -2041,12 +2708,14 @@ app.get('/v1/factory/sites', async () => {
   };
 });
 
-app.get('/api/factory/site/:siteSlug/status', async (req) => {
+app.get('/api/factory/site/:siteSlug/status', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const params = req.params as { siteSlug: string };
   return factoryOps.siteStatus(params.siteSlug);
 });
 
-app.get('/api/factory/options', async () => {
+app.get('/api/factory/options', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   return {
     nichePresets: factoryOps.listNichePresets(),
     businessModes: ['transfer_first', 'managed'],
@@ -2067,6 +2736,7 @@ app.get('/api/factory/options', async () => {
 });
 
 app.post('/api/factory/site/create', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const body = (req.body || {}) as {
     siteSlug?: string;
     blueprint?: string;
@@ -2137,6 +2807,7 @@ app.post('/api/factory/site/create', async (req, reply) => {
 });
 
 app.post('/api/factory/site/launch', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const body = (req.body || {}) as {
     siteSlug?: string;
     blueprint?: string;
@@ -2221,6 +2892,7 @@ app.post('/api/factory/site/launch', async (req, reply) => {
 });
 
 app.post('/api/factory/site/seed-cms', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const body = (req.body || {}) as { siteSlug?: string; apply?: boolean };
   if (!body.siteSlug) return reply.code(400).send({ ok: false, error: 'siteSlug is required' });
   const result = await factoryOps.seedCms({ siteSlug: body.siteSlug, apply: body.apply });
@@ -2229,6 +2901,7 @@ app.post('/api/factory/site/seed-cms', async (req, reply) => {
 });
 
 app.post('/api/factory/site/discover-topics', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const body = (req.body || {}) as {
     siteSlug?: string;
     count?: number;
@@ -2251,6 +2924,7 @@ app.post('/api/factory/site/discover-topics', async (req, reply) => {
 });
 
 app.post('/api/factory/site/prepopulate', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const body = (req.body || {}) as { siteSlug?: string; targetPublishedCount?: number; batchSize?: number };
   if (!body.siteSlug) return reply.code(400).send({ ok: false, error: 'siteSlug is required' });
   const result = await factoryOps.prepopulate({
@@ -2263,6 +2937,7 @@ app.post('/api/factory/site/prepopulate', async (req, reply) => {
 });
 
 app.post('/api/factory/site/handoff-pack', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const body = (req.body || {}) as { siteSlug?: string };
   if (!body.siteSlug) return reply.code(400).send({ ok: false, error: 'siteSlug is required' });
   const result = await factoryOps.handoffPack({ siteSlug: body.siteSlug });
@@ -2271,6 +2946,7 @@ app.post('/api/factory/site/handoff-pack', async (req, reply) => {
 });
 
 app.post('/v1/factory/sites', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const body = (req.body || {}) as {
     siteSlug?: string;
     blueprint?: string;
@@ -2338,6 +3014,7 @@ app.post('/v1/factory/sites', async (req, reply) => {
 });
 
 app.post('/v1/factory/sites/:id/provision', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const params = req.params as { id: string };
   const result = await factoryOps.createSite({ siteSlug: params.id, force: false });
   if (!result.ok) return reply.code(400).send(result);
@@ -2345,6 +3022,7 @@ app.post('/v1/factory/sites/:id/provision', async (req, reply) => {
 });
 
 app.post('/v1/factory/sites/:id/seed', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const params = req.params as { id: string };
   const body = (req.body || {}) as { apply?: boolean };
   const result = await factoryOps.seedCms({ siteSlug: params.id, apply: body.apply });
@@ -2353,6 +3031,7 @@ app.post('/v1/factory/sites/:id/seed', async (req, reply) => {
 });
 
 app.post('/v1/factory/sites/:id/deploy', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const params = req.params as { id: string };
   const result = await factoryOps.handoffPack({ siteSlug: params.id });
   if (!result.ok) return reply.code(400).send(result);
@@ -2360,13 +3039,15 @@ app.post('/v1/factory/sites/:id/deploy', async (req, reply) => {
 });
 
 app.post('/v1/factory/sites/:id/export-handoff', async (req, reply) => {
+  if (!requireFactoryAccess(req, reply)) return;
   const params = req.params as { id: string };
   const result = await factoryOps.handoffPack({ siteSlug: params.id });
   if (!result.ok) return reply.code(400).send(result);
   return result;
 });
 
-app.get('/ops/factory', async (_req, reply) => {
+app.get('/ops/factory', async (req, reply) => {
+  if (!requireFactoryUiAccess(req, reply)) return;
   const html = `<!doctype html>
 <html>
 <head>
@@ -2409,6 +3090,10 @@ app.get('/ops/factory', async (_req, reply) => {
     <section class="panel">
       <h2>Launch Site</h2>
       <div class="row">
+        <div class="col-4">
+          <label>Factory API secret</label>
+          <input id="factorySecret" type="password" autocomplete="off" placeholder="Required" />
+        </div>
         <div class="col-4">
           <label>Site slug</label>
           <input id="siteSlug" value="new-site" />
@@ -2557,6 +3242,7 @@ app.get('/ops/factory', async (_req, reply) => {
   <script>
     const out = document.getElementById('out');
     const status = document.getElementById('status');
+    const FACTORY_SECRET_STORAGE_KEY = 'factory_api_secret';
 
     function getValue(id) {
       const el = document.getElementById(id);
@@ -2611,12 +3297,34 @@ app.get('/ops/factory', async (_req, reply) => {
       return payload;
     }
 
+    function getFactorySecret() {
+      const fromInput = getValue('factorySecret');
+      if (fromInput) {
+        try { localStorage.setItem(FACTORY_SECRET_STORAGE_KEY, fromInput); } catch {}
+        return fromInput;
+      }
+      try {
+        return String(localStorage.getItem(FACTORY_SECRET_STORAGE_KEY) || '').trim();
+      } catch {
+        return '';
+      }
+    }
+
     async function callApi(path, payload) {
+      const secret = getFactorySecret();
+      if (!secret) {
+        setStatus('Factory API secret is required.', 'err');
+        out.textContent = 'Missing factory secret (x-factory-secret).';
+        return;
+      }
       setStatus('Running...', '');
       out.textContent = 'Running...';
       const res = await fetch(path, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'x-factory-secret': secret
+        },
         body: JSON.stringify(payload)
       });
       const text = await res.text();
@@ -2652,20 +3360,36 @@ app.get('/ops/factory', async (_req, reply) => {
     document.getElementById('statusBtn').addEventListener('click', async (e) => {
       e.preventDefault();
       const siteSlug = getValue('siteSlug');
+      const secret = getFactorySecret();
       if (!siteSlug) {
         setStatus('siteSlug is required.', 'err');
         return;
       }
+      if (!secret) {
+        setStatus('Factory API secret is required.', 'err');
+        out.textContent = 'Missing factory secret (x-factory-secret).';
+        return;
+      }
       setStatus('Loading status...', '');
-      const res = await fetch('/api/factory/site/' + encodeURIComponent(siteSlug) + '/status');
+      const res = await fetch('/api/factory/site/' + encodeURIComponent(siteSlug) + '/status', {
+        headers: { 'x-factory-secret': secret }
+      });
       const text = await res.text();
       out.textContent = text;
       setStatus(res.ok ? 'Status loaded.' : 'Status request failed.', res.ok ? 'ok' : 'err');
     });
 
     (async () => {
+      const secret = getFactorySecret();
+      if (secret) {
+        const secretInput = document.getElementById('factorySecret');
+        if (secretInput) secretInput.value = secret;
+      }
+      if (!secret) return;
       try {
-        const res = await fetch('/api/factory/options');
+        const res = await fetch('/api/factory/options', {
+          headers: { 'x-factory-secret': secret }
+        });
         if (!res.ok) return;
         const data = await res.json();
         const nicheSelect = document.getElementById('nichePreset');

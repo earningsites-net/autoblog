@@ -20,6 +20,8 @@ This file stores durable project context shared across tasks.
 - Install deps: `npm install`
 - Start local stack: `./scripts/dev-up.sh`
 - Stop local stack: `./scripts/dev-down.sh`
+- Import changed n8n workflows: `npm run n8n:import:changed`
+- Check + import + smoke changed n8n workflows: `npm run n8n:test:flows`
 - Setup details: `docs/start-local.md`
 
 ## Durable Notes
@@ -42,7 +44,24 @@ This file stores durable project context shared across tasks.
   - `PLAN_TEST_INTERVAL_MINUTES_BASE|STANDARD|PRO`
   - `PLAN_TOPIC_REFILL_INTERVAL_MINUTES`
   - `PLAN_TOPIC_REFILL_COUNT`
+- Protezione chiamate costo-sensibili:
+  - Factory API richiede `x-factory-secret` (`FACTORY_API_SECRET`) oppure `x-internal-token` (`INTERNAL_API_TOKEN`).
+  - Pagina `/ops/factory` protetta con HTTP Basic Auth (`FACTORY_UI_USERNAME`, `FACTORY_UI_PASSWORD`; fallback password a `FACTORY_API_SECRET`).
+  - Webhook n8n `plan-automation` e `factory-prepopulate` validano `INTERNAL_API_TOKEN` prima di procedere.
 - Batch workers controllati da env n8n:
   - `ARTICLE_BATCH_SIZE`
   - `IMAGE_BATCH_SIZE`
   - `QA_BATCH_SIZE`
+- Slug articoli n8n:
+  - `article_generation_worker` usa slug con suffisso univoco (`timestamp+random`) per evitare collisioni Sanity (`slug is already in use`).
+- Password reset portale:
+  - token monouso con scadenza persistiti su tabella `password_reset_tokens`
+  - endpoint: `POST /api/portal/auth/forgot-password` e `POST /api/portal/auth/reset-password`
+  - delivery email configurabile con `PORTAL_PASSWORD_RESET_DELIVERY_MODE`:
+    - `auto` (default): prova `Resend` (`RESEND_API_KEY` + `PORTAL_PASSWORD_RESET_FROM`) e fallback webhook
+    - `resend`: usa solo Resend
+    - `webhook`: usa solo webhook (`PORTAL_PASSWORD_RESET_WEBHOOK_URL`, secret opzionale `PORTAL_PASSWORD_RESET_WEBHOOK_SECRET`)
+- Automazione import workflow n8n:
+  - comando standard: `npm run n8n:import:changed`
+  - script: `skills/n8n-flow-guard/scripts/check_n8n_flows.mjs`
+  - report ultimo run: `docs/ops/n8n-flow-checks/latest-report.json`

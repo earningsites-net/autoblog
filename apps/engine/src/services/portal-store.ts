@@ -64,6 +64,7 @@ export type PortalSiteSummary = {
 export type PortalAdminDbTable =
   | 'users'
   | 'sessions'
+  | 'password_reset_tokens'
   | 'site_access'
   | 'site_settings'
   | 'entitlements'
@@ -121,6 +122,20 @@ export class PortalStore {
         created_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
+
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        token_hash TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        used_at TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id
+        ON password_reset_tokens (user_id);
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires_at
+        ON password_reset_tokens (expires_at);
 
       CREATE TABLE IF NOT EXISTS site_access (
         user_id INTEGER NOT NULL,
@@ -325,6 +340,83 @@ export class PortalStore {
 
   revokeSession(token: string) {
     this.db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+  }
+
+  private cleanupPasswordResetTokens(nowIso = isoNow()) {
+    this.db
+      .prepare('DELETE FROM password_reset_tokens WHERE used_at IS NOT NULL OR expires_at <= ?')
+      .run(nowIso);
+  }
+
+  createPasswordResetToken(userId: number, tokenHash: string, ttlSeconds = 60 * 30) {
+    const now = isoNow();
+    const expiresAt = new Date(Date.now() + Math.max(60, Number(ttlSeconds || 0)) * 1000).toISOString();
+
+    this.cleanupPasswordResetTokens(now);
+    this.db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(userId);
+    this.db
+      .prepare(
+        `INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, created_at, used_at)
+         VALUES (?, ?, ?, ?, NULL)`
+      )
+      .run(tokenHash, userId, expiresAt, now);
+
+    return {
+      tokenHash,
+      userId,
+      expiresAt,
+      createdAt: now
+    };
+  }
+
+  consumePasswordResetToken(tokenHash: string, nextPasswordHash: string): PortalUser | null {
+    const now = isoNow();
+    this.cleanupPasswordResetTokens(now);
+
+    const tokenRow = this.db
+      .prepare(
+        `SELECT token_hash, user_id, expires_at, used_at
+         FROM password_reset_tokens
+         WHERE token_hash = ?`
+      )
+      .get(tokenHash) as
+      | {
+          token_hash: string;
+          user_id: number;
+          expires_at: string;
+          used_at: string | null;
+        }
+      | undefined;
+    if (!tokenRow) return null;
+
+    if (tokenRow.used_at || !isIsoBefore(now, tokenRow.expires_at)) {
+      this.db.prepare('DELETE FROM password_reset_tokens WHERE token_hash = ?').run(tokenHash);
+      return null;
+    }
+
+    const user = this.getUserById(tokenRow.user_id);
+    if (!user) {
+      this.db.prepare('DELETE FROM password_reset_tokens WHERE token_hash = ?').run(tokenHash);
+      return null;
+    }
+
+    this.db.exec('BEGIN');
+    try {
+      this.db
+        .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
+        .run(nextPasswordHash, now, tokenRow.user_id);
+      this.db
+        .prepare('UPDATE password_reset_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL')
+        .run(now, tokenHash);
+      this.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(tokenRow.user_id);
+      this.db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ? AND token_hash <> ?').run(tokenRow.user_id, tokenHash);
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+
+    return this.getUserById(tokenRow.user_id);
   }
 
   assignSiteAccess(userId: number, siteSlug: string, role: PortalSiteAccess['role'] = 'owner') {
@@ -786,6 +878,7 @@ export class PortalStore {
     return [
       'users',
       'sessions',
+      'password_reset_tokens',
       'site_access',
       'site_settings',
       'entitlements',
@@ -844,6 +937,47 @@ export class PortalStore {
         createdAt: row.createdAt
       }));
       const countRow = this.db.prepare('SELECT COUNT(*) AS count FROM sessions').get() as { count: number };
+      return {
+        table: safeTable,
+        count: Number(countRow.count || 0),
+        rows
+      };
+    }
+
+    if (safeTable === 'password_reset_tokens') {
+      const rowsRaw = this.db
+        .prepare(
+          `SELECT
+            prt.token_hash AS tokenHash,
+            prt.user_id AS userId,
+            u.email,
+            prt.expires_at AS expiresAt,
+            prt.created_at AS createdAt,
+            prt.used_at AS usedAt
+           FROM password_reset_tokens prt
+           INNER JOIN users u ON u.id = prt.user_id
+           ORDER BY prt.created_at DESC
+           LIMIT ?`
+        )
+        .all(safeLimit) as Array<{
+        tokenHash: string;
+        userId: number;
+        email: string;
+        expiresAt: string;
+        createdAt: string;
+        usedAt: string | null;
+      }>;
+      const rows = rowsRaw.map((row) => ({
+        tokenPreview: row.tokenHash ? `${row.tokenHash.slice(0, 8)}...${row.tokenHash.slice(-4)}` : '',
+        userId: row.userId,
+        email: row.email,
+        expiresAt: row.expiresAt,
+        createdAt: row.createdAt,
+        usedAt: row.usedAt
+      }));
+      const countRow = this.db.prepare('SELECT COUNT(*) AS count FROM password_reset_tokens').get() as {
+        count: number;
+      };
       return {
         table: safeTable,
         count: Number(countRow.count || 0),

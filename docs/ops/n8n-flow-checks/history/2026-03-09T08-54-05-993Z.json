@@ -1,0 +1,56 @@
+{
+  "runAt": "2026-03-09T08:54:05.993Z",
+  "mode": "changed-only",
+  "workflowsDir": "/Users/danilociamprone/Documents/Auto blog project/infra/n8n/workflows",
+  "reportDir": "/Users/danilociamprone/Documents/Auto blog project/docs/ops/n8n-flow-checks",
+  "importEnabled": true,
+  "smokeEnabled": false,
+  "importConfigured": true,
+  "importReason": "configured",
+  "overallStatus": "pass",
+  "summary": {
+    "total": 1,
+    "pass": 1,
+    "warn": 0,
+    "fail": 0
+  },
+  "regression": {
+    "count": 0,
+    "items": []
+  },
+  "workflows": [
+    {
+      "path": "infra/n8n/workflows/article_generation_worker.json",
+      "name": "article_generation_worker",
+      "status": "pass",
+      "errors": [],
+      "warnings": [],
+      "envVars": [
+        "ARTICLE_BATCH_SIZE",
+        "BUDGET_MODE",
+        "OPENAI_API_KEY",
+        "PIPELINE_MODE_DEFAULT",
+        "PREPOPULATE_BATCH_ID",
+        "SANITY_API_VERSION",
+        "SANITY_DATASET",
+        "SANITY_PROJECT_ID",
+        "SANITY_READ_TOKEN",
+        "SANITY_WRITE_TOKEN",
+        "SITE_SLUG",
+        "TEXT_MODEL_DRAFT"
+      ],
+      "import": {
+        "attempted": true,
+        "status": "pass",
+        "action": "update",
+        "remoteId": "q9jmiptYYBq6ieFd",
+        "details": "Updated workflow \"article_generation_worker\" (id: q9jmiptYYBq6ieFd)"
+      },
+      "smoke": {
+        "attempted": false,
+        "status": "disabled",
+        "details": "Smoke disabled"
+      }
+    }
+  ]
+}

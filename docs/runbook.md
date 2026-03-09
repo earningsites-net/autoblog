@@ -38,6 +38,16 @@
   - `PLAN_TOPIC_REFILL_COUNT`
 - If needed, trigger manual discovery from factory API/UI before re-running scheduler.
 
+### Unauthorized errors on factory/scheduler hooks
+- Verify `INTERNAL_API_TOKEN` is configured and identical in:
+  - root `.env`
+  - `infra/n8n/.env`
+- Verify `FACTORY_API_SECRET` is set in root `.env` and passed as header `x-factory-secret` from Factory UI/API clients.
+- Verify `/ops/factory` Basic Auth credentials:
+  - `FACTORY_UI_USERNAME` (default `admin`)
+  - `FACTORY_UI_PASSWORD` (or fallback to `FACTORY_API_SECRET` if empty)
+- If values changed, restart local stack (`npm run dev:down && npm run dev:up`) and reimport changed workflows.
+
 ### Frontend revalidate errors
 - Check `WEB_REVALIDATE_SECRET` and `WEB_APP_URL`.
 - Test with `curl` to `/api/revalidate`.

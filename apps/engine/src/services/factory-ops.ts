@@ -616,9 +616,13 @@ export class FactoryOpsService {
       };
     }
 
+    const internalToken = String(process.env.INTERNAL_API_TOKEN || '').trim();
     const response = await fetch(triggerUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(internalToken ? { 'x-internal-token': internalToken } : {})
+      },
       body: JSON.stringify({
         siteSlug: input.siteSlug,
         targetPublishedCount: input.targetPublishedCount,

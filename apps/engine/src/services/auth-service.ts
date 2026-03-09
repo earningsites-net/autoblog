@@ -3,6 +3,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { PortalStore, PortalUser } from './portal-store';
 
 const SESSION_COOKIE_NAME = 'portal_session';
+const PASSWORD_RESET_MIN_TTL_SECONDS = 60;
+const PASSWORD_RESET_DEFAULT_TTL_SECONDS = 60 * 30;
 
 function parseCookies(cookieHeader: string | undefined) {
   const out: Record<string, string> = {};
@@ -22,6 +24,10 @@ function parseCookies(cookieHeader: string | undefined) {
 
 function hashSecret(password: string, salt: string) {
   return crypto.scryptSync(password, salt, 64).toString('hex');
+}
+
+function sha256(value: string) {
+  return crypto.createHash('sha256').update(value).digest('hex');
 }
 
 function safeCompare(a: string, b: string) {
@@ -70,6 +76,20 @@ function serializeClearSessionCookie() {
   return parts.join('; ');
 }
 
+function parsePasswordResetTtlSeconds() {
+  const configured = Number(process.env.PORTAL_PASSWORD_RESET_TTL_MINUTES || '');
+  if (Number.isFinite(configured) && configured > 0) {
+    return Math.max(PASSWORD_RESET_MIN_TTL_SECONDS, Math.trunc(configured * 60));
+  }
+  return PASSWORD_RESET_DEFAULT_TTL_SECONDS;
+}
+
+export type PasswordResetRequestResult = {
+  user: PortalUser;
+  token: string;
+  expiresAt: string;
+};
+
 export class AuthService {
   constructor(private readonly store: PortalStore) {}
 
@@ -97,6 +117,32 @@ export class AuthService {
       user: found.user,
       session
     };
+  }
+
+  requestPasswordReset(email: string): PasswordResetRequestResult | null {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) return null;
+    const found = this.store.getUserWithPasswordHashByEmail(normalizedEmail);
+    if (!found) return null;
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const ttlSeconds = parsePasswordResetTtlSeconds();
+    const resetRecord = this.store.createPasswordResetToken(found.user.id, sha256(token), ttlSeconds);
+    return {
+      user: found.user,
+      token,
+      expiresAt: resetRecord.expiresAt
+    };
+  }
+
+  resetPasswordWithToken(token: string, nextPassword: string) {
+    const normalizedToken = String(token || '').trim();
+    const normalizedPassword = String(nextPassword || '');
+    if (!normalizedToken || normalizedPassword.length < 8) return null;
+
+    const user = this.store.consumePasswordResetToken(sha256(normalizedToken), hashPassword(normalizedPassword));
+    if (!user) return null;
+    return { user };
   }
 
   logoutByToken(token: string | undefined) {

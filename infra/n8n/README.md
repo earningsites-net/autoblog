@@ -8,6 +8,16 @@ This folder contains a low-cost self-hosted n8n + PostgreSQL setup and workflow 
 - `workflows/*.json`: importable workflow templates (adapt credentials and node config)
 - `workflows/plan_generation_scheduler_worker.json`: piano-based scheduling (3/20/60) + topic auto-refill trigger
 
+## Workflow Import Automation
+- Esegui da root repo:
+  - `npm run n8n:import:changed` per validare/importare solo i workflow cambiati.
+  - `npm run n8n:test:flows` per aggiungere anche smoke test sui workflow cambiati.
+- Lo script usato dai comandi è `skills/n8n-flow-guard/scripts/check_n8n_flows.mjs`.
+- Report ultimo run: `docs/ops/n8n-flow-checks/latest-report.json` (storico in `docs/ops/n8n-flow-checks/history/`).
+
+## Article Slug Uniqueness
+- Il workflow `article_generation_worker` normalizza lo slug articolo con suffisso univoco (`timestamp+random`) per evitare collisioni su Sanity (`slug is already in use`).
+
 ## Deployment Notes
 - Host on a low-cost VPS (Hetzner/Contabo class) with Docker + Compose.
 - Put n8n behind HTTPS reverse proxy before production.
