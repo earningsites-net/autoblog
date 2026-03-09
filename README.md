@@ -22,3 +22,5 @@ Monorepo MVP for an AI-autopopulated Home & DIY editorial site with:
 - n8n workflows are provided as importable templates and reference docs; provider credentials and endpoint IDs must be configured.
 - `scripts/autoblog.mjs` provides a factory CLI to bootstrap additional sites from blueprint templates.
 - See `docs/factory.md` for the API-first “site factory” architecture.
+- Production pilot runbook for `lux-living-01`: `docs/deploy/pilot-lux-living-01.md`.
+- Bootstrap pilot env files: `npm run release:pilot:init-env`.

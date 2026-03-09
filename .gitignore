@@ -3,6 +3,8 @@ node_modules
 out
 .vercel
 .env
+.env.staging
+.env.production
 .env.local
 .env.*.local
 *.log
@@ -14,5 +16,7 @@ apps/studio/.sanity
 infra/n8n/data
 infra/n8n/postgres
 sites/*/.env.generated
+infra/n8n/.env.staging
+infra/n8n/.env.production
 sites/*/seed-content
 sites/*/handoff

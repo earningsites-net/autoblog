@@ -22,7 +22,14 @@ This file stores durable project context shared across tasks.
 - Stop local stack: `./scripts/dev-down.sh`
 - Import changed n8n workflows: `npm run n8n:import:changed`
 - Check + import + smoke changed n8n workflows: `npm run n8n:test:flows`
+- Pilot release checks (`lux-living-01`):
+  - init env files: `npm run release:pilot:init-env`
+  - staging readiness: `npm run release:pilot:check:staging`
+  - production readiness: `npm run release:pilot:check:production`
+  - factory smoke: `npm run release:pilot:smoke:factory`
+  - registry activation: `npm run release:pilot:activate`
 - Setup details: `docs/start-local.md`
+- Pilot deploy runbook: `docs/deploy/pilot-lux-living-01.md`
 
 ## Durable Notes
 - Frontend supports pluggable content repository via `CONTENT_REPOSITORY_DRIVER`.
@@ -65,3 +72,9 @@ This file stores durable project context shared across tasks.
   - comando standard: `npm run n8n:import:changed`
   - script: `skills/n8n-flow-guard/scripts/check_n8n_flows.mjs`
   - report ultimo run: `docs/ops/n8n-flow-checks/latest-report.json`
+- Runtime ops templates for VPS deploy:
+  - systemd engine service: `infra/ops/systemd/autoblog-engine.service.example`
+  - nginx reverse proxy + private factory example: `infra/ops/nginx/engine-and-factory.conf.example`
+- Pilot release checks read env files:
+  - root: `.env.staging` / `.env.production`
+  - n8n: `infra/n8n/.env.staging` / `infra/n8n/.env.production`

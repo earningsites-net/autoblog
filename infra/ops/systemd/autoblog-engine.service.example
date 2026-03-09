@@ -1,0 +1,16 @@
+[Unit]
+Description=AutoBlog Engine (portal + factory API)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/auto-blog-project
+EnvironmentFile=/etc/autoblog/engine.env
+ExecStart=/usr/bin/npm --workspace @autoblog/engine run start
+Restart=always
+RestartSec=3
+User=autoblog
+Group=autoblog
+
+[Install]
+WantedBy=multi-user.target
