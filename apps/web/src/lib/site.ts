@@ -1,17 +1,25 @@
-import { getSiteBlueprint } from './site-blueprint';
+import { getConfiguredSiteSlug, getSiteBlueprint } from './site-blueprint';
 
 const activeBlueprint = getSiteBlueprint();
+const configuredSiteSlug = getConfiguredSiteSlug();
+const resolvedSiteSlug = activeBlueprint?.siteSlug || configuredSiteSlug;
+
+if (process.env.NODE_ENV === 'production' && !resolvedSiteSlug) {
+  throw new Error(
+    'Site slug is not configured. Set SITE_SLUG or NEXT_PUBLIC_SITE_SLUG in the runtime environment.'
+  );
+}
 
 export const siteConfig = {
-  slug: activeBlueprint?.siteSlug || 'hammer-hearth',
-  name: process.env.NEXT_PUBLIC_SITE_NAME || activeBlueprint?.brandName || 'Hammer & Hearth',
+  slug: resolvedSiteSlug,
+  name: process.env.NEXT_PUBLIC_SITE_NAME || activeBlueprint?.brandName || 'AutoBlog',
   description:
     process.env.NEXT_PUBLIC_SITE_DESCRIPTION ||
     activeBlueprint?.siteDescription ||
-    'A practical lifestyle magazine with clear, evergreen guides, ideas, and inspiration for everyday living.',
+    'Automated editorial site.',
   url: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
   locale: process.env.NEXT_PUBLIC_DEFAULT_LOCALE || activeBlueprint?.locale || 'en-US',
-  niche: activeBlueprint?.niche?.primaryNiche || 'Home & DIY',
+  niche: activeBlueprint?.niche?.primaryNiche || '',
   budgetPolicy: activeBlueprint?.budgetPolicy,
   categories: activeBlueprint?.categories || [],
   themePalette: activeBlueprint?.theme?.palette || {},

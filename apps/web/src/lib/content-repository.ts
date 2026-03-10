@@ -1,7 +1,6 @@
 import groq from 'groq';
 import { articles as mockArticles, mockCategories } from './mock-data';
 import { hasSanityConfig, sanityClient } from './sanity';
-import { getSiteBlueprint } from './site-blueprint';
 import { siteConfig } from './site';
 import type { Article, Category } from './types';
 
@@ -49,17 +48,7 @@ function normalizeArticle(article: Article): Article {
   };
 }
 
-const blueprint = getSiteBlueprint();
 const siteSlug = siteConfig.slug;
-const blueprintCategoriesFallback: Category[] = Array.isArray(blueprint?.categories)
-  ? blueprint.categories.map((category) => ({
-      _id: `category-${siteSlug}-${category.slug}`,
-      title: category.title,
-      slug: category.slug,
-      description: category.description,
-      accent: category.accent
-    }))
-  : [];
 
 class MockContentRepository implements ContentRepository {
   driver: ContentRepositoryDriver = 'mock';
@@ -94,18 +83,14 @@ class SanityContentRepository implements ContentRepository {
   }
 
   async getAllCategories() {
-    try {
-      const data = await this.fetchSanity<Category[]>(groq`*[_type == "category" && siteSlug == $siteSlug] | order(title asc) {
-        _id,
-        title,
-        "slug": slug.current,
-        description,
-        accent
-      }`, { siteSlug });
-      return data?.length ? data : blueprintCategoriesFallback;
-    } catch {
-      return blueprintCategoriesFallback;
-    }
+    const data = await this.fetchSanity<Category[]>(groq`*[_type == "category" && siteSlug == $siteSlug] | order(title asc) {
+      _id,
+      title,
+      "slug": slug.current,
+      description,
+      accent
+    }`, { siteSlug });
+    return data?.length ? data : [];
   }
 }
 
@@ -129,7 +114,7 @@ class ApiContentRepository implements ContentRepository {
   }
 
   async getAllCategories() {
-    if (!this.baseUrl) return blueprintCategoriesFallback;
+    if (!this.baseUrl) return [];
 
     try {
       const res = await fetch(`${this.baseUrl}/v1/content/categories?siteSlug=${encodeURIComponent(siteSlug)}`, {
@@ -137,9 +122,9 @@ class ApiContentRepository implements ContentRepository {
       });
       if (!res.ok) throw new Error(`API ${res.status}`);
       const json = (await res.json()) as { items?: Category[] };
-      return json.items?.length ? json.items : blueprintCategoriesFallback;
+      return json.items?.length ? json.items : [];
     } catch {
-      return blueprintCategoriesFallback;
+      return [];
     }
   }
 }
@@ -158,12 +143,17 @@ function resolveDriver(): ContentRepositoryDriver {
 
 export function getContentRepository(): ContentRepository {
   const driver = resolveDriver();
+  const isProduction = process.env.NODE_ENV === 'production';
 
   if (driver === 'mock') return mockRepository;
-  if (driver === 'sanity') return hasSanityConfig ? sanityRepository : mockRepository;
+  if (driver === 'sanity') return sanityRepository;
   if (driver === 'api') return apiRepository;
 
   if (hasSanityConfig) return sanityRepository;
-  if (process.env.CONTENT_API_BASE_URL || process.env.CONTENT_ENGINE_URL) return apiRepository;
+  if (isProduction) {
+    throw new Error(
+      'No content repository configured for production. Set Sanity envs or choose CONTENT_REPOSITORY_DRIVER explicitly.'
+    );
+  }
   return mockRepository;
 }

@@ -64,15 +64,35 @@ type SiteBlueprintLite = {
   uiCopy?: Record<string, unknown>;
 };
 
+function normalizeSiteSlug(value: string | undefined) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export function getConfiguredSiteSlug() {
+  return normalizeSiteSlug(
+    process.env.SITE_SLUG ||
+      process.env.NEXT_PUBLIC_SITE_SLUG ||
+      process.env.SANITY_STUDIO_SITE_SLUG
+  );
+}
+
 function candidateBlueprintPaths() {
   const cwd = process.cwd();
-  const fromEnv = process.env.SITE_BLUEPRINT_PATH;
+  const fromEnv = String(process.env.SITE_BLUEPRINT_PATH || '').trim();
+  const envResolved = fromEnv ? path.resolve(cwd, fromEnv) : '';
+  const slug = getConfiguredSiteSlug();
+  const bySlugRoot = slug ? path.resolve(cwd, `sites/${slug}/site.blueprint.json`) : '';
+  const bySlugMonorepo = slug ? path.resolve(cwd, `../../sites/${slug}/site.blueprint.json`) : '';
 
-  return [
-    fromEnv,
-    path.resolve(cwd, 'sites/hammer-hearth/site.blueprint.json'),
-    path.resolve(cwd, '../../sites/hammer-hearth/site.blueprint.json')
-  ].filter(Boolean) as string[];
+  return Array.from(
+    new Set(
+      [fromEnv, envResolved, bySlugRoot, bySlugMonorepo].filter(Boolean)
+    )
+  );
 }
 
 let cachedBlueprint: SiteBlueprintLite | null | undefined;
@@ -80,12 +100,18 @@ let cachedBlueprint: SiteBlueprintLite | null | undefined;
 export function getSiteBlueprint(): SiteBlueprintLite | null {
   if (cachedBlueprint !== undefined) return cachedBlueprint;
 
+  const expectedSlug = getConfiguredSiteSlug();
+
   for (const filePath of candidateBlueprintPaths()) {
     try {
       if (!fs.existsSync(filePath)) continue;
       const raw = fs.readFileSync(filePath, 'utf8');
       const parsed = JSON.parse(raw) as SiteBlueprintLite;
       if (parsed?.siteSlug && parsed?.brandName) {
+        const parsedSlug = normalizeSiteSlug(parsed.siteSlug);
+        if (expectedSlug && parsedSlug && parsedSlug !== expectedSlug) {
+          continue;
+        }
         cachedBlueprint = parsed;
         return parsed;
       }
