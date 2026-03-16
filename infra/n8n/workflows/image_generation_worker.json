@@ -14,13 +14,13 @@
     },
     {
       "parameters": {
-        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || '') + '\\\" && status==\\\"draft\\\" && !defined(coverImage)]|order(_createdAt asc)[0...' + Number($env.IMAGE_BATCH_SIZE || 3) + ']') }}",
+        "url": "={{ 'https://' + $('Resolve Site Context').item.json.sanity.projectId + '.api.sanity.io/v' + ($('Resolve Site Context').item.json.sanity.apiVersion || '2025-01-01') + '/data/query/' + ($('Resolve Site Context').item.json.sanity.dataset || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || '') + '\\\" && status==\\\"draft\\\" && !defined(coverImage)]|order(_createdAt asc)[0...' + Number($env.IMAGE_BATCH_SIZE || 3) + ']') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{$env.SANITY_READ_TOKEN}}"
+              "value": "=Bearer {{$('Resolve Site Context').item.json.sanity.readToken}}"
             }
           ]
         },
@@ -99,7 +99,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const nf = (typeof fetch === 'function') ? null : require('node-fetch');\nconst fetchFn = (typeof fetch === 'function') ? fetch : (nf.default || nf);\nconst { Buffer } = require('buffer');\n\nfunction slugify(input) {\n  return String(input || '')\n    .toLowerCase()\n    .trim()\n    .replace(/[\"']/g, '')\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .slice(0, 120);\n}\n\nconst article = $('Build Safe Image Prompt').item.json;\nconst prediction = $json;\n\nconst hasOutput = Array.isArray(prediction.output) ? prediction.output.length > 0 : Boolean(prediction.output);\nif (!hasOutput) {\n  throw new Error('Replicate did not return an image yet (status: ' + (prediction.status || 'unknown') + '). Retry the workflow once the prediction is complete.');\n}\nif (prediction.status === 'failed' || prediction.status === 'canceled') {\n  throw new Error('Replicate prediction failed: ' + (prediction.error || prediction.status));\n}\n\nconst outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;\nif (!outputUrl) {\n  throw new Error('No image output URL from Replicate. Status: ' + prediction.status);\n}\n\nconst imageRes = await fetchFn(outputUrl);\nif (!imageRes.ok) {\n  throw new Error('Failed to download generated image (' + imageRes.status + ')');\n}\nconst imageBuffer = Buffer.from(await imageRes.arrayBuffer());\nconst contentType = imageRes.headers.get('content-type') || 'image/jpeg';\n\nconst apiVersion = $env.SANITY_API_VERSION || '2025-01-01';\nconst projectId = $env.SANITY_PROJECT_ID;\nconst dataset = $env.SANITY_DATASET || 'production';\nconst writeToken = $env.SANITY_WRITE_TOKEN;\nconst imageModel = $env.IMAGE_MODEL || 'black-forest-labs/flux-schnell';\n\nif (!projectId || !writeToken) {\n  throw new Error('Missing Sanity env vars (SANITY_PROJECT_ID / SANITY_WRITE_TOKEN)');\n}\n\nconst filename = slugify((article.slug && article.slug.current) || article.slug || article.title || 'article-hero') + '-hero.jpg';\nconst uploadUrl = 'https://' + projectId + '.api.sanity.io/v' + apiVersion + '/assets/images/' + dataset + '?filename=' + encodeURIComponent(filename);\n\nconst uploadRes = await fetchFn(uploadUrl, {\n  method: 'POST',\n  headers: {\n    Authorization: 'Bearer ' + writeToken,\n    'Content-Type': contentType,\n  },\n  body: imageBuffer,\n});\n\nif (!uploadRes.ok) {\n  const text = await uploadRes.text();\n  throw new Error('Sanity asset upload failed (' + uploadRes.status + '): ' + text);\n}\n\nconst uploadJson = await uploadRes.json();\nconst assetId = uploadJson && uploadJson.document && uploadJson.document._id;\nconst assetUrl = uploadJson && uploadJson.document && uploadJson.document.url;\n\nif (!assetId) {\n  throw new Error('Sanity asset upload succeeded but asset id missing');\n}\n\nconst altText = 'AI-generated editorial hero image for ' + article.title;\nconst mutateUrl = 'https://' + projectId + '.api.sanity.io/v' + apiVersion + '/data/mutate/' + dataset;\n\nconst patchBody = {\n  mutations: [\n    {\n      patch: {\n        id: article._id,\n        set: {\n          coverImage: {\n            _type: 'image',\n            asset: { _type: 'reference', _ref: assetId },\n            aiPrompt: String(article.imagePrompt || '').slice(0, 400),\n            modelVersion: imageModel,\n          },\n          coverImageAlt: 'AI-generated editorial hero image for ' + article.title,\n        },\n      },\n    },\n  ],\n};\n\nconst patchRes = await fetchFn(mutateUrl, {\n  method: 'POST',\n  headers: {\n    Authorization: 'Bearer ' + writeToken,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify(patchBody),\n});\n\nif (!patchRes.ok) {\n  const text = await patchRes.text();\n  throw new Error('Sanity article patch failed (' + patchRes.status + '): ' + text);\n}\n\nconst patchJson = await patchRes.json();\n\nreturn {\n  json: {\n    ...article,\n    replicatePredictionId: prediction.id,\n    imageOutputUrl: outputUrl,\n    sanityAssetId: assetId,\n    sanityAssetUrl: assetUrl,\n    patchResult: patchJson,\n    imageModel,\n  }\n};",
+        "jsCode": "const nf = (typeof fetch === 'function') ? null : require('node-fetch');\nconst fetchFn = (typeof fetch === 'function') ? fetch : (nf.default || nf);\nconst { Buffer } = require('buffer');\n\nfunction slugify(input) {\n  return String(input || '')\n    .toLowerCase()\n    .trim()\n    .replace(/[\"']/g, '')\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .slice(0, 120);\n}\n\nconst article = $('Build Safe Image Prompt').item.json;\nconst prediction = $json;\n\nconst hasOutput = Array.isArray(prediction.output) ? prediction.output.length > 0 : Boolean(prediction.output);\nif (!hasOutput) {\n  throw new Error('Replicate did not return an image yet (status: ' + (prediction.status || 'unknown') + '). Retry the workflow once the prediction is complete.');\n}\nif (prediction.status === 'failed' || prediction.status === 'canceled') {\n  throw new Error('Replicate prediction failed: ' + (prediction.error || prediction.status));\n}\n\nconst outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;\nif (!outputUrl) {\n  throw new Error('No image output URL from Replicate. Status: ' + prediction.status);\n}\n\nconst imageRes = await fetchFn(outputUrl);\nif (!imageRes.ok) {\n  throw new Error('Failed to download generated image (' + imageRes.status + ')');\n}\nconst imageBuffer = Buffer.from(await imageRes.arrayBuffer());\nconst contentType = imageRes.headers.get('content-type') || 'image/jpeg';\n\nconst apiVersion = $('Resolve Site Context').item.json.sanity.apiVersion || '2025-01-01';\nconst projectId = $('Resolve Site Context').item.json.sanity.projectId;\nconst dataset = $('Resolve Site Context').item.json.sanity.dataset || 'production';\nconst writeToken = $('Resolve Site Context').item.json.sanity.writeToken;\nconst imageModel = $env.IMAGE_MODEL || 'black-forest-labs/flux-schnell';\n\nif (!projectId || !writeToken) {\n  throw new Error('Missing Sanity env vars (SANITY_PROJECT_ID / SANITY_WRITE_TOKEN)');\n}\n\nconst filename = slugify((article.slug && article.slug.current) || article.slug || article.title || 'article-hero') + '-hero.jpg';\nconst uploadUrl = 'https://' + projectId + '.api.sanity.io/v' + apiVersion + '/assets/images/' + dataset + '?filename=' + encodeURIComponent(filename);\n\nconst uploadRes = await fetchFn(uploadUrl, {\n  method: 'POST',\n  headers: {\n    Authorization: 'Bearer ' + writeToken,\n    'Content-Type': contentType,\n  },\n  body: imageBuffer,\n});\n\nif (!uploadRes.ok) {\n  const text = await uploadRes.text();\n  throw new Error('Sanity asset upload failed (' + uploadRes.status + '): ' + text);\n}\n\nconst uploadJson = await uploadRes.json();\nconst assetId = uploadJson && uploadJson.document && uploadJson.document._id;\nconst assetUrl = uploadJson && uploadJson.document && uploadJson.document.url;\n\nif (!assetId) {\n  throw new Error('Sanity asset upload succeeded but asset id missing');\n}\n\nconst altText = 'AI-generated editorial hero image for ' + article.title;\nconst mutateUrl = 'https://' + projectId + '.api.sanity.io/v' + apiVersion + '/data/mutate/' + dataset;\n\nconst patchBody = {\n  mutations: [\n    {\n      patch: {\n        id: article._id,\n        set: {\n          coverImage: {\n            _type: 'image',\n            asset: { _type: 'reference', _ref: assetId },\n            aiPrompt: String(article.imagePrompt || '').slice(0, 400),\n            modelVersion: imageModel,\n          },\n          coverImageAlt: 'AI-generated editorial hero image for ' + article.title,\n        },\n      },\n    },\n  ],\n};\n\nconst patchRes = await fetchFn(mutateUrl, {\n  method: 'POST',\n  headers: {\n    Authorization: 'Bearer ' + writeToken,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify(patchBody),\n});\n\nif (!patchRes.ok) {\n  const text = await patchRes.text();\n  throw new Error('Sanity article patch failed (' + patchRes.status + '): ' + text);\n}\n\nconst patchJson = await patchRes.json();\n\nreturn {\n  json: {\n    ...article,\n    replicatePredictionId: prediction.id,\n    imageOutputUrl: outputUrl,\n    sanityAssetId: assetId,\n    sanityAssetUrl: assetUrl,\n    patchResult: patchJson,\n    imageModel,\n  }\n};",
         "language": "javaScript"
       },
       "id": "b2f01803-26bd-42a0-a4d0-c86e8ead59de",
@@ -110,6 +110,19 @@
         4448,
         -480
       ]
+    },
+    {
+      "id": "resolve_site_context",
+      "name": "Resolve Site Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3248,
+        -480
+      ],
+      "parameters": {
+        "jsCode": "const incoming = (typeof $json === 'object' && $json) ? $json : {};\nconst body = incoming.body && typeof incoming.body === 'object' ? incoming.body : {};\nconst payload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst siteSlug = String(\n  incoming.siteSlug ||\n  incoming.site_slug ||\n  body.siteSlug ||\n  payload.siteSlug ||\n  $env.SITE_SLUG ||\n  ''\n).trim().toLowerCase();\nif (!siteSlug) {\n  throw new Error('Missing siteSlug for Resolve Site Context');\n}\n\nconst baseUrl = String($env.CONTENT_ENGINE_URL || '').replace(/\\/$/, '');\nif (!baseUrl) {\n  throw new Error('Missing CONTENT_ENGINE_URL env var');\n}\n\nconst internalToken = String($env.INTERNAL_API_TOKEN || '').trim();\nif (!internalToken) {\n  throw new Error('Missing INTERNAL_API_TOKEN env var');\n}\n\nconst nf = (typeof fetch === 'function') ? null : require('node-fetch');\nconst fetchFn = (typeof fetch === 'function') ? fetch : (nf.default || nf);\nconst url = baseUrl + '/api/internal/sites/' + encodeURIComponent(siteSlug) + '/sanity-connection';\n\nconst response = await fetchFn(url, {\n  method: 'GET',\n  headers: {\n    'x-internal-token': internalToken,\n  },\n});\n\nconst raw = await response.text();\nlet parsed = {};\ntry {\n  parsed = raw ? JSON.parse(raw) : {};\n} catch (error) {\n  throw new Error('Invalid sanity-connection response for ' + siteSlug + ': ' + raw.slice(0, 220));\n}\n\nif (!response.ok || !parsed.ok || !parsed.sanity) {\n  throw new Error('Cannot resolve site Sanity connection for ' + siteSlug + ': ' + (parsed.error || raw || response.status));\n}\n\nconst sanity = parsed.sanity || {};\nif (!sanity.projectId || !sanity.readToken || !sanity.writeToken) {\n  throw new Error('Incomplete site Sanity connection for ' + siteSlug);\n}\n\nreturn {\n  json: {\n    ...incoming,\n    siteSlug: parsed.siteSlug || siteSlug,\n    sanity,\n  }\n};"
+      }
     }
   ],
   "pinData": {},
@@ -159,6 +172,17 @@
       ]
     },
     "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Resolve Site Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Site Context": {
       "main": [
         [
           {

@@ -23,7 +23,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "${N8N_PORT:-5678}:5678"
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"
     environment:
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
@@ -52,11 +52,6 @@ services:
       NODE_FUNCTION_ALLOW_EXTERNAL: ${NODE_FUNCTION_ALLOW_EXTERNAL:-node-fetch}
       NODE_FUNCTION_ALLOW_BUILTIN: ${NODE_FUNCTION_ALLOW_BUILTIN:-buffer}
       # Custom vars exposed to workflows
-      SANITY_PROJECT_ID: ${SANITY_PROJECT_ID}
-      SANITY_DATASET: ${SANITY_DATASET}
-      SANITY_READ_TOKEN: ${SANITY_READ_TOKEN}
-      SANITY_WRITE_TOKEN: ${SANITY_WRITE_TOKEN}
-      SANITY_API_VERSION: ${SANITY_API_VERSION}
       WEB_APP_URL: ${WEB_APP_URL}
       WEB_REVALIDATE_SECRET: ${WEB_REVALIDATE_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY}

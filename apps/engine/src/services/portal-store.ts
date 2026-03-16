@@ -46,6 +46,10 @@ export type PortalSiteEntitlement = {
   publishedThisMonth: number;
   periodStart: string;
   periodEnd: string;
+  pendingPlan: '' | 'base' | 'standard' | 'pro';
+  pendingMonthlyQuota: number;
+  pendingEffectiveAt: string;
+  pendingStripePriceId: string;
   status: 'active' | 'paused' | 'stopped';
   stripeCustomerId: string;
   stripeSubscriptionId: string;
@@ -169,6 +173,10 @@ export class PortalStore {
         published_this_month INTEGER NOT NULL DEFAULT 0,
         period_start TEXT NOT NULL,
         period_end TEXT NOT NULL,
+        pending_plan TEXT NOT NULL DEFAULT '',
+        pending_monthly_quota INTEGER NOT NULL DEFAULT 0,
+        pending_effective_at TEXT NOT NULL DEFAULT '',
+        pending_stripe_price_id TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'active',
         stripe_customer_id TEXT NOT NULL DEFAULT '',
         stripe_subscription_id TEXT NOT NULL DEFAULT '',
@@ -193,6 +201,10 @@ export class PortalStore {
 
     this.ensureColumnExists('site_settings', 'ads_mode', "TEXT NOT NULL DEFAULT 'auto'");
     this.ensureColumnExists('site_settings', 'ads_preview_enabled', 'INTEGER NOT NULL DEFAULT 1');
+    this.ensureColumnExists('entitlements', 'pending_plan', "TEXT NOT NULL DEFAULT ''");
+    this.ensureColumnExists('entitlements', 'pending_monthly_quota', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumnExists('entitlements', 'pending_effective_at', "TEXT NOT NULL DEFAULT ''");
+    this.ensureColumnExists('entitlements', 'pending_stripe_price_id', "TEXT NOT NULL DEFAULT ''");
   }
 
   private ensureColumnExists(table: string, column: string, definition: string) {
@@ -624,6 +636,10 @@ export class PortalStore {
           published_this_month,
           period_start,
           period_end,
+          pending_plan,
+          pending_monthly_quota,
+          pending_effective_at,
+          pending_stripe_price_id,
           status,
           stripe_customer_id,
           stripe_subscription_id,
@@ -641,6 +657,10 @@ export class PortalStore {
           published_this_month: number;
           period_start: string;
           period_end: string;
+          pending_plan: string;
+          pending_monthly_quota: number;
+          pending_effective_at: string;
+          pending_stripe_price_id: string;
           status: string;
           stripe_customer_id: string;
           stripe_subscription_id: string;
@@ -660,6 +680,10 @@ export class PortalStore {
         publishedThisMonth: 0,
         periodStart: window.periodStartIso,
         periodEnd: window.periodEndIso,
+        pendingPlan: '',
+        pendingMonthlyQuota: 0,
+        pendingEffectiveAt: '',
+        pendingStripePriceId: '',
         status: 'active',
         stripeCustomerId: '',
         stripeSubscriptionId: '',
@@ -670,6 +694,11 @@ export class PortalStore {
     }
 
     const plan = normalizePlan(row.plan);
+    const pendingPlanRaw = String(row.pending_plan || '').trim();
+    const pendingPlan =
+      pendingPlanRaw === 'base' || pendingPlanRaw === 'standard' || pendingPlanRaw === 'pro'
+        ? pendingPlanRaw
+        : '';
     return {
       siteSlug: row.site_slug,
       plan,
@@ -677,6 +706,10 @@ export class PortalStore {
       publishedThisMonth: Number(row.published_this_month || 0),
       periodStart: row.period_start,
       periodEnd: row.period_end,
+      pendingPlan,
+      pendingMonthlyQuota: Math.max(0, Number(row.pending_monthly_quota || 0)),
+      pendingEffectiveAt: String(row.pending_effective_at || ''),
+      pendingStripePriceId: String(row.pending_stripe_price_id || ''),
       status: row.status === 'paused' || row.status === 'stopped' ? row.status : 'active',
       stripeCustomerId: row.stripe_customer_id || '',
       stripeSubscriptionId: row.stripe_subscription_id || '',
@@ -692,6 +725,10 @@ export class PortalStore {
     };
   }
 
+  getEntitlementEffective(siteSlug: string): PortalSiteEntitlement {
+    return this.maybeResetEntitlementPeriod(siteSlug);
+  }
+
   private maybeResetEntitlementPeriod(siteSlug: string) {
     const current = this.getEntitlement(siteSlug);
     const nowIso = isoNow();
@@ -700,13 +737,45 @@ export class PortalStore {
     }
 
     const window = getCurrentMonthWindow();
+    const applyPendingPlan =
+      Boolean(current.pendingPlan) &&
+      Boolean(current.pendingEffectiveAt) &&
+      !isIsoBefore(nowIso, current.pendingEffectiveAt);
+
+    const nextPlan = applyPendingPlan ? current.pendingPlan : current.plan;
+    const nextQuota = applyPendingPlan
+      ? Math.max(0, Number(current.pendingMonthlyQuota || getQuotaForPlan(current.pendingPlan || 'base')))
+      : current.monthlyQuota;
+    const nextStripePriceId = applyPendingPlan && current.pendingStripePriceId
+      ? current.pendingStripePriceId
+      : current.stripePriceId;
+
     this.db
       .prepare(
         `UPDATE entitlements
-         SET published_this_month = 0, period_start = ?, period_end = ?, updated_at = ?
+         SET
+          plan = ?,
+          monthly_quota = ?,
+          published_this_month = 0,
+          period_start = ?,
+          period_end = ?,
+          pending_plan = '',
+          pending_monthly_quota = 0,
+          pending_effective_at = '',
+          pending_stripe_price_id = '',
+          stripe_price_id = ?,
+          updated_at = ?
          WHERE site_slug = ?`
       )
-      .run(window.periodStartIso, window.periodEndIso, nowIso, normalizeSiteSlug(siteSlug));
+      .run(
+        nextPlan,
+        Math.max(0, Number(nextQuota || 0)),
+        window.periodStartIso,
+        window.periodEndIso,
+        nextStripePriceId,
+        nowIso,
+        normalizeSiteSlug(siteSlug)
+      );
 
     return this.getEntitlement(siteSlug);
   }
@@ -727,6 +796,16 @@ export class PortalStore {
       publishedThisMonth: Number(patch.publishedThisMonth ?? current.publishedThisMonth ?? 0),
       periodStart: String(patch.periodStart ?? current.periodStart ?? window.periodStartIso),
       periodEnd: String(patch.periodEnd ?? current.periodEnd ?? window.periodEndIso),
+      pendingPlan:
+        patch.pendingPlan === '' ||
+        patch.pendingPlan === 'base' ||
+        patch.pendingPlan === 'standard' ||
+        patch.pendingPlan === 'pro'
+          ? patch.pendingPlan
+          : current.pendingPlan,
+      pendingMonthlyQuota: Number(patch.pendingMonthlyQuota ?? current.pendingMonthlyQuota ?? 0),
+      pendingEffectiveAt: String(patch.pendingEffectiveAt ?? current.pendingEffectiveAt ?? ''),
+      pendingStripePriceId: String(patch.pendingStripePriceId ?? current.pendingStripePriceId ?? ''),
       status:
         patch.status === 'paused' || patch.status === 'stopped' || patch.status === 'active'
           ? patch.status
@@ -754,6 +833,10 @@ export class PortalStore {
           published_this_month = ?,
           period_start = ?,
           period_end = ?,
+          pending_plan = ?,
+          pending_monthly_quota = ?,
+          pending_effective_at = ?,
+          pending_stripe_price_id = ?,
           status = ?,
           stripe_customer_id = ?,
           stripe_subscription_id = ?,
@@ -768,6 +851,10 @@ export class PortalStore {
         Math.max(0, Number(next.publishedThisMonth || 0)),
         next.periodStart,
         next.periodEnd,
+        next.pendingPlan,
+        Math.max(0, Number(next.pendingMonthlyQuota || 0)),
+        next.pendingEffectiveAt,
+        next.pendingStripePriceId,
         next.status,
         next.stripeCustomerId,
         next.stripeSubscriptionId,
@@ -839,7 +926,7 @@ export class PortalStore {
         siteSlug,
         role: row.role,
         settings: this.getSiteSettings(siteSlug),
-        entitlement: this.getEntitlement(siteSlug)
+        entitlement: this.getEntitlementEffective(siteSlug)
       };
     });
   }
@@ -856,7 +943,7 @@ export class PortalStore {
       siteSlug: normalizedSlug,
       role: row?.role || 'viewer',
       settings: this.getSiteSettings(normalizedSlug),
-      entitlement: this.getEntitlement(normalizedSlug)
+      entitlement: this.getEntitlementEffective(normalizedSlug)
     };
   }
 
@@ -1048,6 +1135,10 @@ export class PortalStore {
             published_this_month AS publishedThisMonth,
             period_start AS periodStart,
             period_end AS periodEnd,
+            pending_plan AS pendingPlan,
+            pending_monthly_quota AS pendingMonthlyQuota,
+            pending_effective_at AS pendingEffectiveAt,
+            pending_stripe_price_id AS pendingStripePriceId,
             status,
             stripe_customer_id AS stripeCustomerId,
             stripe_subscription_id AS stripeSubscriptionId,

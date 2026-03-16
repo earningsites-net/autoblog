@@ -1,0 +1,17 @@
+[Unit]
+Description=AutoBlog n8n stack (n8n + postgres)
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/auto-blog-project/infra/n8n
+ExecStart=/usr/bin/docker compose --env-file /etc/autoblog/n8n.env up -d
+ExecStop=/usr/bin/docker compose --env-file /etc/autoblog/n8n.env down
+TimeoutStartSec=0
+User=autoblog
+Group=autoblog
+
+[Install]
+WantedBy=multi-user.target

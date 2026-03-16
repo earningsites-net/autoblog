@@ -18,7 +18,8 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
   }
 
-  # Keep Factory UI private: add allowlist and keep app-level Basic Auth enabled.
+  # Keep Factory UI private: replace this allowlist with your public IP or VPN range
+  # and keep app-level Basic Auth enabled.
   location /ops/factory {
     allow 10.0.0.0/8;
     allow 192.168.0.0/16;

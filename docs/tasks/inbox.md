@@ -32,6 +32,11 @@
   - `infra/n8n/README.md`
   - `docs/start-local.md`
   - report standard: `docs/ops/n8n-flow-checks/latest-report.json`
+- Refactor strict per-site Sanity completato:
+  - aggiunto endpoint interno engine `GET /api/internal/sites/:siteSlug/sanity-connection`
+  - rimosso fallback globale `SANITY_*` da `SiteRuntimeService.getSiteSanityConnection`
+  - workflow n8n Sanity-aware ora risolvono connessione per-run via engine (`Resolve Site Context`)
+  - `infra/n8n/docker-compose.yml` non espone più `SANITY_*` globali al container
 
 ## Decisions
 - Chosen approach: auto-update active task file on each response with meaningful progress.
@@ -40,6 +45,7 @@
 - Refill topic gestito dal scheduler via API engine/factory (non via webhook n8n secondari).
 - Nessuna chiamata factory costosa deve essere eseguibile senza secret/token espliciti.
 - Standard operativo per sync workflow n8n: usare comando repo `npm run n8n:import:changed` (e `npm run n8n:test:flows` quando serve smoke).
+- Isolamento dati Sanity tra siti: enforced by design (strict per-site credentials).
 
 ## Next
 - Validare un giro completo cambio piano `base -> standard -> pro` con verifica incremento publish nel mese.
@@ -50,6 +56,7 @@
   - `INTERNAL_API_TOKEN` (root + n8n)
   - `FACTORY_API_SECRET` (root)
 - Eseguire smoke end-to-end del fix slug con batch di topic simili (assenza collisioni in Sanity).
+- Validare run scheduler su 2 siti con projectId distinti (assenza cross-write).
 
 ## Risks
 - If `TASK:` is omitted for a new activity, updates will continue in `inbox.md`.

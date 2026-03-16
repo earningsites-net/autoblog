@@ -59,6 +59,139 @@
   - `apps/web/src/lib/content-repository.ts`: rimosso fallback categorie da blueprint legacy e fallback automatico a `mock` in production quando driver/env non sono configurati.
 - Verifica post-change:
   - `npm --workspace @autoblog/web run build` OK.
+- Bootstrap release env eseguito:
+  - creati `.env.staging`, `.env.production`, `infra/n8n/.env.staging`, `infra/n8n/.env.production` tramite `npm run release:pilot:init-env`.
+- Eseguito preflight production con `npm run release:pilot:check:production`:
+  - esito: `pass=20 warn=2 fail=26`.
+  - principali gap emersi: slug ancora `hammer-hearth`, secret mancanti/allineamenti root↔n8n, token Sanity mancanti in env n8n, Stripe live non configurato, `sites/lux-living-01/.env.generated` ancora con URL placeholder.
+- Step 1 eseguito (allineamento env production):
+  - aggiornati `.env.production`, `infra/n8n/.env.production`, `sites/lux-living-01/.env.generated` su `lux-living-01`.
+  - impostati path/url principali per web production (`SITE_BLUEPRINT_PATH`, `NEXT_PUBLIC_SITE_URL`) e `SANITY_PROJECT_ID`.
+  - generati/allineati secret runtime tra root e n8n (`INTERNAL_API_TOKEN`, `REVALIDATE_SECRET`/`WEB_REVALIDATE_SECRET`, credenziali Factory/N8N/Postgres).
+  - corretto path blueprint nel file sito generato per Vercel con Root Directory `apps/web` (`../../sites/lux-living-01/site.blueprint.json`).
+- Nuovo preflight production:
+  - esito aggiornato `pass=39 warn=2 fail=7`.
+  - fail residui limitati a: `n8n.SANITY_READ_TOKEN`, `n8n.SANITY_WRITE_TOKEN`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_BASE|STANDARD|PRO`.
+- Chiarita architettura multi-sito n8n/Sanity per il rilascio:
+  - i workflow n8n usano `SANITY_PROJECT_ID`/`SANITY_DATASET`/token da env globali n8n + filtro `siteSlug` nei query principali.
+  - modello attuale consigliato: progetto Sanity condiviso (multi-sito) con separazione logica per `siteSlug`.
+- Verifica tecnica su isolamento contenuti multi-sito:
+  - `siteSlug` è separazione applicativa implementata nel progetto (schema/query/id naming), non un boundary di isolamento forte fornito automaticamente da Sanity.
+  - rilevati workflow con query non filtrate per `siteSlug` (es. `infra/n8n/workflows/internal_link_refresh.json`, `infra/n8n/workflows/budget_monitor_and_alerts.json`) che aumentano rischio di cross-site mix in setup shared-project.
+- Verifica visibilità in Sanity Studio:
+  - il desk è filtrato per `siteSlug` solo se lo Studio è avviato/deployato con `SANITY_STUDIO_SITE_SLUG` (vedi `apps/studio/desk-structure.ts` + `apps/studio/sanity.config.ts`).
+  - senza quella variabile, lo Studio mostra liste complete per tipo documento (cross-site nello stesso dataset).
+  - il filtro desk non equivale a isolamento di sicurezza forte a livello dato.
+- Confermato avvio deploy engine:
+  - runtime applicativo su porta `8787` (servizio interno), con esposizione pubblica consigliata via nginx/HTTPS su dominio engine.
+- Aggiunto runbook VPS step-by-step per bootstrap engine production su provider consigliato:
+  - `docs/deploy/hetzner-vps-engine.md`
+  - provider suggerito: `Hetzner Cloud`
+  - coperti: creazione account/progetto/server, firewall, DNS, hardening SSH, Docker, Node.js 22, clone repo, env engine, systemd, nginx, TLS e smoke test.
+- Implementato il piano infrastruttura ops production con baseline `IONOS`:
+  - nuovo runbook: `docs/deploy/ionos-vps-ops.md`
+  - nuovo service template: `infra/ops/systemd/autoblog-n8n.service.example`
+  - `infra/n8n/docker-compose.yml` aggiornato per bind loopback-only su `127.0.0.1:5678`
+  - `infra/n8n/.env.example` riallineato a deploy VPS production (`CONTENT_ENGINE_URL=https://engine.example.com`, webhook n8n pubblici)
+  - `infra/n8n/README.md`, `docs/deploy/pilot-lux-living-01.md`, `docs/context.md` aggiornati con `IONOS` baseline e `Hetzner` fallback
+  - `infra/ops/nginx/engine-and-factory.conf.example` chiarito per richiedere replace esplicito della allowlist `/ops/factory`
+- Il runbook `IONOS` copre l'intero stack ops:
+  - provisioning VPS `Ubuntu 24.04`
+  - firewall e DNS
+  - hardening SSH
+  - installazione Docker + Node.js 22
+  - deploy `engine` via systemd
+  - deploy `n8n + postgres` via `docker compose` + systemd
+  - `nginx` + TLS
+  - smoke test finali e sequenza Stripe webhook post-deploy
+- Verifica provider `IONOS` completata su fonti ufficiali:
+  - confermati `full root access`, `Ubuntu` tra gli OS supportati, `IPv4/IPv6`, firewall gestibile da Cloud Panel, traffico illimitato e backup opzionale
+  - per il nostro stack il piano `4 vCore / 8 GB RAM / >=120 GB NVMe` e considerato sufficiente per il pilot
+  - chiarito che il deploy non richiede l'immagine `Ubuntu 24.04 + n8n` di IONOS: basta un VPS Ubuntu standard
+- Provisioning `IONOS` avviato lato utente:
+  - acquistato il piano VPS
+  - configurato firewall con principio minimo (`22` da IP admin, `80/443` pubbliche) e chiarito che il filtro opera per IP, non per email
+  - creati record DNS production verso il VPS su `earningsites.net`
+  - hostname pubblico engine/portal deciso come `aiblogs.earningsites.net`
+  - hostname pubblico n8n deciso come `n8n.earningsites.net`
+- Debug bootstrap SSH eseguito:
+  - timeout iniziale su `ssh root@87.106.29.31` identificato come problema di reachability/firewall su porta `22`, non di password
+  - definita procedura pragmatica: apertura temporanea `22` piu ampia per primo login, installazione chiave SSH, poi richiudere `22` al solo `IP/32` admin
+  - primo accesso `root` via chiave completato con successo su `87.106.29.31`
+  - fase corrente: abilitazione login SSH dell'utente applicativo `autoblog` via chiave; il server sta ancora facendo fallback al prompt password, segnale che la chiave non viene ancora accettata per quell'utente
+  - service `autoblog-engine` avviato con successo sul VPS
+  - log confermano bootstrap Fastify/engine e warning SQLite atteso
+  - dai log emerge pero binding anche su `87.106.29.31:8787`, quindi `ENGINE_HOST` non e ancora limitato a loopback (`127.0.0.1`)
+  - dopo aggiornamento `ENGINE_HOST=127.0.0.1` e restart del service, i log piu recenti mostrano solo binding su `127.0.0.1:8787`
+  - smoke `curl http://127.0.0.1:8787/v1/sites/lux-living-01/health` eseguito con esito `ok:true`
+  - chiarimento importante: `/v1/sites/:siteSlug/health` e una health per-sito/configurazione, non una health globale single-tenant del processo engine
+  - i dati restituiti da questa health arrivano dal `LocalSiteRegistry`/`sites/<slug>/site.blueprint.json`, non dal database SQLite del portal
+- Analisi env production richiesta dall'utente completata:
+  - `SANITY_STUDIO_URL` non e runtime-critical per engine/n8n; e usata come fallback/UI convenience per link a Studio (web admin redirect, portal/factory bootstrap, script CLI)
+  - priorita di risoluzione `studioUrl`: `site.settings.studioUrl` -> `registry.studioUrl` -> `sites/<slug>/.env.generated:SANITY_STUDIO_URL` -> `root process.env.SANITY_STUDIO_URL`
+  - `PREPOPULATE_TRIGGER_URL` e `PLAN_AUTOMATION_TRIGGER_URL` sono invece runtime-critical nel root env dell'engine e devono puntare ai webhook pubblici `n8n`
+  - `NEXT_PUBLIC_PORTAL_BASE_URL` non e richiesta per far girare il backend sul VPS, ma serve al sito pubblico `apps/web` per costruire il redirect verso il portal (`/admin` e fallback `/admin/studio`)
+- Audit completo dei file `.env.production` eseguito:
+  - `npm run release:pilot:check:production` attualmente passa con `fail=0`
+  - `ENGINE_PORT` confermato opzionale: l'engine defaulta a `8787`
+  - `NEXT_PUBLIC_PORTAL_BASE_URL` confermata opzionale sul VPS/root env, ma necessaria lato `web`/Vercel per il redirect admin
+  - root `.env.production` contiene il minimo per bootstrap engine/billing/reset password; per engine multi-site non vanno pinzati `PORTAL_SINGLE_SITE_MODE=true` o `SITE_SLUG=lux-living-01`
+  - `ENGINE_HOST=127.0.0.1` resta consigliato per tenere l'engine solo dietro nginx
+  - `infra/n8n/.env.production` contiene tutti i secret richiesti, ma ha valori production ancora errati su `WEB_APP_URL` e `CONTENT_ENGINE_URL` (puntano a `host.docker.internal`)
+  - `infra/n8n/.env.production` contiene doppioni/ambiguita:
+    - `INTERNAL_API_TOKEN` definito due volte
+    - `PLAN_SCHEDULER_TICK_MINUTES` definito due volte (`60` e `1`)
+  - individuato rischio extra non coperto dal readiness script:
+    - `infra/n8n/workflows/qa_scoring_and_publish_worker.json` ha ancora URL revalidate hardcoded a `http://host.docker.internal:3000/api/revalidate`
+  - `sites/lux-living-01/.env.generated` contiene ancora valori production stantii:
+    - `CONTENT_ENGINE_URL=https://engine.example.com`
+    - `REVALIDATE_SECRET` non allineato al `WEB_REVALIDATE_SECRET` attuale di n8n
+- Chiarimento architetturale multi-site confermato da docs + codice:
+  - `engine` deve restare one-to-many senza `SITE_SLUG` globale in production
+  - `PORTAL_SINGLE_SITE_MODE` e `SITE_SLUG` globali servono solo a modalita legacy/preview locale
+  - il revalidate web in `n8n` e ancora global-first:
+    - `publish_scheduler_worker` usa `WEB_APP_URL` + `WEB_REVALIDATE_SECRET`
+    - `qa_scoring_and_publish_worker` contiene ancora un endpoint hardcoded locale
+  - quindi oggi il pilot puo usare un solo target web production attivo per il revalidate automatico senza ulteriori refactor
+- Note fissate anche in `docs/context.md` per gli agenti:
+  - niente pinning single-site nel root env production dell'engine
+  - `NEXT_PUBLIC_PORTAL_BASE_URL` considerata env del web/Vercel, non del backend
+  - `ENGINE_PORT` opzionale
+  - gap noto sul revalidate multi-site in n8n da ripulire
+- Cleanup variabili globali non necessarie completato:
+  - `PORTAL_SESSION_SECRET` rimosso da `.env` / `.env.staging` / `.env.example` (non utilizzata a runtime)
+  - default `PORTAL_SINGLE_SITE_MODE` portato a `false` in engine (`apps/engine/src/index.ts`) e negli env example/staging
+  - `infra/n8n/.env.staging` e `infra/n8n/.env.production` allineati al modello strict per-site (rimossi `SANITY_*` globali legacy)
+- Readiness check release riallineato al modello strict per-site:
+  - `scripts/release/pilot-readiness.mjs` non richiede piu `n8n SANITY_*` globali
+  - rimossi controlli legacy su `root REVALIDATE_SECRET` e dataset root↔n8n
+  - aggiunti controlli obbligatori su `sites/<slug>/.env.generated`: `SANITY_PROJECT_ID`, `SANITY_READ_TOKEN`, `SANITY_WRITE_TOKEN`
+  - `n8n.SITE_SLUG` trattato come opzionale (warn), non hard requirement
+- Verifica post-refactor eseguita:
+  - `npm run release:pilot:check:production` -> `pass=36 warn=2 fail=2`
+  - fail residui reali e coerenti: `alignment.INTERNAL_API_TOKEN`, `root.STRIPE_WEBHOOK_SECRET`
+- Verifica endpoint webhook Stripe a codice:
+  - route `POST /api/billing/webhooks/stripe` presente e registrata in engine
+  - validazione firma attiva via `STRIPE_WEBHOOK_SECRET` e header `stripe-signature`
+- Multi-site scheduler hardening:
+  - aggiunto endpoint engine `GET /api/internal/sites/automation-targets` (protetto con `x-internal-token`)
+  - `plan_generation_scheduler_worker` ora risolve i siti target da engine e non dipende da `SITE_SLUG` in n8n env per il trigger schedulato
+  - rimosso fallback `$env.SITE_SLUG` nel planner per entitlement/query/report/context resolve
+  - `infra/n8n/.env.production` aggiornato con `SITE_SLUG` opzionale vuoto (fallback legacy)
+  - `infra/n8n/.env.example` e `docs/start-local.md` aggiornati per chiarire che `SITE_SLUG` è opzionale in strict multi-site
+- Context hardening anti-ambiguity completato:
+  - `docs/context.md` aggiornato con decisione esplicita: tenancy one-to-many come modello ufficiale, single-site deprecato/legacy
+  - `docs/start-local.md` chiarisce che `SITE_SLUG` root è solo selettore UI locale (web/studio), non controllo tenancy runtime
+  - `docs/runbook.md` usa `automation-targets` come controllo operativo primario per scheduler multi-site
+- Chiarita distinzione tra registry globale e blueprint per-sito:
+  - `sites/<slug>/site.blueprint.json` è la configurazione del singolo sito (brand, theme, categorie, publishing target, budget, ecc.)
+  - `sites/registry.json` è l'indice operativo globale dei siti (stato dominio, automation, billing, webBaseUrl, studioUrl, refs token)
+  - `LocalSiteRegistry` carica i blueprint scansionando le cartelle sotto `sites/`; la health `/v1/sites/:siteSlug/health` legge dal blueprint del sito, non dal DB del portal
+  - nel deploy ops l'engine legge questi file dal filesystem del repo presente sul VPS; non legge il blueprint dal frontend Vercel
+- Verificato caveat sul runbook VPS:
+  - i comandi `cp /srv/auto-blog-project/...` usano path assoluti, quindi si possono eseguire da qualunque directory sul server
+  - se il file template non esiste sul VPS, le cause probabili sono: repo clonato in path diverso oppure clone GitHub non contiene ancora i file aggiunti localmente nel workspace
+  - caso reale verificato su VPS `IONOS`: `/srv/auto-blog-project/infra/ops/systemd` contiene `autoblog-engine.service.example` ma non `autoblog-n8n.service.example`; quindi il clone server non ha ancora quel file e il service n8n va copiato manualmente o sincronizzato dal repo aggiornato
 
 ## Decisions
 - Pilot operativo fissato su `lux-living-01`.
@@ -70,6 +203,28 @@
   - staging mantenuto per dashboard/ops quando necessario.
 - Priorità immediata: stabilizzare env production Vercel del sito (slug/path/url) prima di ulteriori modifiche codice.
 - Strategia fallback aggiornata: privilegiare fail-fast su production rispetto a fallback silenziosi cross-brand.
+- Procedere con rilascio del resto stack solo dopo chiusura fail readiness su `.env.production` e `infra/n8n/.env.production`.
+- Step 1 considerato quasi chiuso: restano solo credenziali/tariffe reali Sanity + Stripe da inserire.
+- `STRIPE_WEBHOOK_SECRET` va ottenuto registrando webhook Stripe sul route engine production (`/api/billing/webhooks/stripe`), poi copiando il signing secret nel root env.
+- Sequenza deploy billing chiarita:
+  - senza URL engine pubblica non è possibile completare la registrazione webhook Stripe production.
+  - quindi `STRIPE_WEBHOOK_SECRET` si chiude dopo deploy HTTPS dell'engine e creazione endpoint webhook in Stripe.
+- Deploy engine confermato come prossimo step operativo immediato.
+- Provider VPS consigliato per il pilot: `Hetzner Cloud`, per rapporto costo/prestazioni e runbook operativo gia definito nel repo.
+- Provider VPS baseline aggiornato per il pilot ops: `IONOS VPS`, per allinearsi alla scelta utente su provider piu noto e contratto flessibile.
+- `Hetzner Cloud` declassato a fallback tecnico documentato, non piu baseline del rollout.
+- `n8n` in production deve essere esposto solo tramite `nginx`; la porta `5678` non va lasciata pubblica sul VPS.
+- Conferma pre-acquisto: `IONOS VPS` copre i requisiti tecnici del nostro rilascio ops; restano da aggiungere separatamente solo dominio/DNS e, se desiderato, il backup package IONOS.
+- Dominio ops definitivo scelto:
+  - `aiblogs.earningsites.net` sostituisce il placeholder `engine.<dominio>` in tutto il deploy dell'engine/portal/factory
+  - `n8n.earningsites.net` resta endpoint dedicato per editor/webhook n8n
+- Convenzione confermata: variabili `SANITY_*` e `SITE_*` globali restano solo per preview locale `web/studio`; isolamento runtime engine+n8n avviene per sito via `sites/<slug>/.env.generated`.
+- Convenzione aggiornata: in n8n production `SITE_SLUG` non è più un requisito per il planner multi-site; resta solo fallback compatibilità per workflow legacy single-site.
+- Decisione esplicita di progetto: la modalità single-site non è più path operativo previsto; mantenuta solo per retrocompatibilità tecnica.
+- Distinzione dati confermata:
+  - blueprint = configurazione editoriale/operativa del singolo sito su filesystem
+  - registry = anagrafica/stato operativo cross-site su filesystem
+  - SQLite del portal non è la fonte per `/v1/sites/:siteSlug/health`
 
 ## Next
 - Popolare `.env.staging`, `.env.production`, `infra/n8n/.env.staging`, `infra/n8n/.env.production` con segreti reali e domini.
@@ -91,6 +246,45 @@
   - `data-theme-recipe` coerente con `lux-living-01`
   - `og:url` coerente col dominio production.
 - Dopo il redeploy, monitorare il primo ciclo ISR (5 minuti) per confermare che la rigenerazione non reintroduca stato errato.
+- Preparare checklist operativa unica per deploy `n8n + engine(portal/factory) + Sanity studio` con sequenza account, VPS, smoke e cutover.
+- Eseguire bootstrap del VPS Hetzner seguendo `docs/deploy/hetzner-vps-engine.md` fino ad avere `engine` online su dominio HTTPS reale.
+- Eseguire bootstrap del VPS `IONOS` seguendo `docs/deploy/ionos-vps-ops.md` fino ad avere online:
+  - `https://aiblogs.earningsites.net`
+  - `https://n8n.earningsites.net`
+- Completare primo accesso SSH root:
+  - usare password iniziale del VPS per `ssh-copy-id`
+  - installare chiave `~/.ssh/autoblog_ionos.pub`
+  - verificare login con `ssh -i ~/.ssh/autoblog_ionos root@87.106.29.31`
+  - poi creare utente `autoblog` e richiudere `22` al solo `IP/32` admin
+- Completare accesso SSH dell'utente `autoblog`:
+  - verificare permessi/ownership di `/home/autoblog` e `/home/autoblog/.ssh/authorized_keys`
+  - verificare via `ssh -v` che la chiave venga proposta e capire perche `sshd` la rifiuta
+  - solo dopo il login riuscito con `autoblog`, disabilitare `PermitRootLogin` e `PasswordAuthentication`
+- Aggiornare env production del VPS con naming definitivo:
+  - `PORTAL_BASE_URL=https://aiblogs.earningsites.net`
+  - `NEXT_PUBLIC_PORTAL_BASE_URL=https://aiblogs.earningsites.net`
+  - `CONTENT_ENGINE_URL=https://aiblogs.earningsites.net`
+  - `PREPOPULATE_TRIGGER_URL=https://n8n.earningsites.net/webhook/factory-prepopulate`
+  - `PLAN_AUTOMATION_TRIGGER_URL=https://n8n.earningsites.net/webhook/plan-automation`
+- Aggiornare anche le env `web` production su Vercel con `NEXT_PUBLIC_PORTAL_BASE_URL=https://aiblogs.earningsites.net`, altrimenti la pagina `/admin` non puo redirigere al portal reale
+- Correggere prima del go-live effettivo:
+  - `infra/n8n/.env.production`: `WEB_APP_URL` -> URL reale del sito, `CONTENT_ENGINE_URL` -> `https://aiblogs.earningsites.net`
+  - `sites/lux-living-01/.env.generated`: `CONTENT_ENGINE_URL` e `REVALIDATE_SECRET`
+  - workflow `qa_scoring_and_publish_worker` per rimuovere revalidate hardcoded verso `host.docker.internal`
+  - chiarire modello multi-site per revalidate:
+    - `WEB_APP_URL` in n8n non puo essere un solo dominio se lo stack deve pubblicare su piu siti
+    - i secret di revalidate vivono lato sito/web (`REVALIDATE_SECRET`) e devono combaciare con il valore usato dai workflow n8n (`WEB_REVALIDATE_SECRET`) per il sito target
+  - sul VPS engine: impostare `ENGINE_HOST=127.0.0.1` in `/etc/autoblog/engine.env` e riavviare `autoblog-engine`, cosi `8787` non resta bindata all'IP pubblico
+- Usare `docs/deploy/hetzner-vps-engine.md` solo se serve fallback provider.
+- Dopo inserimento dei 7 valori residui, rilanciare `npm run release:pilot:check:production` e passare al deploy VPS (`engine` + `n8n`) e Sanity Studio.
+- Valutare nel medio termine se supportare multi-tenant Sanity per-progetto (token/project dinamici per sito) direttamente nei workflow n8n; oggi i workflow sono centrati su un project/dataset condivisi.
+- Decisione proposta:
+  - breve termine: completare pilot con progetto Sanity condiviso + hardening query per `siteSlug`.
+  - medio termine: introdurre isolamento forte per cliente (project Sanity per sito o n8n per-tenant).
+- Eseguire bootstrap engine su VPS con `ENGINE_PORT=8787`, systemd + reverse proxy HTTPS, poi validare `health` e accesso portal.
+- Eseguire di nuovo `npm run release:pilot:check:production` con i nuovi criteri strict per-site (attesi meno falsi negativi legacy).
+- Reimportare il workflow `plan_generation_scheduler_worker` in n8n (`npm run n8n:import:changed`) e verificare che lo scheduler riceva target da `automation-targets`.
+- Ripulire progressivamente i workflow legacy che usano ancora fallback `SITE_SLUG` (publish/topic/budget) per convergere al modello multi-site puro.
 
 ## Risks
 - I gate `release:pilot:check:*` assumono file env dedicati (`.env.staging/.env.production` e varianti n8n): senza questi file il check fallisce immediatamente.
@@ -99,3 +293,13 @@
 - Se `SITE_SLUG` / `NEXT_PUBLIC_SITE_SLUG` non sono impostati in production, il loader può continuare a selezionare blueprint legacy e generare mix brand/tema.
 - ISR a 300s può “riattivare” il problema dopo un deploy apparentemente corretto se la configurazione env resta incoerente.
 - Con fallback rimossi, env mancanti in production possono generare errore esplicito (expected) anziché contenuti di un sito sbagliato.
+- Finché `release:pilot:check:production` non è verde, il deploy dei servizi ops può partire ma resta ad alto rischio di integrazione incompleta (revalidate/prepopulate/billing).
+- I secret generati automaticamente sono ora nel filesystem locale: vanno trasferiti in modo sicuro ai runtime target (Vercel/VPS) e non versionati.
+- Con configurazione n8n attuale, se si usano progetti Sanity separati per cliente è necessario un adattamento architetturale (n8n per-tenant o token/project dinamici), altrimenti n8n opererà sul solo project configurato.
+- Migrazione immediata a project-id per sito aumenta complessità (workflow/env/segreti/orchestrazione) e non è plug-and-play con la configurazione n8n attuale.
+- Se il deploy usa una copia locale vecchia di `infra/n8n/docker-compose.yml`, `5678` puo restare pubblica: va usata la versione aggiornata con bind su `127.0.0.1`.
+- Se la allowlist di `/ops/factory` resta quella di esempio nel template nginx, la pagina puo risultare inaccessibile oppure esposta al range sbagliato: va sostituita con IP pubblico o VPN reali prima del go-live.
+- Il backup su `IONOS` e opzionale/add-on, non necessariamente incluso nel piano base: se non viene attivato, va coperto con backup applicativi/manuali.
+- `n8n.SITE_SLUG` resta ancora usato come default per trigger schedulati: se non valorizzato e non si usa trigger webhook per-sito, alcuni scheduler possono non partire.
+- Workflow legacy ancora presenti (`publish_scheduler_worker`, `topic_discovery_daily`, ecc.) usano fallback `SITE_SLUG`: se attivati in modalità schedule senza payload per-sito, richiedono ancora una strategia multi-site dedicata o un fallback configurato.
+- Rischio principale di incomprensione ridotto ma non azzerato finché restano workflow legacy con fallback `SITE_SLUG`.

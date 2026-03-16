@@ -1,17 +1,17 @@
 {
-  "runAt": "2026-03-11T11:14:34.843Z",
+  "runAt": "2026-03-11T09:37:15.902Z",
   "mode": "changed-only",
   "workflowsDir": "/Users/danilociamprone/Documents/Auto blog project/infra/n8n/workflows",
   "reportDir": "/Users/danilociamprone/Documents/Auto blog project/docs/ops/n8n-flow-checks",
-  "importEnabled": true,
+  "importEnabled": false,
   "smokeEnabled": false,
   "importConfigured": true,
   "importReason": "configured",
   "overallStatus": "warn",
   "summary": {
     "total": 10,
-    "pass": 8,
-    "warn": 2,
+    "pass": 0,
+    "warn": 10,
     "fail": 0
   },
   "regression": {
@@ -22,7 +22,7 @@
     {
       "path": "infra/n8n/workflows/article_generation_worker.json",
       "name": "article_generation_worker",
-      "status": "pass",
+      "status": "warn",
       "errors": [],
       "warnings": [],
       "envVars": [
@@ -37,11 +37,11 @@
         "TEXT_MODEL_DRAFT"
       ],
       "import": {
-        "attempted": true,
-        "status": "pass",
-        "action": "update",
-        "remoteId": "q9jmiptYYBq6ieFd",
-        "details": "Updated workflow \"article_generation_worker\" (id: q9jmiptYYBq6ieFd)"
+        "attempted": false,
+        "status": "skipped",
+        "action": "none",
+        "remoteId": null,
+        "details": "Import disabled"
       },
       "smoke": {
         "attempted": false,
@@ -52,7 +52,7 @@
     {
       "path": "infra/n8n/workflows/brief_generation_worker.json",
       "name": "brief_generation_worker",
-      "status": "pass",
+      "status": "warn",
       "errors": [],
       "warnings": [],
       "envVars": [
@@ -63,11 +63,11 @@
         "TEXT_MODEL_DRAFT"
       ],
       "import": {
-        "attempted": true,
-        "status": "pass",
-        "action": "update",
-        "remoteId": "wXEiU2LVUe8VKH1B",
-        "details": "Updated workflow \"brief_generation_worker\" (id: wXEiU2LVUe8VKH1B)"
+        "attempted": false,
+        "status": "skipped",
+        "action": "none",
+        "remoteId": null,
+        "details": "Import disabled"
       },
       "smoke": {
         "attempted": false,
@@ -94,11 +94,11 @@
         "TELEGRAM_CHAT_ID"
       ],
       "import": {
-        "attempted": true,
-        "status": "pass",
-        "action": "update",
-        "remoteId": "amySkarPGIdWDqgt",
-        "details": "Updated workflow \"budget_monitor_and_alerts\" (id: amySkarPGIdWDqgt)"
+        "attempted": false,
+        "status": "skipped",
+        "action": "none",
+        "remoteId": null,
+        "details": "Import disabled"
       },
       "smoke": {
         "attempted": false,
@@ -109,7 +109,7 @@
     {
       "path": "infra/n8n/workflows/image_generation_worker.json",
       "name": "image_generation_worker",
-      "status": "pass",
+      "status": "warn",
       "errors": [],
       "warnings": [],
       "envVars": [
@@ -121,11 +121,11 @@
         "SITE_SLUG"
       ],
       "import": {
-        "attempted": true,
-        "status": "pass",
-        "action": "update",
-        "remoteId": "DJO82hLkI6S6wg0v",
-        "details": "Updated workflow \"image_generation_worker\" (id: DJO82hLkI6S6wg0v)"
+        "attempted": false,
+        "status": "skipped",
+        "action": "none",
+        "remoteId": null,
+        "details": "Import disabled"
       },
       "smoke": {
         "attempted": false,
@@ -136,7 +136,7 @@
     {
       "path": "infra/n8n/workflows/internal_link_refresh.json",
       "name": "internal_link_refresh",
-      "status": "pass",
+      "status": "warn",
       "errors": [],
       "warnings": [],
       "envVars": [
@@ -145,11 +145,11 @@
         "SITE_SLUG"
       ],
       "import": {
-        "attempted": true,
-        "status": "pass",
-        "action": "update",
-        "remoteId": "A7WbjGZV8VfmVzbp",
-        "details": "Updated workflow \"internal_link_refresh\" (id: A7WbjGZV8VfmVzbp)"
+        "attempted": false,
+        "status": "skipped",
+        "action": "none",
+        "remoteId": null,
+        "details": "Import disabled"
       },
       "smoke": {
         "attempted": false,
@@ -160,7 +160,7 @@
     {
       "path": "infra/n8n/workflows/plan_generation_scheduler_worker.json",
       "name": "plan_generation_scheduler_worker",
-      "status": "pass",
+      "status": "warn",
       "errors": [],
       "warnings": [],
       "envVars": [
@@ -183,11 +183,11 @@
         "SITE_SLUG"
       ],
       "import": {
-        "attempted": true,
-        "status": "pass",
-        "action": "update",
-        "remoteId": "qT8r42FJx1tjCsR2",
-        "details": "Updated workflow \"plan_generation_scheduler_worker\" (id: qT8r42FJx1tjCsR2)"
+        "attempted": false,
+        "status": "skipped",
+        "action": "none",
+        "remoteId": null,
+        "details": "Import disabled"
       },
       "smoke": {
         "attempted": false,
@@ -198,7 +198,7 @@
     {
       "path": "infra/n8n/workflows/prepopulate_bulk_runner.json",
       "name": "prepopulate_bulk_runner",
-      "status": "pass",
+      "status": "warn",
       "errors": [],
       "warnings": [],
       "envVars": [
@@ -214,11 +214,11 @@
         "SITE_SLUG"
       ],
       "import": {
-        "attempted": true,
-        "status": "pass",
-        "action": "update",
-        "remoteId": "IK5hWdMSdBZKr51n",
-        "details": "Updated workflow \"prepopulate_bulk_runner\" (id: IK5hWdMSdBZKr51n)"
+        "attempted": false,
+        "status": "skipped",
+        "action": "none",
+        "remoteId": null,
+        "details": "Import disabled"
       },
       "smoke": {
         "attempted": false,
@@ -229,7 +229,7 @@
     {
       "path": "infra/n8n/workflows/publish_scheduler_worker.json",
       "name": "publish_scheduler_worker",
-      "status": "pass",
+      "status": "warn",
       "errors": [],
       "warnings": [],
       "envVars": [
@@ -241,11 +241,11 @@
         "WEB_REVALIDATE_SECRET"
       ],
       "import": {
-        "attempted": true,
-        "status": "pass",
-        "action": "update",
-        "remoteId": "5oaSXgkhGeUjlJyc",
-        "details": "Updated workflow \"publish_scheduler_worker\" (id: 5oaSXgkhGeUjlJyc)"
+        "attempted": false,
+        "status": "skipped",
+        "action": "none",
+        "remoteId": null,
+        "details": "Import disabled"
       },
       "smoke": {
         "attempted": false,
@@ -256,7 +256,7 @@
     {
       "path": "infra/n8n/workflows/qa_scoring_and_publish_worker.json",
       "name": "qa_scoring_and_publish_worker",
-      "status": "pass",
+      "status": "warn",
       "errors": [],
       "warnings": [],
       "envVars": [
@@ -267,11 +267,11 @@
         "WEB_REVALIDATE_SECRET"
       ],
       "import": {
-        "attempted": true,
-        "status": "pass",
-        "action": "update",
-        "remoteId": "6f0gfZAsQQILFj1U",
-        "details": "Updated workflow \"qa_scoring_and_publish_worker\" (id: 6f0gfZAsQQILFj1U)"
+        "attempted": false,
+        "status": "skipped",
+        "action": "none",
+        "remoteId": null,
+        "details": "Import disabled"
       },
       "smoke": {
         "attempted": false,
@@ -296,11 +296,11 @@
         "TOPIC_DISCOVERY_TARGET_PER_DAY"
       ],
       "import": {
-        "attempted": true,
-        "status": "pass",
-        "action": "update",
-        "remoteId": "97aJSRReUBbQ3ePV",
-        "details": "Updated workflow \"topic_discovery_daily\" (id: 97aJSRReUBbQ3ePV)"
+        "attempted": false,
+        "status": "skipped",
+        "action": "none",
+        "remoteId": null,
+        "details": "Import disabled"
       },
       "smoke": {
         "attempted": false,

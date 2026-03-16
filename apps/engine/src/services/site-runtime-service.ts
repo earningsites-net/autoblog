@@ -194,17 +194,13 @@ export class SiteRuntimeService {
 
   async getSiteSanityConnection(siteSlug: string) {
     const env = await this.readSiteEnv(siteSlug);
-    const rootProjectId = String(process.env.SANITY_PROJECT_ID || '').trim();
-    const rootDataset = String(process.env.SANITY_DATASET || 'production').trim();
-    const rootApiVersion = String(process.env.SANITY_API_VERSION || '2025-01-01').trim();
-    const rootReadToken = String(process.env.SANITY_READ_TOKEN || process.env.SITE_SANITY_READ_TOKEN || '').trim();
-    const rootWriteToken = String(process.env.SANITY_WRITE_TOKEN || process.env.SITE_SANITY_WRITE_TOKEN || '').trim();
+    // Strict per-site mode: no fallback to root/global SANITY_* env vars.
     return {
-      projectId: String(env.SANITY_PROJECT_ID || rootProjectId).trim(),
-      dataset: String(env.SANITY_DATASET || rootDataset).trim(),
-      apiVersion: String(env.SANITY_API_VERSION || rootApiVersion).trim(),
-      readToken: String(env.SANITY_READ_TOKEN || env.SITE_SANITY_READ_TOKEN || rootReadToken).trim(),
-      writeToken: String(env.SANITY_WRITE_TOKEN || env.SITE_SANITY_WRITE_TOKEN || rootWriteToken).trim()
+      projectId: String(env.SANITY_PROJECT_ID || '').trim(),
+      dataset: String(env.SANITY_DATASET || 'production').trim(),
+      apiVersion: String(env.SANITY_API_VERSION || '2025-01-01').trim(),
+      readToken: String(env.SANITY_READ_TOKEN || env.SITE_SANITY_READ_TOKEN || '').trim(),
+      writeToken: String(env.SANITY_WRITE_TOKEN || env.SITE_SANITY_WRITE_TOKEN || '').trim()
     };
   }
 

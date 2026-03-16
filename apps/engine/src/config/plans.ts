@@ -18,6 +18,19 @@ export function getQuotaForPlan(plan: SubscriptionPlan): number {
   return PLAN_QUOTAS[plan] ?? PLAN_QUOTAS.base;
 }
 
+export function getPlanRank(plan: SubscriptionPlan): number {
+  if (plan === 'pro') return 3;
+  if (plan === 'standard') return 2;
+  return 1;
+}
+
+export function comparePlanRank(current: SubscriptionPlan, next: SubscriptionPlan): -1 | 0 | 1 {
+  const diff = getPlanRank(next) - getPlanRank(current);
+  if (diff > 0) return 1;
+  if (diff < 0) return -1;
+  return 0;
+}
+
 export function planFromPriceId(priceId: string | undefined | null): SubscriptionPlan | null {
   if (!priceId) return null;
 

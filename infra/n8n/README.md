@@ -19,10 +19,14 @@ This folder contains a low-cost self-hosted n8n + PostgreSQL setup and workflow 
 - Il workflow `article_generation_worker` normalizza lo slug articolo con suffisso univoco (`timestamp+random`) per evitare collisioni su Sanity (`slug is already in use`).
 
 ## Deployment Notes
-- Host on a low-cost VPS (Hetzner/Contabo class) with Docker + Compose.
+- Host on a single VPS with Docker + Compose.
+- Current production baseline: `IONOS VPS` (`4 vCore`, `8 GB RAM`, `>=120 GB NVMe`).
+- `Hetzner` remains a valid fallback option if pricing or contract terms change.
 - Put n8n behind HTTPS reverse proxy before production.
+- Keep `5678` loopback-only and expose n8n only through `nginx`.
 - Restrict the editor URL and use strong `N8N_ENCRYPTION_KEY`.
-- Set API credentials for LLM/image providers and Sanity tokens in `.env`.
+- Set API credentials for LLM/image providers in `.env`.
+- Set Sanity credentials per-site in `sites/<slug>/.env.generated` (resolved at runtime via engine API).
 
 ## Plan Scheduler Notes
 - `plan_generation_scheduler_worker` legge quota/piano da `apps/engine` (`/api/internal/sites/:siteSlug/entitlement`).
@@ -33,6 +37,15 @@ This folder contains a low-cost self-hosted n8n + PostgreSQL setup and workflow 
   - `status=brief_ready`
   - `replace=true`
   - `apply=true`
+
+## Strict Per-Site Sanity Mode
+- `n8n` non usa più `SANITY_PROJECT_ID/READ/WRITE` globali.
+- Ogni workflow risolve la connessione Sanity per-run via:
+  - `GET /api/internal/sites/:siteSlug/sanity-connection` (engine interno)
+- Requisiti:
+  - `CONTENT_ENGINE_URL` configurato
+  - `INTERNAL_API_TOKEN` uguale tra engine e n8n
+  - `sites/<slug>/.env.generated` con `SANITY_PROJECT_ID`, `SANITY_READ_TOKEN`, `SANITY_WRITE_TOKEN`
 
 ## Important Env
 - Scheduler:

@@ -12,6 +12,7 @@
     "dev:web": "npm --workspace @autoblog/web run dev",
     "dev:studio": "npm --workspace @autoblog/studio run dev",
     "dev:engine": "npm --workspace @autoblog/engine run dev",
+    "site:use": "node scripts/site-use.mjs",
     "build:web": "npm --workspace @autoblog/web run build",
     "build:studio": "npm --workspace @autoblog/studio run build",
     "factory": "node scripts/autoblog.mjs",

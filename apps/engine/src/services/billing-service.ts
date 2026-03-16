@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { PortalStore } from './portal-store';
 import {
+  comparePlanRank,
   getCurrentMonthWindow,
   getQuotaForPlan,
   normalizePlan,
@@ -16,6 +17,8 @@ type StripeWebhookPayload = {
     object?: Record<string, unknown>;
   };
 };
+
+type PlanChangeMode = 'upgrade' | 'downgrade' | 'lateral';
 
 function normalizeStripeStatus(status: string | undefined | null): 'trial' | 'active' | 'overdue' | 'canceled' {
   const value = String(status || '').toLowerCase();
@@ -67,6 +70,12 @@ function extractSiteSlugFromMetadata(metadata: unknown) {
   if (!metadata || typeof metadata !== 'object') return '';
   const record = metadata as Record<string, unknown>;
   return String(record.siteSlug || record.site_slug || '').trim().toLowerCase();
+}
+
+function epochToIso(epochSeconds: unknown): string {
+  const raw = Number(epochSeconds);
+  if (!Number.isFinite(raw) || raw <= 0) return '';
+  return new Date(raw * 1000).toISOString();
 }
 
 export class BillingService {
@@ -149,6 +158,7 @@ export class BillingService {
     siteSlug: string;
     subscriptionId: string;
     plan: SubscriptionPlan;
+    changeMode: PlanChangeMode;
   }) {
     const priceId = priceIdForPlan(input.plan);
     if (!priceId) {
@@ -174,19 +184,24 @@ export class BillingService {
     if (currentDetails.priceId && currentDetails.priceId === priceId) {
       return {
         noChange: true,
+        changeMode: input.changeMode,
         plan: currentDetails.plan,
         priceId: currentDetails.priceId,
         customerId: currentDetails.customerId,
         subscriptionId: currentDetails.subscriptionId,
-        billingStatus: currentDetails.billingStatus
+        billingStatus: currentDetails.billingStatus,
+        currentPeriodStart: currentDetails.currentPeriodStart,
+        currentPeriodEnd: currentDetails.currentPeriodEnd
       };
     }
 
     const prorationBehaviorRaw = String(process.env.STRIPE_PRORATION_BEHAVIOR || 'always_invoice').trim();
     const prorationBehavior =
-      prorationBehaviorRaw === 'none' || prorationBehaviorRaw === 'create_prorations'
-        ? prorationBehaviorRaw
-        : 'always_invoice';
+      input.changeMode === 'downgrade'
+        ? 'none'
+        : prorationBehaviorRaw === 'none' || prorationBehaviorRaw === 'create_prorations'
+          ? prorationBehaviorRaw
+          : 'always_invoice';
 
     const params = new URLSearchParams();
     params.set('items[0][id]', subscriptionItemId);
@@ -204,11 +219,14 @@ export class BillingService {
 
     return {
       noChange: false,
+      changeMode: input.changeMode,
       plan: details.plan,
       priceId: details.priceId,
       customerId: details.customerId,
       subscriptionId: details.subscriptionId,
-      billingStatus: details.billingStatus
+      billingStatus: details.billingStatus,
+      currentPeriodStart: details.currentPeriodStart,
+      currentPeriodEnd: details.currentPeriodEnd
     };
   }
 
@@ -261,6 +279,8 @@ export class BillingService {
     const customerId = String(object.customer || '');
     const subscriptionId = String(object.id || '');
     const status = normalizeStripeStatus(String(object.status || ''));
+    const currentPeriodEnd = epochToIso(object.current_period_end);
+    const currentPeriodStart = epochToIso(object.current_period_start);
 
     return {
       siteSlug,
@@ -268,7 +288,9 @@ export class BillingService {
       priceId,
       customerId,
       subscriptionId,
-      billingStatus: status
+      billingStatus: status,
+      currentPeriodStart,
+      currentPeriodEnd
     };
   }
 
@@ -310,21 +332,54 @@ export class BillingService {
         return { ok: true, ignored: true, eventId, type, reason: 'No siteSlug metadata' };
       }
 
+      const current = this.store.getEntitlementEffective(details.siteSlug);
       const window = getCurrentMonthWindow();
       const quota = getQuotaForPlan(details.plan);
       const status = type === 'customer.subscription.deleted' ? 'stopped' : 'active';
+      const rankDelta = comparePlanRank(current.plan, details.plan);
+      const isScheduledDowngradeEvent =
+        type === 'customer.subscription.updated' &&
+        rankDelta < 0 &&
+        status === 'active';
 
-      this.store.patchEntitlement(details.siteSlug, {
-        plan: details.plan,
-        monthlyQuota: quota,
-        periodStart: window.periodStartIso,
-        periodEnd: window.periodEndIso,
-        status,
-        stripeCustomerId: details.customerId,
-        stripeSubscriptionId: details.subscriptionId,
-        stripePriceId: details.priceId,
-        billingStatus: details.billingStatus
-      });
+      let entitlementResult;
+      let planApplied = true;
+
+      if (isScheduledDowngradeEvent) {
+        entitlementResult = this.store.patchEntitlement(details.siteSlug, {
+          // Keep current access until cycle end
+          plan: current.plan,
+          monthlyQuota: current.monthlyQuota,
+          periodStart: current.periodStart || window.periodStartIso,
+          periodEnd: current.periodEnd || window.periodEndIso,
+          pendingPlan: details.plan,
+          pendingMonthlyQuota: quota,
+          pendingEffectiveAt: details.currentPeriodEnd || current.periodEnd || window.periodEndIso,
+          pendingStripePriceId: details.priceId,
+          status: 'active',
+          stripeCustomerId: details.customerId,
+          stripeSubscriptionId: details.subscriptionId,
+          stripePriceId: current.stripePriceId,
+          billingStatus: details.billingStatus
+        });
+        planApplied = false;
+      } else {
+        entitlementResult = this.store.patchEntitlement(details.siteSlug, {
+          plan: details.plan,
+          monthlyQuota: quota,
+          periodStart: window.periodStartIso,
+          periodEnd: window.periodEndIso,
+          pendingPlan: '',
+          pendingMonthlyQuota: 0,
+          pendingEffectiveAt: '',
+          pendingStripePriceId: '',
+          status,
+          stripeCustomerId: details.customerId,
+          stripeSubscriptionId: details.subscriptionId,
+          stripePriceId: details.priceId,
+          billingStatus: details.billingStatus
+        });
+      }
 
       this.store.markWebhookEventProcessed(eventId);
       return {
@@ -332,9 +387,12 @@ export class BillingService {
         eventId,
         type,
         siteSlug: details.siteSlug,
-        plan: details.plan,
-        monthlyQuota: quota,
-        status
+        plan: entitlementResult.plan,
+        monthlyQuota: entitlementResult.monthlyQuota,
+        status,
+        planApplied,
+        pendingPlan: entitlementResult.pendingPlan,
+        pendingEffectiveAt: entitlementResult.pendingEffectiveAt
       };
     }
 

@@ -30,8 +30,14 @@ This file stores durable project context shared across tasks.
   - registry activation: `npm run release:pilot:activate`
 - Setup details: `docs/start-local.md`
 - Pilot deploy runbook: `docs/deploy/pilot-lux-living-01.md`
+- Ops VPS runbook (IONOS): `docs/deploy/ionos-vps-ops.md`
+- Fallback VPS runbook (Hetzner): `docs/deploy/hetzner-vps-engine.md`
 
 ## Durable Notes
+- Tenancy model (authoritative):
+  - engine is **one-to-many** and serves multiple `siteSlug`.
+  - single-site mode is legacy/compatibility only and should not be used for normal ops.
+  - per-site isolation boundary is `sites/<slug>/.env.generated` + registry metadata, not root env.
 - Frontend supports pluggable content repository via `CONTENT_REPOSITORY_DRIVER`.
 - n8n workflows are template-based and require configured credentials/endpoint ids.
 - Portal cliente (engine) attivo con auth locale + SQLite (`apps/engine/data/portal.db`) e billing Stripe.
@@ -43,6 +49,19 @@ This file stores durable project context shared across tasks.
   - workflow: `plan_generation_scheduler_worker`
   - endpoint entitlement: `GET /api/internal/sites/:siteSlug/entitlement`
   - incremento publish idempotente: `POST /api/internal/sites/:siteSlug/publish-count`
+- Strict per-site Sanity runtime:
+  - n8n non usa più `SANITY_PROJECT_ID/SANITY_READ_TOKEN/SANITY_WRITE_TOKEN` globali nel container.
+  - ogni workflow risolve la connessione per run via `GET /api/internal/sites/:siteSlug/sanity-connection` su engine.
+  - le credenziali vivono in `sites/<slug>/.env.generated`.
+  - i `SANITY_*` nel root `.env` restano solo per preview locale `web/studio`.
+- Env conventions for ops production:
+  - do not pin `SITE_SLUG` or enable `PORTAL_SINGLE_SITE_MODE` in root engine env for normal multi-site production.
+  - `NEXT_PUBLIC_PORTAL_BASE_URL` belongs to web/Vercel env; it is not required by engine runtime.
+  - `ENGINE_PORT` is optional; engine defaults to `8787`.
+- Scheduler multi-site:
+  - endpoint interno engine: `GET /api/internal/sites/automation-targets` (auth `x-internal-token`)
+  - `plan_generation_scheduler_worker` risolve i siti target da questo endpoint e non richiede più `SITE_SLUG` fisso in n8n env.
+  - i siti vengono processati solo se presenti nel registry con `automationStatus=active`.
 - Refill topic automatico:
   - quando i `topicCandidate` `brief_ready` sono vuoti, scheduler chiama `POST /api/factory/site/discover-topics`
   - parametri di default refill: `source=suggest`, `status=brief_ready`, `replace=true`, `apply=true`
@@ -59,6 +78,9 @@ This file stores durable project context shared across tasks.
   - `ARTICLE_BATCH_SIZE`
   - `IMAGE_BATCH_SIZE`
   - `QA_BATCH_SIZE`
+- Current multi-site gap to remember:
+  - web revalidate in n8n is still global-first via `WEB_APP_URL` + `WEB_REVALIDATE_SECRET`.
+  - `publish_scheduler_worker` respects `PUBLISH_REVALIDATE_ENABLED=false`, but `qa_scoring_and_publish_worker` still has a hardcoded local revalidate URL and needs cleanup before relying on revalidate in production.
 - Slug articoli n8n:
   - `article_generation_worker` usa slug con suffisso univoco (`timestamp+random`) per evitare collisioni Sanity (`slug is already in use`).
 - Password reset portale:
@@ -74,7 +96,10 @@ This file stores durable project context shared across tasks.
   - report ultimo run: `docs/ops/n8n-flow-checks/latest-report.json`
 - Runtime ops templates for VPS deploy:
   - systemd engine service: `infra/ops/systemd/autoblog-engine.service.example`
+  - systemd n8n stack service: `infra/ops/systemd/autoblog-n8n.service.example`
   - nginx reverse proxy + private factory example: `infra/ops/nginx/engine-and-factory.conf.example`
+- Provider VPS baseline per il pilot ops: `IONOS VPS`; runbook step-by-step su `docs/deploy/ionos-vps-ops.md`.
+- `Hetzner Cloud` resta documentato come fallback tecnico.
 - Pilot release checks read env files:
   - root: `.env.staging` / `.env.production`
   - n8n: `infra/n8n/.env.staging` / `infra/n8n/.env.production`

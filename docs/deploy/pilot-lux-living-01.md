@@ -8,6 +8,10 @@ This runbook implements the pilot release plan for `lux-living-01` with:
 - private Factory UI
 - Stripe live in production
 
+Ops VPS baseline:
+- `IONOS VPS` for production ops bootstrap: `docs/deploy/ionos-vps-ops.md`
+- `Hetzner` fallback runbook: `docs/deploy/hetzner-vps-engine.md`
+
 ## 1) Environment Layout
 
 Create dedicated env files:
@@ -95,8 +99,9 @@ Deploy production web on Vercel:
 vercel deploy apps/web --prod -y
 ```
 
-Deploy/verify engine on VPS (systemd example in `infra/ops/systemd/`).
-Deploy/verify n8n stack on VPS (Docker Compose, behind HTTPS).
+Bootstrap the ops VPS following `docs/deploy/ionos-vps-ops.md`.
+Deploy/verify engine on VPS (`infra/ops/systemd/autoblog-engine.service.example`).
+Deploy/verify n8n stack on VPS (`infra/ops/systemd/autoblog-n8n.service.example`, Docker Compose behind HTTPS).
 
 Run production smoke checks:
 

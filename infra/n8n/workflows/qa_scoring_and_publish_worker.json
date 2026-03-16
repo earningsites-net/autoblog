@@ -14,13 +14,13 @@
     },
     {
       "parameters": {
-        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || '') + '\\\" && status==\\\"draft\\\" && defined(coverImage)]|order(_updatedAt asc)[0...' + Number($env.QA_BATCH_SIZE || 100) + ']') }}",
+        "url": "={{ 'https://' + $('Resolve Site Context').item.json.sanity.projectId + '.api.sanity.io/v' + ($('Resolve Site Context').item.json.sanity.apiVersion || '2025-01-01') + '/data/query/' + ($('Resolve Site Context').item.json.sanity.dataset || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || '') + '\\\" && status==\\\"draft\\\" && defined(coverImage)]|order(_updatedAt asc)[0...' + Number($env.QA_BATCH_SIZE || 100) + ']') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{$env.SANITY_READ_TOKEN}}"
+              "value": "=Bearer {{$('Resolve Site Context').item.json.sanity.readToken}}"
             }
           ]
         },
@@ -90,13 +90,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}",
+        "url": "=https://{{$('Resolve Site Context').item.json.sanity.projectId}}.api.sanity.io/v{{$('Resolve Site Context').item.json.sanity.apiVersion || '2025-01-01'}}/data/mutate/{{$('Resolve Site Context').item.json.sanity.dataset || 'production'}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"
+              "value": "=Bearer {{$('Resolve Site Context').item.json.sanity.writeToken}}"
             }
           ]
         },
@@ -117,13 +117,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}",
+        "url": "=https://{{$('Resolve Site Context').item.json.sanity.projectId}}.api.sanity.io/v{{$('Resolve Site Context').item.json.sanity.apiVersion || '2025-01-01'}}/data/mutate/{{$('Resolve Site Context').item.json.sanity.dataset || 'production'}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"
+              "value": "=Bearer {{$('Resolve Site Context').item.json.sanity.writeToken}}"
             }
           ]
         },
@@ -199,7 +199,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const nf = (typeof fetch === 'function') ? null : require('node-fetch');\nconst fetchFn = (typeof fetch === 'function') ? fetch : (nf.default || nf);\n\nconst source = $('Compute QA Score').item.json;\nconst qaScore = Number(source.qaScore || 0);\nconst qaFlags = Array.isArray(source.qaFlags) ? source.qaFlags : [];\nconst qaChecks = source.qaChecks || {};\nconst pipelineMode = source.pipelineMode || (source.aiMeta && source.aiMeta.pipelineMode) || 'prepopulate_bulk_direct';\nconst decision = qaScore < 75 ? 'reject' : 'publish';\nconst siteSlug = String(source.siteSlug || $env.SITE_SLUG || '').toLowerCase().trim();\nif (!siteSlug) throw new Error('Missing siteSlug in QA log writer');\n\nconst apiVersion = $env.SANITY_API_VERSION || '2025-01-01';\nconst projectId = $env.SANITY_PROJECT_ID;\nconst dataset = $env.SANITY_DATASET || 'production';\nconst writeToken = $env.SANITY_WRITE_TOKEN;\n\nif (!projectId || !writeToken) {\n  throw new Error('Missing Sanity env vars for qaLog');\n}\n\nconst mutateUrl = 'https://' + projectId + '.api.sanity.io/v' + apiVersion + '/data/mutate/' + dataset;\nconst body = {\n  mutations: [\n    {\n      create: {\n        _type: 'qaLog',\n        siteSlug,\n        article: source._id ? { _type: 'reference', _ref: source._id } : undefined,\n        workflowRunId: String($execution.id),\n        score: qaScore,\n        decision,\n        flags: qaFlags.concat(pipelineMode === 'steady_scheduled' && qaScore >= 75 ? ['queued_for_scheduler'] : []),\n        checks: {\n          wordCount: qaChecks.wordCount || 0,\n          seoComplete: Boolean(qaChecks.seoComplete),\n          duplicateScore: Number(qaChecks.duplicateScore || 0),\n          readability: Number(qaChecks.readability || 0),\n        },\n        createdAt: new Date().toISOString(),\n      },\n    },\n  ],\n};\n\nconst res = await fetchFn(mutateUrl, {\n  method: 'POST',\n  headers: {\n    Authorization: 'Bearer ' + writeToken,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify(body),\n});\n\nif (!res.ok) {\n  const text = await res.text();\n  throw new Error('qaLog create failed (' + res.status + '): ' + text);\n}\n\nconst json = await res.json();\nreturn { json: { ...$json, qaLogDecision: decision, qaLogScore: qaScore, qaLogResult: json } };",
+        "jsCode": "const nf = (typeof fetch === 'function') ? null : require('node-fetch');\nconst fetchFn = (typeof fetch === 'function') ? fetch : (nf.default || nf);\n\nconst source = $('Compute QA Score').item.json;\nconst qaScore = Number(source.qaScore || 0);\nconst qaFlags = Array.isArray(source.qaFlags) ? source.qaFlags : [];\nconst qaChecks = source.qaChecks || {};\nconst pipelineMode = source.pipelineMode || (source.aiMeta && source.aiMeta.pipelineMode) || 'prepopulate_bulk_direct';\nconst decision = qaScore < 75 ? 'reject' : 'publish';\nconst siteSlug = String(source.siteSlug || $env.SITE_SLUG || '').toLowerCase().trim();\nif (!siteSlug) throw new Error('Missing siteSlug in QA log writer');\n\nconst apiVersion = $('Resolve Site Context').item.json.sanity.apiVersion || '2025-01-01';\nconst projectId = $('Resolve Site Context').item.json.sanity.projectId;\nconst dataset = $('Resolve Site Context').item.json.sanity.dataset || 'production';\nconst writeToken = $('Resolve Site Context').item.json.sanity.writeToken;\n\nif (!projectId || !writeToken) {\n  throw new Error('Missing Sanity env vars for qaLog');\n}\n\nconst mutateUrl = 'https://' + projectId + '.api.sanity.io/v' + apiVersion + '/data/mutate/' + dataset;\nconst body = {\n  mutations: [\n    {\n      create: {\n        _type: 'qaLog',\n        siteSlug,\n        article: source._id ? { _type: 'reference', _ref: source._id } : undefined,\n        workflowRunId: String($execution.id),\n        score: qaScore,\n        decision,\n        flags: qaFlags.concat(pipelineMode === 'steady_scheduled' && qaScore >= 75 ? ['queued_for_scheduler'] : []),\n        checks: {\n          wordCount: qaChecks.wordCount || 0,\n          seoComplete: Boolean(qaChecks.seoComplete),\n          duplicateScore: Number(qaChecks.duplicateScore || 0),\n          readability: Number(qaChecks.readability || 0),\n        },\n        createdAt: new Date().toISOString(),\n      },\n    },\n  ],\n};\n\nconst res = await fetchFn(mutateUrl, {\n  method: 'POST',\n  headers: {\n    Authorization: 'Bearer ' + writeToken,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify(body),\n});\n\nif (!res.ok) {\n  const text = await res.text();\n  throw new Error('qaLog create failed (' + res.status + '): ' + text);\n}\n\nconst json = await res.json();\nreturn { json: { ...$json, qaLogDecision: decision, qaLogScore: qaScore, qaLogResult: json } };",
         "language": "javaScript"
       },
       "id": "f37a1526-9198-4460-b138-97da12725676",
@@ -237,13 +237,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}",
+        "url": "=https://{{$('Resolve Site Context').item.json.sanity.projectId}}.api.sanity.io/v{{$('Resolve Site Context').item.json.sanity.apiVersion || '2025-01-01'}}/data/mutate/{{$('Resolve Site Context').item.json.sanity.dataset || 'production'}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"
+              "value": "=Bearer {{$('Resolve Site Context').item.json.sanity.writeToken}}"
             }
           ]
         },
@@ -260,6 +260,19 @@
         520,
         0
       ]
+    },
+    {
+      "id": "resolve_site_context",
+      "name": "Resolve Site Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1184,
+        80
+      ],
+      "parameters": {
+        "jsCode": "const incoming = (typeof $json === 'object' && $json) ? $json : {};\nconst body = incoming.body && typeof incoming.body === 'object' ? incoming.body : {};\nconst payload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst siteSlug = String(\n  incoming.siteSlug ||\n  incoming.site_slug ||\n  body.siteSlug ||\n  payload.siteSlug ||\n  $env.SITE_SLUG ||\n  ''\n).trim().toLowerCase();\nif (!siteSlug) {\n  throw new Error('Missing siteSlug for Resolve Site Context');\n}\n\nconst baseUrl = String($env.CONTENT_ENGINE_URL || '').replace(/\\/$/, '');\nif (!baseUrl) {\n  throw new Error('Missing CONTENT_ENGINE_URL env var');\n}\n\nconst internalToken = String($env.INTERNAL_API_TOKEN || '').trim();\nif (!internalToken) {\n  throw new Error('Missing INTERNAL_API_TOKEN env var');\n}\n\nconst nf = (typeof fetch === 'function') ? null : require('node-fetch');\nconst fetchFn = (typeof fetch === 'function') ? fetch : (nf.default || nf);\nconst url = baseUrl + '/api/internal/sites/' + encodeURIComponent(siteSlug) + '/sanity-connection';\n\nconst response = await fetchFn(url, {\n  method: 'GET',\n  headers: {\n    'x-internal-token': internalToken,\n  },\n});\n\nconst raw = await response.text();\nlet parsed = {};\ntry {\n  parsed = raw ? JSON.parse(raw) : {};\n} catch (error) {\n  throw new Error('Invalid sanity-connection response for ' + siteSlug + ': ' + raw.slice(0, 220));\n}\n\nif (!response.ok || !parsed.ok || !parsed.sanity) {\n  throw new Error('Cannot resolve site Sanity connection for ' + siteSlug + ': ' + (parsed.error || raw || response.status));\n}\n\nconst sanity = parsed.sanity || {};\nif (!sanity.projectId || !sanity.readToken || !sanity.writeToken) {\n  throw new Error('Incomplete site Sanity connection for ' + siteSlug);\n}\n\nreturn {\n  json: {\n    ...incoming,\n    siteSlug: parsed.siteSlug || siteSlug,\n    sanity,\n  }\n};"
+      }
     }
   ],
   "pinData": {},
@@ -346,7 +359,7 @@
       "main": [
         [
           {
-            "node": "Fetch drafts_with_image",
+            "node": "Resolve Site Context",
             "type": "main",
             "index": 0
           }
@@ -392,6 +405,17 @@
           },
           {
             "node": "Write QA Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Site Context": {
+      "main": [
+        [
+          {
+            "node": "Fetch drafts_with_image",
             "type": "main",
             "index": 0
           }

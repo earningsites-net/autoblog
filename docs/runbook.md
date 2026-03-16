@@ -7,6 +7,7 @@
   - no runaway loops
   - expected cadence for current plan
   - no persistent refill/no-op when `brief_ready > 0`
+  - targets are coming from `/api/internal/sites/automation-targets` (no single-site pinning)
 - Verify new articles appear on homepage/category pages.
 - Spot-check one published article for image, metadata, and disclaimer.
 - Confirm `sites/registry.json` reflects actual ownership/mode for active sites.
@@ -25,10 +26,11 @@
 - Re-run failed workflow batches.
 
 ### Sanity API failure/token expired
-- Rotate token, update n8n env, restart container.
+- Rotate token in `sites/<slug>/.env.generated` (strict per-site), then restart `apps/engine` and n8n container.
 - Re-run backlog workers (`brief`, `article`, `image`, `qa`).
 
 ### Scheduler keeps returning no-op
+- Verify automation targets endpoint returns active sites (`/api/internal/sites/automation-targets`).
 - Verify entitlement endpoint responds for target site (`/api/internal/sites/:siteSlug/entitlement`).
 - Verify `topicCandidate` queue for that site:
   - `brief_ready` count
@@ -37,6 +39,7 @@
   - `PLAN_TOPIC_REFILL_INTERVAL_MINUTES`
   - `PLAN_TOPIC_REFILL_COUNT`
 - If needed, trigger manual discovery from factory API/UI before re-running scheduler.
+- Do not rely on `SITE_SLUG` global in n8n as tenancy control; use registry `automationStatus` per site.
 
 ### Unauthorized errors on factory/scheduler hooks
 - Verify `INTERNAL_API_TOKEN` is configured and identical in:

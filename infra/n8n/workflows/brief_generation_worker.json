@@ -33,13 +33,13 @@
       ],
       "parameters": {
         "method": "GET",
-        "url": "={{ 'https://' + $env.SANITY_PROJECT_ID + '.api.sanity.io/v' + ($env.SANITY_API_VERSION || '2025-01-01') + '/data/query/' + ($env.SANITY_DATASET || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"topicCandidate\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || '') + '\\\" && status==\\\"queued\\\"]|order(_updatedAt asc)[0...5]') }}",
+        "url": "={{ 'https://' + $('Resolve Site Context').item.json.sanity.projectId + '.api.sanity.io/v' + ($('Resolve Site Context').item.json.sanity.apiVersion || '2025-01-01') + '/data/query/' + ($('Resolve Site Context').item.json.sanity.dataset || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"topicCandidate\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || '') + '\\\" && status==\\\"queued\\\"]|order(_updatedAt asc)[0...5]') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{$env.SANITY_READ_TOKEN}}"
+              "value": "=Bearer {{$('Resolve Site Context').item.json.sanity.readToken}}"
             }
           ]
         }
@@ -96,13 +96,13 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "=https://{{$env.SANITY_PROJECT_ID}}.api.sanity.io/v{{$env.SANITY_API_VERSION || '2025-01-01'}}/data/mutate/{{$env.SANITY_DATASET || 'production'}}",
+        "url": "=https://{{$('Resolve Site Context').item.json.sanity.projectId}}.api.sanity.io/v{{$('Resolve Site Context').item.json.sanity.apiVersion || '2025-01-01'}}/data/mutate/{{$('Resolve Site Context').item.json.sanity.dataset || 'production'}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{$env.SANITY_WRITE_TOKEN}}"
+              "value": "=Bearer {{$('Resolve Site Context').item.json.sanity.writeToken}}"
             }
           ]
         },
@@ -139,6 +139,19 @@
         "options": {},
         "multipleMethods": false
       }
+    },
+    {
+      "id": "resolve_site_context",
+      "name": "Resolve Site Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        240
+      ],
+      "parameters": {
+        "jsCode": "const incoming = (typeof $json === 'object' && $json) ? $json : {};\nconst body = incoming.body && typeof incoming.body === 'object' ? incoming.body : {};\nconst payload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst siteSlug = String(\n  incoming.siteSlug ||\n  incoming.site_slug ||\n  body.siteSlug ||\n  payload.siteSlug ||\n  $env.SITE_SLUG ||\n  ''\n).trim().toLowerCase();\nif (!siteSlug) {\n  throw new Error('Missing siteSlug for Resolve Site Context');\n}\n\nconst baseUrl = String($env.CONTENT_ENGINE_URL || '').replace(/\\/$/, '');\nif (!baseUrl) {\n  throw new Error('Missing CONTENT_ENGINE_URL env var');\n}\n\nconst internalToken = String($env.INTERNAL_API_TOKEN || '').trim();\nif (!internalToken) {\n  throw new Error('Missing INTERNAL_API_TOKEN env var');\n}\n\nconst nf = (typeof fetch === 'function') ? null : require('node-fetch');\nconst fetchFn = (typeof fetch === 'function') ? fetch : (nf.default || nf);\nconst url = baseUrl + '/api/internal/sites/' + encodeURIComponent(siteSlug) + '/sanity-connection';\n\nconst response = await fetchFn(url, {\n  method: 'GET',\n  headers: {\n    'x-internal-token': internalToken,\n  },\n});\n\nconst raw = await response.text();\nlet parsed = {};\ntry {\n  parsed = raw ? JSON.parse(raw) : {};\n} catch (error) {\n  throw new Error('Invalid sanity-connection response for ' + siteSlug + ': ' + raw.slice(0, 220));\n}\n\nif (!response.ok || !parsed.ok || !parsed.sanity) {\n  throw new Error('Cannot resolve site Sanity connection for ' + siteSlug + ': ' + (parsed.error || raw || response.status));\n}\n\nconst sanity = parsed.sanity || {};\nif (!sanity.projectId || !sanity.readToken || !sanity.writeToken) {\n  throw new Error('Incomplete site Sanity connection for ' + siteSlug);\n}\n\nreturn {\n  json: {\n    ...incoming,\n    siteSlug: parsed.siteSlug || siteSlug,\n    sanity,\n  }\n};"
+      }
     }
   ],
   "connections": {
@@ -146,7 +159,7 @@
       "main": [
         [
           {
-            "node": "Fetch queued topics (Sanity)",
+            "node": "Resolve Site Context",
             "type": "main",
             "index": 0
           }
@@ -190,7 +203,7 @@
       "main": [
         [
           {
-            "node": "Fetch queued topics (Sanity)",
+            "node": "Resolve Site Context",
             "type": "main",
             "index": 0
           }
@@ -198,6 +211,17 @@
       ]
     },
     "Webhook Refill Trigger": {
+      "main": [
+        [
+          {
+            "node": "Resolve Site Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Site Context": {
       "main": [
         [
           {

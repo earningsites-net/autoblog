@@ -10,7 +10,7 @@ import { BillingService } from './services/billing-service';
 import { DefaultEngineService } from './services/engine-service';
 import { FactoryOpsService } from './services/factory-ops';
 import { InMemoryJobStore } from './services/job-store';
-import { getCurrentMonthWindow, getQuotaForPlan } from './config/plans';
+import { comparePlanRank, getCurrentMonthWindow, getQuotaForPlan } from './config/plans';
 import { PortalStore } from './services/portal-store';
 import { LocalSiteRegistry } from './services/site-registry';
 import { SiteRuntimeService } from './services/site-runtime-service';
@@ -41,7 +41,7 @@ async function bootstrapAdminAccessForKnownSites() {
   const admin = portalStore.getUserWithPasswordHashByEmail(adminEmail);
   if (!admin) return;
 
-  const singleSiteMode = String(process.env.PORTAL_SINGLE_SITE_MODE || 'true').toLowerCase() !== 'false';
+  const singleSiteMode = String(process.env.PORTAL_SINGLE_SITE_MODE || 'false').toLowerCase() !== 'false';
   const configuredSiteSlug = sanitizeSiteSlug(
     String(process.env.SITE_SLUG || process.env.NEXT_PUBLIC_SITE_SLUG || '')
   );
@@ -1346,6 +1346,18 @@ app.get('/portal', async (_req, reply) => {
         if (res.mode === 'updated') {
           showNotice('Subscription updated successfully.', 'ok');
           await loadSites();
+        } else if (res.mode === 'downgrade_scheduled') {
+          const effectiveAtLabel = res.pendingEffectiveAt
+            ? new Date(res.pendingEffectiveAt).toLocaleDateString()
+            : 'next billing cycle';
+          const nextPlan = String(res.pendingPlan || plan || '').trim();
+          const nextPlanLabel = nextPlan ? (nextPlan.charAt(0).toUpperCase() + nextPlan.slice(1)) : 'new plan';
+          showNotice(
+            'Downgrade scheduled: access remains unchanged until ' + effectiveAtLabel + ', then switches to ' + nextPlanLabel + '.',
+            'ok',
+            7000
+          );
+          await loadSites();
         } else if (res.mode === 'unchanged') {
           showNotice('Selected plan is already active.', 'warn');
         }
@@ -1392,7 +1404,8 @@ app.get('/portal', async (_req, reply) => {
             '<li>Priority generation queue</li>' +
             '<li>Monthly optimization review</li>' +
             '</ul>' +
-            '<p>Your plan will be limited to <strong>' + escapeHtml(nextQuota) + '</strong> articles per month.</p>' +
+            '<p>Your plan will be limited to <strong>' + escapeHtml(nextQuota) + '</strong> articles per month from the next billing cycle.</p>' +
+            '<p>No credit is issued for the remaining current cycle.</p>' +
             '<p>If you are expecting traffic growth soon, keeping your current plan may help maintain your publishing cadence.</p>';
         } else {
           planConfirmText.innerHTML =
@@ -1513,6 +1526,21 @@ app.get('/portal', async (_req, reply) => {
         const currentPlanLabel = currentPlan
           ? currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)
           : 'Base';
+        const pendingPlan = String(site.entitlement?.pendingPlan || '').trim();
+        const pendingPlanLabel = pendingPlan
+          ? pendingPlan.charAt(0).toUpperCase() + pendingPlan.slice(1)
+          : '';
+        const pendingEffectiveAt = String(site.entitlement?.pendingEffectiveAt || '').trim();
+        const pendingEffectiveAtLabel = pendingEffectiveAt
+          ? new Date(pendingEffectiveAt).toLocaleDateString()
+          : '';
+        const pendingDowngradeHtml = pendingPlan
+          ? '<div class="billing-note warn">Downgrade scheduled to <strong>' +
+            escapeHtml(pendingPlanLabel) +
+            '</strong> on <strong>' +
+            escapeHtml(pendingEffectiveAtLabel || 'next cycle') +
+            '</strong>. Current quota remains active until then.</div>'
+          : '';
         const currentAdsMode = site.settings?.adsMode === 'manual' ? 'manual' : 'auto';
         const wrapper = document.createElement('div');
         wrapper.className = 'panel';
@@ -1615,6 +1643,7 @@ app.get('/portal', async (_req, reply) => {
               </div>
             </div>
             <div class="hint">Current plan: <strong>\${escapeHtml(currentPlanLabel)}</strong> • Monthly quota: <strong>\${escapeHtml(site.entitlement?.monthlyQuota || 0)}</strong> • Published this month: <strong>\${escapeHtml(site.entitlement?.publishedThisMonth || 0)}</strong></div>
+            \${pendingDowngradeHtml}
 
             <div class="actions">
               <button class="ghost" data-action="open-billing" data-slug="\${escapeHtml(slug)}">Open Billing Portal</button>
@@ -2186,7 +2215,7 @@ app.get('/api/portal/sites', async (req, reply) => {
     return reply.code(403).send({ ok: false, error: 'Forbidden' });
   }
 
-  const singleSiteMode = String(process.env.PORTAL_SINGLE_SITE_MODE || 'true').toLowerCase() !== 'false';
+  const singleSiteMode = String(process.env.PORTAL_SINGLE_SITE_MODE || 'false').toLowerCase() !== 'false';
   const configuredSiteSlug = sanitizeSiteSlug(
     String(process.env.SITE_SLUG || process.env.NEXT_PUBLIC_SITE_SLUG || '')
   );
@@ -2247,7 +2276,7 @@ app.patch('/api/portal/sites/:siteSlug/publishing', async (req, reply) => {
   }
 
   const settings = portalStore.patchSiteSettings(siteSlug, parsed.data);
-  const entitlement = portalStore.getEntitlement(siteSlug);
+  const entitlement = portalStore.getEntitlementEffective(siteSlug);
   const sync = await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
   return {
     ok: true,
@@ -2270,7 +2299,7 @@ app.patch('/api/portal/sites/:siteSlug/ads', async (req, reply) => {
   }
 
   const settings = portalStore.patchSiteSettings(siteSlug, parsed.data);
-  const entitlement = portalStore.getEntitlement(siteSlug);
+  const entitlement = portalStore.getEntitlementEffective(siteSlug);
   await siteRuntime.upsertRegistrySite(siteSlug, {
     adConfig: {
       provider: 'adsense',
@@ -2301,7 +2330,7 @@ app.post('/api/portal/sites/:siteSlug/billing/portal-session', async (req, reply
   const auth = authService.requireSiteAccess(req, reply, siteSlug);
   if (!auth) return;
 
-  let entitlement = portalStore.getEntitlement(siteSlug);
+  let entitlement = portalStore.getEntitlementEffective(siteSlug);
   if (!entitlement.stripeCustomerId) {
     try {
       const created = await billingService.createCustomer({
@@ -2347,7 +2376,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
     return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
   }
 
-  let entitlement = portalStore.getEntitlement(siteSlug);
+  let entitlement = portalStore.getEntitlementEffective(siteSlug);
   if (!entitlement.stripeCustomerId) {
     try {
       const created = await billingService.createCustomer({
@@ -2376,6 +2405,10 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
           monthlyQuota: getQuotaForPlan(recovered.plan),
           periodStart: window.periodStartIso,
           periodEnd: window.periodEndIso,
+          pendingPlan: '',
+          pendingMonthlyQuota: 0,
+          pendingEffectiveAt: '',
+          pendingStripePriceId: '',
           status: 'active',
           stripeCustomerId: recovered.customerId || entitlement.stripeCustomerId,
           stripeSubscriptionId: recovered.subscriptionId,
@@ -2388,7 +2421,27 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
     }
   }
 
-  if (entitlement.plan === parsed.data.plan && entitlement.stripeSubscriptionId) {
+  if (
+    entitlement.pendingPlan &&
+    entitlement.pendingPlan === parsed.data.plan &&
+    entitlement.stripeSubscriptionId
+  ) {
+    return {
+      ok: true,
+      mode: 'downgrade_scheduled',
+      plan: entitlement.plan,
+      pendingPlan: entitlement.pendingPlan,
+      pendingEffectiveAt: entitlement.pendingEffectiveAt,
+      billingStatus: entitlement.billingStatus,
+      message: 'Downgrade already scheduled for next billing cycle'
+    };
+  }
+
+  if (
+    entitlement.plan === parsed.data.plan &&
+    !entitlement.pendingPlan &&
+    entitlement.stripeSubscriptionId
+  ) {
     return {
       ok: true,
       mode: 'unchanged',
@@ -2403,12 +2456,58 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
     entitlement.status !== 'stopped' &&
     entitlement.billingStatus !== 'canceled'
   ) {
+    const direction = comparePlanRank(entitlement.plan, parsed.data.plan);
+    const changeMode = direction > 0 ? 'upgrade' : direction < 0 ? 'downgrade' : 'lateral';
+
     try {
       const updated = await billingService.updateExistingSubscriptionPlan({
         siteSlug,
         subscriptionId: entitlement.stripeSubscriptionId,
-        plan: parsed.data.plan
+        plan: parsed.data.plan,
+        changeMode
       });
+
+      if (updated.noChange) {
+        return {
+          ok: true,
+          mode: 'unchanged',
+          plan: entitlement.plan,
+          billingStatus: entitlement.billingStatus,
+          message: 'Selected plan is already active'
+        };
+      }
+
+      const settings = portalStore.getSiteSettings(siteSlug);
+      if (changeMode === 'downgrade') {
+        entitlement = portalStore.patchEntitlement(siteSlug, {
+          // Keep current plan active until end of billing cycle.
+          plan: entitlement.plan,
+          monthlyQuota: entitlement.monthlyQuota,
+          periodStart: entitlement.periodStart,
+          periodEnd: entitlement.periodEnd,
+          pendingPlan: parsed.data.plan,
+          pendingMonthlyQuota: getQuotaForPlan(parsed.data.plan),
+          pendingEffectiveAt: updated.currentPeriodEnd || entitlement.periodEnd,
+          pendingStripePriceId: updated.priceId || '',
+          status: 'active',
+          stripeCustomerId: updated.customerId || entitlement.stripeCustomerId,
+          stripeSubscriptionId: updated.subscriptionId || entitlement.stripeSubscriptionId,
+          stripePriceId: entitlement.stripePriceId,
+          billingStatus: updated.billingStatus
+        });
+
+        const sync = await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
+        return {
+          ok: true,
+          mode: 'downgrade_scheduled',
+          plan: entitlement.plan,
+          pendingPlan: entitlement.pendingPlan,
+          pendingEffectiveAt: entitlement.pendingEffectiveAt,
+          billingStatus: entitlement.billingStatus,
+          sanitySync: sync,
+          automationTrigger: { ok: true, skipped: true, reason: 'Downgrade scheduled for next cycle' }
+        };
+      }
 
       const window = getCurrentMonthWindow();
       entitlement = portalStore.patchEntitlement(siteSlug, {
@@ -2416,6 +2515,10 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
         monthlyQuota: getQuotaForPlan(updated.plan),
         periodStart: window.periodStartIso,
         periodEnd: window.periodEndIso,
+        pendingPlan: '',
+        pendingMonthlyQuota: 0,
+        pendingEffectiveAt: '',
+        pendingStripePriceId: '',
         status: 'active',
         stripeCustomerId: updated.customerId || entitlement.stripeCustomerId,
         stripeSubscriptionId: updated.subscriptionId || entitlement.stripeSubscriptionId,
@@ -2423,15 +2526,12 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
         billingStatus: updated.billingStatus
       });
 
-      const settings = portalStore.getSiteSettings(siteSlug);
       const sync = await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
-      const automationTrigger = updated.noChange
-        ? { ok: true, skipped: true, reason: 'Plan unchanged' }
-        : await triggerPlanAutomationNow(siteSlug, 'plan_change_updated');
+      const automationTrigger = await triggerPlanAutomationNow(siteSlug, 'plan_change_updated');
 
       return {
         ok: true,
-        mode: updated.noChange ? 'unchanged' : 'updated',
+        mode: 'updated',
         plan: updated.plan,
         billingStatus: updated.billingStatus,
         sanitySync: sync,
@@ -2449,6 +2549,10 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
       entitlement = portalStore.patchEntitlement(siteSlug, {
         stripeSubscriptionId: '',
         stripePriceId: '',
+        pendingPlan: '',
+        pendingMonthlyQuota: 0,
+        pendingEffectiveAt: '',
+        pendingStripePriceId: '',
         status: 'active',
         billingStatus: 'trial'
       });
@@ -2490,12 +2594,13 @@ app.post('/api/billing/webhooks/stripe', async (req, reply) => {
     if (result && typeof result === 'object' && 'siteSlug' in result && typeof result.siteSlug === 'string' && result.siteSlug) {
       const siteSlug = result.siteSlug;
       const settings = portalStore.getSiteSettings(siteSlug);
-      const entitlement = portalStore.getEntitlement(siteSlug);
+      const entitlement = portalStore.getEntitlementEffective(siteSlug);
       await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
 
       const eventType = 'type' in result ? String(result.type || '') : '';
+      const planApplied = !('planApplied' in result) || Boolean(result.planApplied);
       const shouldTrigger =
-        eventType === 'checkout.session.completed' || eventType === 'customer.subscription.updated';
+        planApplied && (eventType === 'checkout.session.completed' || eventType === 'customer.subscription.updated');
       if (shouldTrigger) {
         automationTrigger = await triggerPlanAutomationNow(siteSlug, `stripe_${eventType}`);
       }
@@ -2507,16 +2612,94 @@ app.post('/api/billing/webhooks/stripe', async (req, reply) => {
   }
 });
 
-app.get('/api/internal/sites/:siteSlug/entitlement', async (req, reply) => {
+app.get('/api/internal/sites/automation-targets', async (req, reply) => {
   const internalToken = String(process.env.INTERNAL_API_TOKEN || '').trim();
+  if (!internalToken) {
+    return reply.code(503).send({ ok: false, error: 'INTERNAL_API_TOKEN not configured' });
+  }
   const provided = String(req.headers['x-internal-token'] || '').trim();
-  if (internalToken && provided !== internalToken) {
+  if (provided !== internalToken) {
+    return reply.code(401).send({ ok: false, error: 'Unauthorized' });
+  }
+
+  const query = (req.query || {}) as { includeInactive?: string };
+  const includeInactive = String(query.includeInactive || '').toLowerCase() === 'true';
+  const registry = await siteRuntime.loadRegistry();
+  const seen = new Set<string>();
+  const targets: string[] = [];
+  const skipped: Array<{ siteSlug: string; reason: string }> = [];
+
+  for (const entry of registry.sites || []) {
+    const siteSlug = sanitizeSiteSlug(String(entry.siteSlug || ''));
+    if (!siteSlug || seen.has(siteSlug)) continue;
+    seen.add(siteSlug);
+
+    const automationStatus = String(entry.automationStatus || 'inactive').toLowerCase();
+    if (!includeInactive && automationStatus !== 'active') {
+      skipped.push({ siteSlug, reason: `automationStatus=${automationStatus || 'inactive'}` });
+      continue;
+    }
+
+    const sanity = await siteRuntime.getSiteSanityConnection(siteSlug);
+    if (!sanity.projectId || !sanity.readToken || !sanity.writeToken) {
+      skipped.push({ siteSlug, reason: 'missing_per_site_sanity_credentials' });
+      continue;
+    }
+
+    targets.push(siteSlug);
+  }
+
+  return {
+    ok: true,
+    count: targets.length,
+    targets,
+    skipped
+  };
+});
+
+app.get('/api/internal/sites/:siteSlug/sanity-connection', async (req, reply) => {
+  const internalToken = String(process.env.INTERNAL_API_TOKEN || '').trim();
+  if (!internalToken) {
+    return reply.code(503).send({ ok: false, error: 'INTERNAL_API_TOKEN not configured' });
+  }
+  const provided = String(req.headers['x-internal-token'] || '').trim();
+  if (provided !== internalToken) {
     return reply.code(401).send({ ok: false, error: 'Unauthorized' });
   }
 
   const params = req.params as { siteSlug: string };
   const siteSlug = sanitizeSiteSlug(params.siteSlug);
-  const entitlement = portalStore.getEntitlement(siteSlug);
+  const sanity = await siteRuntime.getSiteSanityConnection(siteSlug);
+
+  if (!sanity.projectId || !sanity.readToken || !sanity.writeToken) {
+    return reply.code(400).send({
+      ok: false,
+      siteSlug,
+      error:
+        'Missing per-site Sanity credentials. Expected SANITY_PROJECT_ID, SANITY_READ_TOKEN, SANITY_WRITE_TOKEN in sites/<siteSlug>/.env.generated'
+    });
+  }
+
+  return {
+    ok: true,
+    siteSlug,
+    sanity
+  };
+});
+
+app.get('/api/internal/sites/:siteSlug/entitlement', async (req, reply) => {
+  const internalToken = String(process.env.INTERNAL_API_TOKEN || '').trim();
+  if (!internalToken) {
+    return reply.code(503).send({ ok: false, error: 'INTERNAL_API_TOKEN not configured' });
+  }
+  const provided = String(req.headers['x-internal-token'] || '').trim();
+  if (provided !== internalToken) {
+    return reply.code(401).send({ ok: false, error: 'Unauthorized' });
+  }
+
+  const params = req.params as { siteSlug: string };
+  const siteSlug = sanitizeSiteSlug(params.siteSlug);
+  const entitlement = portalStore.getEntitlementEffective(siteSlug);
   const settings = portalStore.getSiteSettings(siteSlug);
   const now = new Date().toISOString();
   const periodWindow = getCurrentMonthWindow();
@@ -2533,6 +2716,8 @@ app.get('/api/internal/sites/:siteSlug/entitlement', async (req, reply) => {
       periodEnd: entitlement.periodEnd || periodWindow.periodEndIso
     },
     plan: entitlement.plan,
+    pendingPlan: entitlement.pendingPlan,
+    pendingEffectiveAt: entitlement.pendingEffectiveAt,
     status: entitlement.status,
     publishingEnabled: settings.publishingEnabled
   };
@@ -2540,8 +2725,11 @@ app.get('/api/internal/sites/:siteSlug/entitlement', async (req, reply) => {
 
 app.post('/api/internal/sites/:siteSlug/publish-count', async (req, reply) => {
   const internalToken = String(process.env.INTERNAL_API_TOKEN || '').trim();
+  if (!internalToken) {
+    return reply.code(503).send({ ok: false, error: 'INTERNAL_API_TOKEN not configured' });
+  }
   const provided = String(req.headers['x-internal-token'] || '').trim();
-  if (internalToken && provided !== internalToken) {
+  if (provided !== internalToken) {
     return reply.code(401).send({ ok: false, error: 'Unauthorized' });
   }
 
@@ -2796,7 +2984,7 @@ app.post('/api/factory/site/create', async (req, reply) => {
     ...(studioUrlPatch !== undefined ? { studioUrl: studioUrlPatch } : {}),
     maxPublishesPerRun: 1
   });
-  const entitlement = portalStore.getEntitlement(siteSlug);
+  const entitlement = portalStore.getEntitlementEffective(siteSlug);
   await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
 
   return {
@@ -2881,7 +3069,7 @@ app.post('/api/factory/site/launch', async (req, reply) => {
     ...(studioUrlPatch !== undefined ? { studioUrl: studioUrlPatch } : {}),
     maxPublishesPerRun: 1
   });
-  const entitlement = portalStore.getEntitlement(siteSlug);
+  const entitlement = portalStore.getEntitlementEffective(siteSlug);
   await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
 
   return {

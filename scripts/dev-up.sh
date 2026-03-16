@@ -92,10 +92,19 @@ fi
 
 cleanup_stale_pid() {
   local pid_file="$1"
+  local expected_port="${2:-}"
   if [[ -f "$pid_file" ]]; then
     local pid
     pid="$(cat "$pid_file" 2>/dev/null || true)"
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      if [[ -n "$expected_port" ]]; then
+        local listener_pid
+        listener_pid="$(lsof -nP -iTCP:"$expected_port" -sTCP:LISTEN -t 2>/dev/null | head -n 1 || true)"
+        if [[ -z "$listener_pid" ]]; then
+          rm -f "$pid_file"
+          return 1
+        fi
+      fi
       return 0
     fi
     rm -f "$pid_file"
@@ -142,6 +151,7 @@ ensure_port_available() {
 start_service() {
   local name="$1"
   local command="$2"
+  local expected_port="${3:-}"
   local pid_file="${RUNTIME_DIR}/${name}.pid"
   local log_file="${LOG_DIR}/${name}.log"
   local node_bin
@@ -152,7 +162,7 @@ start_service() {
   node_dir="$(dirname "$node_bin")"
   wrapped_command="export PATH=\"${node_dir}:\$PATH\"; hash -r; ${command}"
 
-  if cleanup_stale_pid "$pid_file"; then
+  if cleanup_stale_pid "$pid_file" "$expected_port"; then
     echo "[skip] ${name} already running (pid $(cat "$pid_file"))"
     return 0
   fi
@@ -195,9 +205,9 @@ ensure_port_available "web" 3000
 ensure_port_available "studio" 3333
 ensure_port_available "engine" 8787
 
-start_service "web" "npm --workspace @autoblog/web run dev -- --hostname 0.0.0.0 --port 3000"
-start_service "studio" "npm run dev:studio"
-start_service "engine" "npm run dev:engine"
+start_service "web" "npm --workspace @autoblog/web run dev -- --hostname 0.0.0.0 --port 3000" "3000"
+start_service "studio" "npm run dev:studio" "3333"
+start_service "engine" "npm run dev:engine" "8787"
 
 cat <<EOF
 

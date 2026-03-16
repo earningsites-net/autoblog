@@ -115,21 +115,13 @@ function main() {
   const registry = readJsonFile(registryPath);
   const siteEnv = fs.existsSync(siteEnvPath) ? parseEnvFile(siteEnvPath) : {};
 
-  const siteSlugCandidates = [
-    { source: 'root.SITE_SLUG', value: rootEnv.SITE_SLUG },
-    { source: 'root.NEXT_PUBLIC_SITE_SLUG', value: rootEnv.NEXT_PUBLIC_SITE_SLUG },
-    { source: 'root.SANITY_STUDIO_SITE_SLUG', value: rootEnv.SANITY_STUDIO_SITE_SLUG },
-    { source: 'n8n.SITE_SLUG', value: n8nEnv.SITE_SLUG }
-  ];
-  for (const candidate of siteSlugCandidates) {
-    const normalized = normalizeSlug(candidate.value);
-    pushCheck(
-      `site_slug.${candidate.source}`,
-      normalized === siteSlug,
-      `${candidate.source}=${normalized || '(empty)'} expected=${siteSlug}`,
-      'error'
-    );
-  }
+  const n8nDefaultSiteSlug = normalizeSlug(n8nEnv.SITE_SLUG);
+  pushCheck(
+    'site_slug.n8n_default_optional',
+    !n8nDefaultSiteSlug || n8nDefaultSiteSlug === siteSlug,
+    `n8n.SITE_SLUG=${n8nDefaultSiteSlug || '(empty)'} expected=${siteSlug} (optional, used only by scheduled trigger default)`,
+    'warn'
+  );
 
   pushCheck(
     'blueprint.deployment_target',
@@ -180,7 +172,6 @@ function main() {
     'INTERNAL_API_TOKEN',
     'FACTORY_API_SECRET',
     'FACTORY_UI_USERNAME',
-    'REVALIDATE_SECRET',
     'PREPOPULATE_TRIGGER_URL'
   ];
   for (const key of requiredRootKeys) {
@@ -214,10 +205,7 @@ function main() {
     'N8N_ENCRYPTION_KEY',
     'N8N_BASIC_AUTH_USER',
     'N8N_BASIC_AUTH_PASSWORD',
-    'POSTGRES_PASSWORD',
-    'SANITY_PROJECT_ID',
-    'SANITY_READ_TOKEN',
-    'SANITY_WRITE_TOKEN'
+    'POSTGRES_PASSWORD'
   ];
   for (const key of requiredN8nKeys) {
     pushCheck(
@@ -239,37 +227,6 @@ function main() {
     'error'
   );
 
-  const revalidateAligned =
-    isConfigured(rootEnv.REVALIDATE_SECRET) &&
-    isConfigured(n8nEnv.WEB_REVALIDATE_SECRET) &&
-    rootEnv.REVALIDATE_SECRET === n8nEnv.WEB_REVALIDATE_SECRET;
-  pushCheck(
-    'alignment.REVALIDATE_SECRET',
-    revalidateAligned,
-    'root REVALIDATE_SECRET must match n8n WEB_REVALIDATE_SECRET',
-    'error'
-  );
-
-  const datasetsAligned =
-    isConfigured(rootEnv.SANITY_DATASET) &&
-    isConfigured(n8nEnv.SANITY_DATASET) &&
-    rootEnv.SANITY_DATASET === n8nEnv.SANITY_DATASET;
-  pushCheck(
-    'alignment.SANITY_DATASET',
-    datasetsAligned,
-    `root=${String(rootEnv.SANITY_DATASET || '(missing)')} n8n=${String(n8nEnv.SANITY_DATASET || '(missing)')}`,
-    'error'
-  );
-
-  if (stage === 'staging') {
-    pushCheck(
-      'staging.dataset_not_production',
-      String(rootEnv.SANITY_DATASET || '').toLowerCase() !== 'production',
-      `SANITY_DATASET=${String(rootEnv.SANITY_DATASET || '(missing)')} (recommended: staging)`,
-      'warn'
-    );
-  }
-
   if (stage === 'production') {
     const requiredStripeKeys = [
       'STRIPE_SECRET_KEY',
@@ -286,13 +243,6 @@ function main() {
         'error'
       );
     }
-
-    pushCheck(
-      'production.dataset_is_production',
-      String(rootEnv.SANITY_DATASET || '').toLowerCase() === 'production',
-      `SANITY_DATASET=${String(rootEnv.SANITY_DATASET || '(missing)')}`,
-      'warn'
-    );
   }
 
   pushCheck(
@@ -311,6 +261,18 @@ function main() {
     'site_env.SANITY_PROJECT_ID',
     isConfigured(siteEnv.SANITY_PROJECT_ID),
     `SANITY_PROJECT_ID=${isConfigured(siteEnv.SANITY_PROJECT_ID) ? '(set)' : '(missing/placeholder)'}`,
+    stage === 'production' ? 'error' : 'warn'
+  );
+  pushCheck(
+    'site_env.SANITY_READ_TOKEN',
+    isConfigured(siteEnv.SANITY_READ_TOKEN),
+    `SANITY_READ_TOKEN=${isConfigured(siteEnv.SANITY_READ_TOKEN) ? '(set)' : '(missing/placeholder)'}`,
+    stage === 'production' ? 'error' : 'warn'
+  );
+  pushCheck(
+    'site_env.SANITY_WRITE_TOKEN',
+    isConfigured(siteEnv.SANITY_WRITE_TOKEN),
+    `SANITY_WRITE_TOKEN=${isConfigured(siteEnv.SANITY_WRITE_TOKEN) ? '(set)' : '(missing/placeholder)'}`,
     stage === 'production' ? 'error' : 'warn'
   );
 
