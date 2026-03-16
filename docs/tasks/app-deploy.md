@@ -200,6 +200,7 @@
   - `infra/n8n/.env.example` usa ora host/URL reali per `n8n` e `CONTENT_ENGINE_URL=https://aiblogs.earningsites.net`
   - `docs/deploy/ionos-vps-ops.md` non richiede più `sed` sui domini e include il fix permessi per `/etc/autoblog/n8n.env`
   - `docs/deploy/pilot-lux-living-01.md`, `sites/lux-living-01/deploy-plan.md` e `docs/context.md` aggiornati con `https://aiblogs.earningsites.net` e `https://n8n.earningsites.net`
+  - caveat TLS registrato: `certbot --nginx -d aiblogs... -d n8n...` sul VPS ha emesso un singolo certificato SAN con nome `aiblogs.earningsites.net`, quindi entrambi i server block HTTPS devono puntare a `/etc/letsencrypt/live/aiblogs.earningsites.net/*`
 
 ## Decisions
 - Pilot operativo fissato su `lux-living-01`.

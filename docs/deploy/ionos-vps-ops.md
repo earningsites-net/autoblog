@@ -364,6 +364,14 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+Nota su Certbot:
+
+- con `certbot --nginx -d aiblogs.earningsites.net -d n8n.earningsites.net ...` viene creato un certificato SAN unico
+- nel caso corrente il nome del certificato è `aiblogs.earningsites.net`
+- quindi anche il blocco `server_name n8n.earningsites.net` usa:
+  - `/etc/letsencrypt/live/aiblogs.earningsites.net/fullchain.pem`
+  - `/etc/letsencrypt/live/aiblogs.earningsites.net/privkey.pem`
+
 Prima del reload finale, sostituisci la allowlist di `/ops/factory` con il tuo IP pubblico o con il range della VPN.
 Esempio:
 
