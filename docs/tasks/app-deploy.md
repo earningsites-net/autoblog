@@ -192,6 +192,14 @@
   - i comandi `cp /srv/auto-blog-project/...` usano path assoluti, quindi si possono eseguire da qualunque directory sul server
   - se il file template non esiste sul VPS, le cause probabili sono: repo clonato in path diverso oppure clone GitHub non contiene ancora i file aggiunti localmente nel workspace
   - caso reale verificato su VPS `IONOS`: `/srv/auto-blog-project/infra/ops/systemd` contiene `autoblog-engine.service.example` ma non `autoblog-n8n.service.example`; quindi il clone server non ha ancora quel file e il service n8n va copiato manualmente o sincronizzato dal repo aggiornato
+  - dopo sync del repo e installazione del unit file, `systemctl enable --now autoblog-n8n` fallisce in start: diagnostica da fare su `systemctl status`, `journalctl -u autoblog-n8n`, permessi Docker per utente `autoblog` e validità di `/etc/autoblog/n8n.env`
+  - errore reale individuato: `docker compose` non riesce ad aprire `/etc/autoblog/n8n.env` (`permission denied`) perché il service gira come utente `autoblog`
+  - fix applicato lato VPS: `/etc/autoblog` e `/etc/autoblog/n8n.env` resi leggibili dal gruppo `autoblog` (`root:autoblog`, permessi `750` sulla directory e `640` sul file)
+- Template e runbook riallineati ai domini ops reali:
+  - `infra/ops/nginx/engine-and-factory.conf.example` usa ora `aiblogs.earningsites.net` e `n8n.earningsites.net`
+  - `infra/n8n/.env.example` usa ora host/URL reali per `n8n` e `CONTENT_ENGINE_URL=https://aiblogs.earningsites.net`
+  - `docs/deploy/ionos-vps-ops.md` non richiede più `sed` sui domini e include il fix permessi per `/etc/autoblog/n8n.env`
+  - `docs/deploy/pilot-lux-living-01.md`, `sites/lux-living-01/deploy-plan.md` e `docs/context.md` aggiornati con `https://aiblogs.earningsites.net` e `https://n8n.earningsites.net`
 
 ## Decisions
 - Pilot operativo fissato su `lux-living-01`.

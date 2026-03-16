@@ -100,6 +100,9 @@ This file stores durable project context shared across tasks.
   - nginx reverse proxy + private factory example: `infra/ops/nginx/engine-and-factory.conf.example`
 - Provider VPS baseline per il pilot ops: `IONOS VPS`; runbook step-by-step su `docs/deploy/ionos-vps-ops.md`.
 - `Hetzner Cloud` resta documentato come fallback tecnico.
+- Hostname ops production correnti:
+  - engine / portal / factory: `https://aiblogs.earningsites.net`
+  - n8n editor / webhook: `https://n8n.earningsites.net`
 - Pilot release checks read env files:
   - root: `.env.staging` / `.env.production`
   - n8n: `infra/n8n/.env.staging` / `infra/n8n/.env.production`

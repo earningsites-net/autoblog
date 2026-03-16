@@ -30,7 +30,7 @@
   - `vercel deploy apps/web --prod -y`
 - Deploy engine on VPS (systemd) and n8n on VPS (docker compose), both behind HTTPS.
 - Validate one-click factory flow in production:
-  - `node scripts/release/factory-launch-smoke.mjs --site lux-living-01 --base-url https://engine.example.com --root-env .env.production --execute --apply-sanity --run-prepopulate`
+  - `node scripts/release/factory-launch-smoke.mjs --site lux-living-01 --base-url https://aiblogs.earningsites.net --root-env .env.production --execute --apply-sanity --run-prepopulate`
 
 ## 5. Post go-live
 - Promote registry status:

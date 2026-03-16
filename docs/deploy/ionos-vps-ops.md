@@ -70,14 +70,14 @@ Nota operativa:
 
 Crea almeno questi record verso l'IPv4 del VPS:
 
-- `engine.tuodominio.com`
-- `n8n.tuodominio.com`
+- `aiblogs.earningsites.net`
+- `n8n.earningsites.net`
 
 Verifica:
 
 ```bash
-dig +short engine.tuodominio.com
-dig +short n8n.tuodominio.com
+dig +short aiblogs.earningsites.net
+dig +short n8n.earningsites.net
 ```
 
 ## 5. Primo accesso e hardening SSH
@@ -218,31 +218,37 @@ sudo mkdir -p /etc/autoblog
 sudo install -m 600 /tmp/engine.env /etc/autoblog/engine.env
 sudo install -m 600 /tmp/n8n.env /etc/autoblog/n8n.env
 rm /tmp/engine.env /tmp/n8n.env
+sudo chown root:autoblog /etc/autoblog
+sudo chmod 750 /etc/autoblog
+sudo chown root:autoblog /etc/autoblog/n8n.env
+sudo chmod 640 /etc/autoblog/n8n.env
 sudo mkdir -p /var/lib/autoblog
 sudo chown autoblog:autoblog /var/lib/autoblog
 ```
 
 Valori da allineare in `/etc/autoblog/engine.env`:
 
-- `PORTAL_BASE_URL=https://engine.tuodominio.com`
-- `NEXT_PUBLIC_PORTAL_BASE_URL=https://engine.tuodominio.com`
-- `ENGINE_PORT=8787`
+- `PORTAL_BASE_URL=https://aiblogs.earningsites.net`
 - `ENGINE_HOST=127.0.0.1`
 - `PORTAL_DB_PATH=/var/lib/autoblog/portal.db`
-- `SITE_SLUG=lux-living-01`
-- `NEXT_PUBLIC_SITE_SLUG=lux-living-01`
-- `PLAN_AUTOMATION_TRIGGER_URL=https://n8n.tuodominio.com/webhook/plan-automation`
-- `PREPOPULATE_TRIGGER_URL=https://n8n.tuodominio.com/webhook/factory-prepopulate`
+- `PLAN_AUTOMATION_TRIGGER_URL=https://n8n.earningsites.net/webhook/plan-automation`
+- `PREPOPULATE_TRIGGER_URL=https://n8n.earningsites.net/webhook/factory-prepopulate`
+
+Note:
+
+- `ENGINE_PORT=8787` è opzionale; l'engine usa gia quel default.
+- non impostare `SITE_SLUG` o `NEXT_PUBLIC_SITE_SLUG` nel root env dell'engine production: il runtime ops è multi-site.
+- `NEXT_PUBLIC_PORTAL_BASE_URL` va configurata sul web/Vercel, non è richiesta dal backend engine.
 
 Valori da allineare in `/etc/autoblog/n8n.env`:
 
-- `N8N_HOST=n8n.tuodominio.com`
+- `N8N_HOST=n8n.earningsites.net`
 - `N8N_PROTOCOL=https`
-- `WEBHOOK_URL=https://n8n.tuodominio.com/`
-- `N8N_EDITOR_BASE_URL=https://n8n.tuodominio.com/`
-- `CONTENT_ENGINE_URL=https://engine.tuodominio.com`
+- `WEBHOOK_URL=https://n8n.earningsites.net/`
+- `N8N_EDITOR_BASE_URL=https://n8n.earningsites.net/`
+- `CONTENT_ENGINE_URL=https://aiblogs.earningsites.net`
 - `WEB_APP_URL=https://lux-living-01.tuodominio.com`
-- `SITE_SLUG=lux-living-01`
+- `SITE_SLUG=` (opzionale; solo fallback legacy single-site)
 - `INTERNAL_API_TOKEN` identico al root env
 - `WEB_REVALIDATE_SECRET` identico a `REVALIDATE_SECRET`
 
@@ -276,6 +282,7 @@ curl -sS http://127.0.0.1:8787/v1/sites/lux-living-01/health
 
 ## 12. Service systemd n8n + postgres
 
+fino qui
 Installa il service dello stack n8n:
 
 ```bash
@@ -306,7 +313,7 @@ Prima del certificato, crea un vhost HTTP minimale:
 sudo tee /etc/nginx/sites-available/autoblog-ops-http >/dev/null <<'EOF'
 server {
   listen 80;
-  server_name engine.tuodominio.com;
+  server_name aiblogs.earningsites.net;
 
   location / {
     proxy_pass http://127.0.0.1:8787;
@@ -319,7 +326,7 @@ server {
 
 server {
   listen 80;
-  server_name n8n.tuodominio.com;
+  server_name n8n.earningsites.net;
 
   location / {
     proxy_pass http://127.0.0.1:5678;
@@ -342,7 +349,7 @@ sudo snap install core
 sudo snap refresh core
 sudo snap install --classic certbot
 sudo ln -sf /snap/bin/certbot /usr/local/bin/certbot
-sudo certbot --nginx -d engine.tuodominio.com -d n8n.tuodominio.com -m tua-email@dominio.com --agree-tos --no-eff-email --redirect
+sudo certbot --nginx -d aiblogs.earningsites.net -d n8n.earningsites.net -m info@earningsites.net --agree-tos --no-eff-email --redirect
 ```
 
 ## 15. Configurazione HTTPS definitiva
@@ -351,8 +358,6 @@ Installa la configurazione HTTPS di esempio solo dopo avere i certificati:
 
 ```bash
 sudo cp /srv/auto-blog-project/infra/ops/nginx/engine-and-factory.conf.example /etc/nginx/sites-available/autoblog-ops
-sudo sed -i 's/engine.example.com/engine.tuodominio.com/g' /etc/nginx/sites-available/autoblog-ops
-sudo sed -i 's/n8n.example.com/n8n.tuodominio.com/g' /etc/nginx/sites-available/autoblog-ops
 sudo ln -sf /etc/nginx/sites-available/autoblog-ops /etc/nginx/sites-enabled/autoblog-ops
 sudo rm -f /etc/nginx/sites-enabled/autoblog-ops-http
 sudo nginx -t
@@ -378,9 +383,9 @@ location /ops/factory {
 Verifica:
 
 ```bash
-curl -I https://engine.tuodominio.com
-curl -I https://n8n.tuodominio.com
-curl -sS https://engine.tuodominio.com/v1/sites/lux-living-01/health
+curl -I https://aiblogs.earningsites.net
+curl -I https://n8n.earningsites.net
+curl -sS https://aiblogs.earningsites.net/v1/sites/lux-living-01/health
 ```
 
 ## 16. Workflow import e smoke finale
@@ -404,15 +409,15 @@ sudo certbot renew --dry-run
 
 Verifica anche:
 
-- login portal su `https://engine.tuodominio.com/portal`
-- pagina `factory` su `https://engine.tuodominio.com/ops/factory`
-- editor `n8n` su `https://n8n.tuodominio.com`
+- login portal su `https://aiblogs.earningsites.net/portal`
+- pagina `factory` su `https://aiblogs.earningsites.net/ops/factory`
+- editor `n8n` su `https://n8n.earningsites.net`
 
 ## 17. Billing e cutover
 
 Quando l'engine e online su HTTPS:
 
-1. crea in Stripe Live il webhook `https://engine.tuodominio.com/api/billing/webhooks/stripe`
+1. crea in Stripe Live il webhook `https://aiblogs.earningsites.net/api/billing/webhooks/stripe`
 2. copia il signing secret `whsec_...` in `STRIPE_WEBHOOK_SECRET` dentro `/etc/autoblog/engine.env`
 3. riavvia l'engine:
 
@@ -424,5 +429,5 @@ sudo systemctl restart autoblog-engine
 
 ```bash
 cd /srv/auto-blog-project
-node scripts/release/factory-launch-smoke.mjs --site lux-living-01 --base-url https://engine.tuodominio.com --root-env .env.production
+node scripts/release/factory-launch-smoke.mjs --site lux-living-01 --base-url https://aiblogs.earningsites.net --root-env .env.production
 ```

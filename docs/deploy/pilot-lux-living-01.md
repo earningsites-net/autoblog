@@ -108,7 +108,7 @@ Run production smoke checks:
 ```bash
 node scripts/release/factory-launch-smoke.mjs \
   --site lux-living-01 \
-  --base-url https://engine.example.com \
+  --base-url https://aiblogs.earningsites.net \
   --root-env .env.production
 ```
 
@@ -117,7 +117,7 @@ Run production one-click launch validation:
 ```bash
 node scripts/release/factory-launch-smoke.mjs \
   --site lux-living-01 \
-  --base-url https://engine.example.com \
+  --base-url https://aiblogs.earningsites.net \
   --root-env .env.production \
   --execute \
   --apply-sanity \

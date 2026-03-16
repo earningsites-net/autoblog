@@ -40,3 +40,7 @@ Verifica:
 
 sudo systemctl status autoblog-engine --no-pager
 sudo systemctl status autoblog-n8n --no-pager
+
+# Login con username autoblog
+
+ssh -i ~/.ssh/autoblog_ionos autoblog@87.106.29.31

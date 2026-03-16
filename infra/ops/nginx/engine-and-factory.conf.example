@@ -1,12 +1,12 @@
 # Example reverse proxy for engine + private factory UI.
-# Replace domains and certificates before use.
+# TLS hostnames are set for the current production baseline.
 
 server {
   listen 443 ssl http2;
-  server_name engine.example.com;
+  server_name aiblogs.earningsites.net;
 
-  ssl_certificate     /etc/letsencrypt/live/engine.example.com/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/engine.example.com/privkey.pem;
+  ssl_certificate     /etc/letsencrypt/live/aiblogs.earningsites.net/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/aiblogs.earningsites.net/privkey.pem;
 
   client_max_body_size 10m;
 
@@ -35,10 +35,10 @@ server {
 
 server {
   listen 443 ssl http2;
-  server_name n8n.example.com;
+  server_name n8n.earningsites.net;
 
-  ssl_certificate     /etc/letsencrypt/live/n8n.example.com/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/n8n.example.com/privkey.pem;
+  ssl_certificate     /etc/letsencrypt/live/n8n.earningsites.net/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/n8n.earningsites.net/privkey.pem;
 
   location / {
     proxy_pass http://127.0.0.1:5678;
