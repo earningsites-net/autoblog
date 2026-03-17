@@ -235,7 +235,30 @@
   - riavviato con successo `autoblog-n8n`; container `autoblog-n8n` ora `Up`
   - verificato `n8n` operativo sia su `http://127.0.0.1:5678` che su `https://n8n.earningsites.net` (`200 OK`)
   - verificato test API key n8n con successo (`GET /api/v1/workflows?limit=1` -> `{"data":[],"nextCursor":null}`)
-  - `certbot renew --dry-run` resta da rieseguire: un tentativo diretto successivo ha risposto `Another instance of Certbot is already running`, ma senza processi/lock evidenti residui
+  - eseguito check servizi/applicazioni:
+    - `https://aiblogs.earningsites.net/v1/sites/lux-living-01/health` -> `ok:true`
+    - `https://aiblogs.earningsites.net/healthz` -> `ok:true`
+    - `https://aiblogs.earningsites.net/portal` -> `200`
+    - `https://aiblogs.earningsites.net/ops/factory` -> `403` da IP non allowlisted (atteso)
+    - `https://n8n.earningsites.net` -> `200`
+  - rieseguito import/smoke completo workflow su VPS con env production sourced: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`, `Overall: warn`
+  - i soli warning residui riguardano placeholder/TODO in:
+    - `budget_monitor_and_alerts`
+    - `topic_discovery_daily`
+  - `certbot renew --dry-run --no-random-sleep-on-renew` eseguito con successo sul VPS
+- Hardening portal multi-site completato:
+  - `apps/engine/src/index.ts`: il bootstrap admin non assegna più automaticamente tutti i blueprint in multi-site production
+  - nuovo comportamento: in multi-site non viene assegnato nulla di default; eventuali preassegnazioni passano da `PORTAL_BOOTSTRAP_SITE_SLUGS`
+  - `.env.example`, `docs/context.md` e `docs/deploy/ionos-vps-ops.md` aggiornati per documentare la nuova allowlist esplicita
+- Deploy diretto del fix engine sul VPS completato:
+  - aggiornato `/srv/auto-blog-project/apps/engine/src/index.ts`
+  - `autoblog-engine` riavviato con successo
+  - health confermata su `http://127.0.0.1:8787/healthz`
+- Cleanup portal DB production eseguito con backup:
+  - backup creato in `/var/lib/autoblog/backups`
+  - rimosse dal `site_access` dell'admin `info@earningsites.net` le assegnazioni bootstrap a `factory-smoke-demo`, `hammer-hearth`, `lux-living-01`
+  - verifica post-restart: `site_access` admin resta vuota (`[]`), quindi il nuovo bootstrap non reintroduce più i siti del repo
+  - verifica applicativa via login reale `portal` su VPS: `GET /api/portal/sites` ritorna `count=0`, `sites=[]`
 
 ## Decisions
 - Pilot operativo fissato su `lux-living-01`.
@@ -269,6 +292,11 @@
   - blueprint = configurazione editoriale/operativa del singolo sito su filesystem
   - registry = anagrafica/stato operativo cross-site su filesystem
   - SQLite del portal non è la fonte per `/v1/sites/:siteSlug/health`
+- Per il portal production multi-site:
+  - niente auto-assegnazione dell'admin a tutti i blueprint del repo
+  - i siti visibili al portal admin devono arrivare da provisioning esplicito (`maybeProvisionAdminAccess`) o da allowlist `PORTAL_BOOTSTRAP_SITE_SLUGS`
+- Per il cleanup production:
+  - rimosse solo le righe `site_access` dell'admin, senza cancellare `site_settings` o `entitlements`, per evitare perdita non necessaria di storico/config
 
 ## Next
 - Popolare `.env.staging`, `.env.production`, `infra/n8n/.env.staging`, `infra/n8n/.env.production` con segreti reali e domini.
@@ -329,6 +357,13 @@
 - Eseguire di nuovo `npm run release:pilot:check:production` con i nuovi criteri strict per-site (attesi meno falsi negativi legacy).
 - Reimportare il workflow `plan_generation_scheduler_worker` in n8n (`npm run n8n:import:changed`) e verificare che lo scheduler riceva target da `automation-targets`.
 - Ripulire progressivamente i workflow legacy che usano ancora fallback `SITE_SLUG` (publish/topic/budget) per convergere al modello multi-site puro.
+- Verificare dal browser che il portal admin risulti ora privo di siti preassegnati.
+- Eseguire un test E2E reale tramite Factory Ops creando un nuovo sito e verificando:
+  - blueprint/registry/env generated
+  - assegnazione portal admin
+  - import automazioni n8n
+  - reachability engine/factory/webhook
+- Dopo il test E2E reale, decidere se reassegnare manualmente `lux-living-01` al portal admin oppure lasciarlo solo come pilot web pubblico.
 
 ## Risks
 - I gate `release:pilot:check:*` assumono file env dedicati (`.env.staging/.env.production` e varianti n8n): senza questi file il check fallisce immediatamente.
@@ -347,3 +382,9 @@
 - `n8n.SITE_SLUG` resta ancora usato come default per trigger schedulati: se non valorizzato e non si usa trigger webhook per-sito, alcuni scheduler possono non partire.
 - Workflow legacy ancora presenti (`publish_scheduler_worker`, `topic_discovery_daily`, ecc.) usano fallback `SITE_SLUG`: se attivati in modalità schedule senza payload per-sito, richiedono ancora una strategia multi-site dedicata o un fallback configurato.
 - Rischio principale di incomprensione ridotto ma non azzerato finché restano workflow legacy con fallback `SITE_SLUG`.
+- Con il nuovo comportamento portal, i siti già esistenti fuori dal percorso factory non compariranno finché non verranno assegnati esplicitamente all'admin.
+- `engine.env` attuale contiene almeno un valore con caratteri speciali non quotati: il servizio systemd funziona, ma il `source /etc/autoblog/engine.env` da shell è fragile e va evitato o normalizzato.
+- Il clone Git sul VPS e ora dirty per:
+  - deploy diretto del fix su `apps/engine/src/index.ts`
+  - report/history generati da `docs/ops/n8n-flow-checks/*`
+  - prima del prossimo `git pull --ff-only` sul server va previsto un riallineamento esplicito.

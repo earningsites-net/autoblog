@@ -56,6 +56,7 @@ This file stores durable project context shared across tasks.
   - i `SANITY_*` nel root `.env` restano solo per preview locale `web/studio`.
 - Env conventions for ops production:
   - do not pin `SITE_SLUG` or enable `PORTAL_SINGLE_SITE_MODE` in root engine env for normal multi-site production.
+  - in multi-site production, leave `PORTAL_BOOTSTRAP_SITE_SLUGS` empty by default; use it only as an explicit allowlist for pre-existing portal-visible sites.
   - `NEXT_PUBLIC_PORTAL_BASE_URL` belongs to web/Vercel env; it is not required by engine runtime.
   - `ENGINE_PORT` is optional; engine defaults to `8787`.
 - Scheduler multi-site:

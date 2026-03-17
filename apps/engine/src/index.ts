@@ -51,10 +51,22 @@ async function bootstrapAdminAccessForKnownSites() {
     return;
   }
 
-  const sites = await siteRegistry.listSites();
-  for (const site of sites) {
-    const siteSlug = sanitizeSiteSlug(site.siteSlug);
-    if (!siteSlug) continue;
+  const configuredBootstrapSlugs = parseSiteSlugList(process.env.PORTAL_BOOTSTRAP_SITE_SLUGS || '');
+  if (configuredBootstrapSlugs.length === 0) {
+    return;
+  }
+
+  const knownSites = new Set(
+    (await siteRegistry.listSites())
+      .map((site) => sanitizeSiteSlug(site.siteSlug))
+      .filter(Boolean)
+  );
+
+  for (const siteSlug of configuredBootstrapSlugs) {
+    if (!knownSites.has(siteSlug)) {
+      app.log.warn({ siteSlug }, 'Skipping unknown portal bootstrap site slug');
+      continue;
+    }
     portalStore.assignSiteAccess(admin.user.id, siteSlug, 'owner');
   }
 }
@@ -117,6 +129,17 @@ function sanitizeSiteSlug(siteSlug: string) {
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function parseSiteSlugList(raw: string) {
+  return Array.from(
+    new Set(
+      String(raw || '')
+        .split(',')
+        .map((value) => sanitizeSiteSlug(value))
+        .filter(Boolean)
+    )
+  );
 }
 
 function getPortalBaseUrl() {

@@ -244,11 +244,13 @@ Valori da allineare in `/etc/autoblog/engine.env`:
 - `PORTAL_DB_PATH=/var/lib/autoblog/portal.db`
 - `PLAN_AUTOMATION_TRIGGER_URL=https://n8n.earningsites.net/webhook/plan-automation`
 - `PREPOPULATE_TRIGGER_URL=https://n8n.earningsites.net/webhook/factory-prepopulate`
+- `PORTAL_BOOTSTRAP_SITE_SLUGS=` (vuoto di default in multi-site production)
 
 Note:
 
 - `ENGINE_PORT=8787` è opzionale; l'engine usa gia quel default.
 - non impostare `SITE_SLUG` o `NEXT_PUBLIC_SITE_SLUG` nel root env dell'engine production: il runtime ops è multi-site.
+- non usare `PORTAL_BOOTSTRAP_SITE_SLUGS` per replicare il vecchio auto-grant globale: compilalo solo se vuoi preassegnare esplicitamente alcuni siti già esistenti al portal admin.
 - `NEXT_PUBLIC_PORTAL_BASE_URL` va configurata sul web/Vercel, non è richiesta dal backend engine.
 
 Valori da allineare in `/etc/autoblog/n8n.env`:
@@ -451,7 +453,7 @@ Controlli finali:
 systemctl status autoblog-engine --no-pager
 systemctl status autoblog-n8n --no-pager
 systemctl status nginx --no-pager
-sudo certbot renew --dry-run
+sudo certbot renew --dry-run --no-random-sleep-on-renew
 ```
 
 Verifica anche:
