@@ -595,6 +595,11 @@
     - valori esposti allo stato attuale: `generic-editorial-magazine`, `home-diy-magazine`
     - default mantenuto su `generic-editorial-magazine`
     - `npm run typecheck` rieseguito dopo il cambio -> OK
+  - commit/push/deploy del refinement UI Factory completati:
+    - commit `ce025f4` (`Refine factory blueprint controls`)
+    - production VPS aggiornato con `git pull --ff-only origin main`
+    - `autoblog-engine` riavviato con successo
+    - smoke `GET /api/factory/options` su production -> `200` con `blueprints=["generic-editorial-magazine","home-diy-magazine"]`
 
 ## Decisions
 - Per nicchie fuori catalogo il flusso corretto è:
