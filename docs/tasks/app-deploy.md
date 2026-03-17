@@ -572,6 +572,29 @@
     - `https://aiblogs.earningsites.net/v1/sites/couple-wellness/health` -> `ok:true`
     - `https://aiblogs.earningsites.net/portal` -> `200`
     - `https://n8n.earningsites.net/` -> `200`
+  - cleanup completo del test `couple-wellness` eseguito su production:
+    - backup esterno salvato in `/var/lib/autoblog/backups/couple-wellness-cleanup-20260317-180338`
+    - cancellati `140` documenti Sanity filtrati per `siteSlug=couple-wellness`
+    - rimosse le righe correlate in `site_access`, `site_settings`, `entitlements`, `published_article_events`
+    - rimossa entry da `sites/registry.json`
+    - rimossa directory `/srv/auto-blog-project/sites/couple-wellness`
+    - `https://couple-wellness.sanity.studio/` messo in undeploy
+    - verifica finale Sanity: `Total docs to delete: 0`
+  - riallineato il clone Git del VPS:
+    - `git fetch origin`
+    - `git reset --hard origin/main`
+    - `git clean -fd`
+    - `HEAD=75838e1`, `git status --short` pulito
+  - restart engine post-cleanup eseguito; `GET /v1/sites/couple-wellness/health` ritorna `ok:false` con `Site blueprint not found` (sito rimosso correttamente)
+  - piccola revisione UI su `/ops/factory`:
+    - `textarea` ora condividono lo stesso styling dark di `input/select`
+    - `Niche prompt`, `Categories`, `Seed topics` sono ora nella stessa riga a 3 colonne su desktop
+    - `npm run typecheck` rieseguito dopo il cambio UI -> OK
+  - campo `Blueprint` in `/ops/factory` convertito da `input` libero a `select`
+    - lista popolata via `/api/factory/options`
+    - valori esposti allo stato attuale: `generic-editorial-magazine`, `home-diy-magazine`
+    - default mantenuto su `generic-editorial-magazine`
+    - `npm run typecheck` rieseguito dopo il cambio -> OK
 
 ## Decisions
 - Per nicchie fuori catalogo il flusso corretto è:
@@ -580,13 +603,20 @@
   - compilare manualmente `Primary niche`, `Niche prompt`, `Categories`, `Seed topics`
 - I preset non sono più il centro della strategia editoriale; restano solo come shortcut retrocompatibile per alcuni verticali già modellati.
 - Finché il repo production ospita anche stato runtime, il deploy engine/n8n sul VPS va fatto con `git fetch origin` + `git checkout origin/main -- <file sorgente>` invece di `git pull --ff-only`.
+- Per rimuovere un sito di test fallito in production, la sequenza sicura è:
+  - backup esterno fuori repo
+  - cleanup Sanity per `siteSlug`
+  - cleanup portal DB + registry + directory `sites/<slug>`
+  - solo dopo `git reset --hard origin/main` / `git clean -fd` sul clone VPS
+- Il campo `Blueprint` resta necessario nel Factory finché non esiste una sintesi automatica che costruisce il template strutturale a partire dal solo prompt nicchia.
+- Dato che i blueprint/template disponibili sono oggi un set chiuso e piccolo, la UI del Factory deve esporli come `select`, non come `input` arbitrario.
 
 ## Next
-- Test E2E con un sito non preset-driven (es. AI blog) creato solo con blueprint generico + bootstrap manuale.
+- Test E2E pulito con un nuovo sito non preset-driven (es. AI blog) creato solo con blueprint generico + bootstrap manuale.
 - Ripassare il fallback category mapping di `article_generation_worker` se emergono pipeline che producono topic senza `categorySlug`.
 - Estrarre o desincronizzare dallo stato Git del VPS gli artefatti runtime (`sites/registry.json`, nuovi slug, report flow-guard`) per tornare a un deploy pulito con pull fast-forward.
 
 ## Risks
 - Il bootstrap manuale riduce l'accoppiamento coi preset, ma richiede disciplina operativa: categorie e seed topics scritti male produrranno contenuti incoerenti anche con prompt puliti.
 - `article_generation_worker` contiene ancora fallback category mapping legacy se `categorySlug` manca; il path principale è coperto, ma il fallback va ancora generalizzato.
-- Il clone Git sul VPS resta deliberatamente sporco perché contiene stato runtime e report operativi; senza pulizia architetturale del layout, i prossimi deploy continueranno a richiedere checkout mirati per non sovrascrivere dati live.
+- Anche se il clone VPS ora è pulito, il rischio architetturale resta: finché lo stato runtime viene scritto dentro il working tree (`sites/registry.json`, nuovi slug, report flow-guard`), i futuri deploy possono tornare a sporcare il repo di produzione.

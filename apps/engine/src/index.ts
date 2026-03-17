@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import Fastify from 'fastify';
 import { z } from 'zod';
+import { listBlueprintTemplateIds } from '@autoblog/blueprints';
 import { generationJobRequestSchema } from '@autoblog/factory-sdk';
 import { createWorkflowRunner } from './adapters/workflow-runners';
 import { AuthService } from './services/auth-service';
@@ -2928,6 +2929,7 @@ app.get('/api/factory/site/:siteSlug/status', async (req, reply) => {
 app.get('/api/factory/options', async (req, reply) => {
   if (!requireFactoryAccess(req, reply)) return;
   return {
+    blueprints: listBlueprintTemplateIds(),
     nichePresets: factoryOps.listNichePresets(),
     businessModes: ['transfer_first', 'managed'],
     themeTones: ['auto', 'editorial', 'luxury', 'wellness', 'playful', 'technical'],
@@ -3300,7 +3302,8 @@ app.get('/ops/factory', async (req, reply) => {
     .col-3{grid-column:span 3;}
     .col-12{grid-column:span 12;}
     label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;}
-    input,select,button{width:100%;box-sizing:border-box;background:#0f131a;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px 10px;}
+    input,select,textarea,button{width:100%;box-sizing:border-box;background:#0f131a;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px 10px;}
+    textarea{resize:vertical;min-height:120px;font:inherit;line-height:1.45;}
     button{cursor:pointer;font-weight:600;}
     button.primary{background:var(--accent);color:#041526;border-color:transparent;}
     button.secondary{background:#1f2733;}
@@ -3345,7 +3348,9 @@ app.get('/ops/factory', async (req, reply) => {
       <div class="row">
         <div class="col-3">
           <label>Blueprint</label>
-          <input id="blueprint" value="generic-editorial-magazine" />
+          <select id="blueprint">
+            <option value="generic-editorial-magazine">generic-editorial-magazine</option>
+          </select>
         </div>
         <div class="col-3">
           <label>Business mode</label>
@@ -3371,17 +3376,15 @@ app.get('/ops/factory', async (req, reply) => {
         </div>
       </div>
       <div class="row">
-        <div class="col-12">
+        <div class="col-4">
           <label>Niche prompt</label>
           <textarea id="nichePrompt" rows="10" placeholder="Describe the editorial niche, content scope, angles, tone, and exclusions."></textarea>
         </div>
-      </div>
-      <div class="row">
-        <div class="col-6">
+        <div class="col-4">
           <label>Categories (one per line)</label>
           <textarea id="categoryLabels" rows="6" placeholder="AI News&#10;AI Tools & Platforms&#10;Use Cases & Industry Insights"></textarea>
         </div>
-        <div class="col-6">
+        <div class="col-4">
           <label>Seed topics (one per line)</label>
           <textarea id="seedTopicLabels" rows="6" placeholder="AI tools comparison&#10;AI trends and developments&#10;Practical AI applications"></textarea>
         </div>
@@ -3650,6 +3653,18 @@ app.get('/ops/factory', async (req, reply) => {
         });
         if (!res.ok) return;
         const data = await res.json();
+        const blueprintSelect = document.getElementById('blueprint');
+        if (blueprintSelect && Array.isArray(data.blueprints) && data.blueprints.length) {
+          const currentValue = blueprintSelect.value || 'generic-editorial-magazine';
+          blueprintSelect.innerHTML = '';
+          for (const blueprintId of data.blueprints) {
+            const option = document.createElement('option');
+            option.value = blueprintId;
+            option.textContent = blueprintId;
+            blueprintSelect.appendChild(option);
+          }
+          blueprintSelect.value = data.blueprints.includes(currentValue) ? currentValue : 'generic-editorial-magazine';
+        }
       } catch {}
     })();
   </script>
