@@ -82,7 +82,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"model\": \"{{$env.TEXT_MODEL_DRAFT || 'gpt-4.1-mini'}}\", \"input\": [{\"role\":\"system\",\"content\":\"Return JSON brief with angle, audience, H2/H3 outline, faq ideas, entities. Home & DIY informational only.\"},{\"role\":\"user\",\"content\":\"Topic: {{$json.query}} | keyword: {{$json.targetKeyword}}\"}]}"
+        "jsonBody": "={\"model\": \"{{$env.TEXT_MODEL_DRAFT || 'gpt-4.1-mini'}}\", \"input\": [{\"role\":\"system\",\"content\":\"Return JSON brief with angle, audience, H2/H3 outline, faq ideas, and notable entities. The brief must be informational, publication-quality, niche-aware, and aligned with the site context provided in the topic.\"},{\"role\":\"user\",\"content\":\"Topic: {{$json.query}} | keyword: {{$json.targetKeyword}} | existing brief context: {{ JSON.stringify($json.brief || {}) }}\"}]}"
       }
     },
     {

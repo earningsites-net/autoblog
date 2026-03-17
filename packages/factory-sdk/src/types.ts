@@ -44,6 +44,7 @@ export type NichePolicyConfig = {
   allowedSubtopics: string[];
   excludedSubtopics: string[];
   scopeNotes?: string[];
+  editorialPrompt?: string;
   disclaimerVariants: Array<'general' | 'safety'>;
 };
 

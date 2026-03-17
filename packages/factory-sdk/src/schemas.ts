@@ -107,6 +107,7 @@ export const siteBlueprintSchema = z.object({
     allowedSubtopics: z.array(z.string()),
     excludedSubtopics: z.array(z.string()),
     scopeNotes: z.array(z.string()).optional(),
+    editorialPrompt: z.string().min(1).optional(),
     disclaimerVariants: z.array(z.enum(['general', 'safety']))
   }),
   categories: z.array(categorySeedSchema).min(1),

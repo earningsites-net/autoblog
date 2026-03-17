@@ -19,6 +19,10 @@ type CreateSiteInput = {
   locale?: string;
   businessMode?: 'transfer_first' | 'managed';
   nichePreset?: NichePresetId;
+  nichePrompt?: string;
+  primaryNiche?: string;
+  categoryLabels?: string[];
+  seedTopicLabels?: string[];
   themeTone?: 'auto' | 'editorial' | 'luxury' | 'wellness' | 'playful' | 'technical';
   themeRecipe?:
     | 'bold_magazine'
@@ -71,6 +75,10 @@ type LaunchSiteInput = {
   locale?: string;
   businessMode?: 'transfer_first' | 'managed';
   nichePreset?: NichePresetId;
+  nichePrompt?: string;
+  primaryNiche?: string;
+  categoryLabels?: string[];
+  seedTopicLabels?: string[];
   themeTone?: 'auto' | 'editorial' | 'luxury' | 'wellness' | 'playful' | 'technical';
   themeRecipe?:
     | 'bold_magazine'
@@ -117,6 +125,51 @@ type NichePreset = {
   allowedSubtopics: string[];
   excludedSubtopics: string[];
 };
+
+const DEFAULT_BLUEPRINT_ID = 'generic-editorial-magazine';
+const DEFAULT_NICHE_EXCLUSIONS = [
+  'Medical advice',
+  'Legal advice',
+  'Financial advice',
+  'Dangerous how-to instructions',
+  'Invented facts or unsupported claims'
+];
+
+function uniqueStrings(values: Array<string | undefined | null>) {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of values) {
+    const value = String(raw || '').trim().replace(/\s+/g, ' ');
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+function slugify(input: string) {
+  return String(input || '')
+    .toLowerCase()
+    .trim()
+    .replace(/["']/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
+function titleCase(input: string) {
+  return String(input || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function compactText(input: string, maxLength = 240) {
+  return String(input || '').trim().replace(/\s+/g, ' ').slice(0, maxLength);
+}
 
 const NICHE_PRESETS: Record<NichePresetId, NichePreset> = {
   home_diy: {
@@ -330,6 +383,150 @@ export class FactoryOpsService {
     }));
   }
 
+  private extractPromptBullets(prompt?: string, limit = 8) {
+    const lines = String(prompt || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const bullets = lines
+      .filter((line) => /^[-*•]\s+/.test(line))
+      .map((line) => line.replace(/^[-*•]\s+/, '').trim())
+      .filter(Boolean);
+
+    return uniqueStrings(bullets).slice(0, limit);
+  }
+
+  private derivePrimaryNiche(prompt?: string, explicitPrimaryNiche?: string) {
+    const explicit = compactText(explicitPrimaryNiche || '', 120);
+    if (explicit) return explicit;
+
+    const rawPrompt = String(prompt || '').trim();
+    if (!rawPrompt) return 'Editorial Magazine';
+
+    const focusMatch = rawPrompt.match(/focus(?:es)? on\s+(.+?)(?:[.\n]|$)/i);
+    if (focusMatch?.[1]) return titleCase(compactText(focusMatch[1], 120));
+
+    const lines = rawPrompt
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !/^[-*•]\s+/.test(line))
+      .filter((line) => !/:$/.test(line));
+
+    return titleCase(compactText(lines[0] || rawPrompt, 120)) || 'Editorial Magazine';
+  }
+
+  private buildSiteDescription(prompt?: string, primaryNiche?: string) {
+    const rawPrompt = String(prompt || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !/^[-*•]\s+/.test(line))
+      .join(' ');
+
+    const compact = compactText(rawPrompt, 220);
+    if (compact) return compact;
+    return `Editorial coverage focused on ${String(primaryNiche || 'a clearly defined niche').toLowerCase()}.`;
+  }
+
+  private synthesizeCategoryLabels(prompt?: string, primaryNiche?: string) {
+    const bulletTopics = this.extractPromptBullets(prompt, 6);
+    if (bulletTopics.length >= 3) return bulletTopics.slice(0, 3);
+
+    const base = titleCase(compactText(primaryNiche || 'Core Coverage', 80)) || 'Core Coverage';
+    return uniqueStrings([
+      ...bulletTopics,
+      base,
+      `${base} Guides`,
+      `${base} Analysis`
+    ]).slice(0, 3);
+  }
+
+  private buildCategorySeeds(labels: string[], primaryNiche: string) {
+    return uniqueStrings(labels)
+      .slice(0, 4)
+      .map((label, index) => {
+        const title = titleCase(compactText(label, 80));
+        return {
+          slug: slugify(title) || `category-${index + 1}`,
+          title,
+          description: `Editorial coverage of ${title.toLowerCase()} within ${primaryNiche.toLowerCase()}.`,
+          accent: (index % 2 === 0 ? 'rust' : 'sage') as 'rust' | 'sage'
+        };
+      });
+  }
+
+  private synthesizeSeedTopics(labels: string[], primaryNiche: string) {
+    const base = uniqueStrings(labels).slice(0, 4);
+    if (!base.length) {
+      return uniqueStrings([
+        `${primaryNiche} explained`,
+        `${primaryNiche} trends`,
+        `${primaryNiche} practical guide`,
+        `${primaryNiche} examples`
+      ]).slice(0, 6);
+    }
+
+    return uniqueStrings(
+      base.flatMap((label) => [
+        label,
+        `${label} explained`,
+        `${label} trends`,
+        `${label} practical guide`
+      ])
+    ).slice(0, 8);
+  }
+
+  private async applyCustomNicheConfig(siteSlug: string, input: Pick<CreateSiteInput, 'nichePrompt' | 'primaryNiche' | 'categoryLabels' | 'seedTopicLabels'>) {
+    const prompt = compactText(input.nichePrompt || '', 4000);
+    const manualCategories = uniqueStrings(input.categoryLabels || []);
+    const manualSeedTopics = uniqueStrings(input.seedTopicLabels || []);
+    const explicitPrimaryNiche = compactText(input.primaryNiche || '', 120);
+
+    if (!prompt && !explicitPrimaryNiche && !manualCategories.length && !manualSeedTopics.length) {
+      return { ok: true, applied: false };
+    }
+
+    const blueprintPath = path.join(this.workspaceRoot, 'sites', siteSlug, 'site.blueprint.json');
+    const raw = await fs.readFile(blueprintPath, 'utf8');
+    const blueprint = JSON.parse(raw) as Record<string, any>;
+
+    const primaryNiche = this.derivePrimaryNiche(prompt, explicitPrimaryNiche);
+    const categoryLabels = manualCategories.length ? manualCategories : this.synthesizeCategoryLabels(prompt, primaryNiche);
+    const categories = this.buildCategorySeeds(categoryLabels, primaryNiche);
+    const seedTopics = manualSeedTopics.length ? manualSeedTopics : this.synthesizeSeedTopics(categoryLabels, primaryNiche);
+    const allowedSubtopics = uniqueStrings([
+      ...categoryLabels,
+      ...seedTopics.slice(0, 5)
+    ]).slice(0, 10);
+    const existingExcluded = Array.isArray(blueprint?.niche?.excludedSubtopics) ? blueprint.niche.excludedSubtopics : [];
+    const excludedSubtopics = uniqueStrings([...existingExcluded, ...DEFAULT_NICHE_EXCLUSIONS]);
+
+    blueprint.niche = blueprint.niche || {};
+    blueprint.niche.primaryNiche = primaryNiche;
+    blueprint.niche.allowedSubtopics = allowedSubtopics;
+    blueprint.niche.excludedSubtopics = excludedSubtopics;
+    blueprint.niche.scopeNotes = uniqueStrings([
+      ...(Array.isArray(blueprint?.niche?.scopeNotes) ? blueprint.niche.scopeNotes : []),
+      'Use the configured niche prompt as editorial context.'
+    ]);
+    if (prompt) blueprint.niche.editorialPrompt = prompt;
+    blueprint.siteDescription = this.buildSiteDescription(prompt, primaryNiche);
+    blueprint.categories = categories;
+    blueprint.seedTopics = seedTopics;
+
+    await fs.writeFile(blueprintPath, `${JSON.stringify(blueprint, null, 2)}\n`, 'utf8');
+
+    return {
+      ok: true,
+      applied: true,
+      primaryNiche,
+      categoryCount: categories.length,
+      seedTopicCount: seedTopics.length
+    };
+  }
+
   private async pathExists(filePath: string) {
     try {
       await fs.access(filePath);
@@ -466,7 +663,7 @@ export class FactoryOpsService {
   }
 
   async createSite(input: CreateSiteInput) {
-    const args = ['new', input.siteSlug, '--blueprint', input.blueprint || 'home-diy-magazine'];
+    const args = ['new', input.siteSlug, '--blueprint', input.blueprint || DEFAULT_BLUEPRINT_ID];
     if (input.brandName) args.push('--brand-name', input.brandName);
     if (input.locale) args.push('--locale', input.locale);
     if (input.businessMode) args.push('--business-mode', input.businessMode);
@@ -478,6 +675,14 @@ export class FactoryOpsService {
     const niche = await this.applyNichePreset(input.siteSlug, input.nichePreset);
     if (!niche.ok) return { ok: false, step: 'niche-preset', create, niche };
 
+    const customNiche = await this.applyCustomNicheConfig(input.siteSlug, {
+      nichePrompt: input.nichePrompt,
+      primaryNiche: input.primaryNiche,
+      categoryLabels: input.categoryLabels,
+      seedTopicLabels: input.seedTopicLabels
+    });
+    if (!customNiche.ok) return { ok: false, step: 'custom-niche', create, niche, customNiche };
+
     const themeArgs = ['theme-generate', input.siteSlug];
     if (input.themeTone) themeArgs.push('--tone', input.themeTone);
     if (!input.themeTone && input.nichePreset) {
@@ -485,10 +690,10 @@ export class FactoryOpsService {
     }
     if (input.themeRecipe) themeArgs.push('--recipe', input.themeRecipe);
     const theme = await this.runAutoblog(themeArgs);
-    if (!theme.ok) return { ok: false, step: 'theme-generate', create, niche, theme };
+    if (!theme.ok) return { ok: false, step: 'theme-generate', create, niche, customNiche, theme };
 
     const provision = await this.runAutoblog(['provision-env', input.siteSlug, '--force']);
-    if (!provision.ok) return { ok: false, step: 'provision-env', create, niche, theme, provision };
+    if (!provision.ok) return { ok: false, step: 'provision-env', create, niche, customNiche, theme, provision };
 
     await this.applySiteRuntimeOverrides({
       siteSlug: input.siteSlug,
@@ -503,10 +708,10 @@ export class FactoryOpsService {
     });
 
     const initContent = await this.runAutoblog(['init-content', input.siteSlug]);
-    if (!initContent.ok) return { ok: false, step: 'init-content', create, niche, theme, provision, initContent };
+    if (!initContent.ok) return { ok: false, step: 'init-content', create, niche, customNiche, theme, provision, initContent };
 
     const seedCms = await this.runAutoblog(['seed-cms', input.siteSlug]);
-    if (!seedCms.ok) return { ok: false, step: 'seed-cms', create, niche, theme, provision, initContent, seedCms };
+    if (!seedCms.ok) return { ok: false, step: 'seed-cms', create, niche, customNiche, theme, provision, initContent, seedCms };
 
     const cmsMutationsFile = `sites/${input.siteSlug}/seed-content/sanity.mutations.json`;
     let cmsApplied: CommandResult | null = null;
@@ -519,6 +724,7 @@ export class FactoryOpsService {
           error: 'Missing SANITY_PROJECT_ID or SANITY_WRITE_TOKEN for this site',
           create,
           niche,
+          customNiche,
           theme,
           provision,
           initContent,
@@ -532,6 +738,7 @@ export class FactoryOpsService {
           step: 'sanity-apply-cms',
           create,
           niche,
+          customNiche,
           theme,
           provision,
           initContent,
@@ -544,7 +751,7 @@ export class FactoryOpsService {
     return {
       ok: true,
       siteSlug: input.siteSlug,
-      steps: { create, niche, theme, provision, initContent, seedCms, cmsApplied }
+      steps: { create, niche, customNiche, theme, provision, initContent, seedCms, cmsApplied }
     };
   }
 
@@ -660,6 +867,10 @@ export class FactoryOpsService {
       locale: input.locale,
       businessMode: input.businessMode,
       nichePreset: input.nichePreset,
+      nichePrompt: input.nichePrompt,
+      primaryNiche: input.primaryNiche,
+      categoryLabels: input.categoryLabels,
+      seedTopicLabels: input.seedTopicLabels,
       themeTone: input.themeTone,
       themeRecipe: input.themeRecipe,
       applyCmsMutations: input.applySanity,
@@ -701,9 +912,13 @@ export class FactoryOpsService {
       ok: true,
       siteSlug: input.siteSlug,
       input: {
-        blueprint: input.blueprint || 'home-diy-magazine',
+        blueprint: input.blueprint || DEFAULT_BLUEPRINT_ID,
         businessMode: input.businessMode || 'transfer_first',
         nichePreset: input.nichePreset || null,
+        primaryNiche: input.primaryNiche || null,
+        nichePromptConfigured: Boolean(input.nichePrompt),
+        categoryCount: Array.isArray(input.categoryLabels) ? input.categoryLabels.length : 0,
+        seedTopicCount: Array.isArray(input.seedTopicLabels) ? input.seedTopicLabels.length : 0,
         topicCount: input.topicCount ?? 60,
         topicSource: input.topicSource ?? 'suggest',
         applySanity: Boolean(input.applySanity),

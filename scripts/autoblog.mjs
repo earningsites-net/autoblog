@@ -18,7 +18,7 @@ Usage:
   autoblog seed-cms <site-slug>
   autoblog seed-topics <site-slug> [--count 30] [--status brief_ready] [--replace] [--source suggest|synthetic]
   autoblog discover-topics <site-slug> [--count 30] [--status brief_ready] [--replace] [--source suggest|synthetic]
-  autoblog launch-site <site-slug> [--blueprint home-diy-magazine] [--brand-name "Brand"] [--topic-count 60] [--source suggest|synthetic] [--theme-tone auto|editorial|luxury|wellness|playful|technical] [--theme-recipe <recipe>] [--apply-sanity]
+  autoblog launch-site <site-slug> [--blueprint generic-editorial-magazine] [--brand-name "Brand"] [--topic-count 60] [--source suggest|synthetic] [--theme-tone auto|editorial|luxury|wellness|playful|technical] [--theme-recipe <recipe>] [--apply-sanity]
   autoblog release-site <site-slug> [--from-sanity]
   autoblog deploy <site-slug>
   autoblog doctor <site-slug>
@@ -404,6 +404,7 @@ function inferThemeTone(blueprint) {
     blueprint.brandName,
     blueprint.siteDescription,
     blueprint.niche?.primaryNiche,
+    blueprint.niche?.editorialPrompt,
     ...(Array.isArray(blueprint.niche?.allowedSubtopics) ? blueprint.niche.allowedSubtopics : []),
     ...(Array.isArray(blueprint.categories) ? blueprint.categories.flatMap((category) => [category.title, category.description]) : []),
     ...(Array.isArray(blueprint.seedTopics) ? blueprint.seedTopics : [])
@@ -517,25 +518,29 @@ function inferTemplateType(query) {
   return 'tips';
 }
 
+function getEditorialPrompt(blueprint) {
+  return String(blueprint?.niche?.editorialPrompt || '').trim();
+}
+
 function buildBriefOutline(query, templateType) {
-  const title = String(query || 'home and diy topic');
+  const title = String(query || 'editorial topic');
   if (templateType === 'checklist') {
     return [
       `## What to prepare before you start`,
       `## Checklist for ${title}`,
-      `### Quick wins first`,
-      `### Keep it renter-friendly and low-cost`,
+      `### Highest-impact priorities`,
+      `### Practical considerations`,
       `## Common mistakes to avoid`,
-      `## Simple maintenance plan`
+      `## How to keep momentum after the first step`
     ].join('\n');
   }
   if (templateType === 'list') {
     return [
-      `## Start with the easiest improvements`,
-      `## Best ${title} options for beginners`,
-      `### Low-cost ideas`,
-      `### Small-space friendly ideas`,
-      `## How to maintain the setup`,
+      `## Start with the strongest options`,
+      `## Best ${title} approaches`,
+      `### Foundational ideas`,
+      `### Advanced or differentiated angles`,
+      `## How to apply the insight in practice`,
       `## Mistakes to avoid`
     ].join('\n');
   }
@@ -550,23 +555,29 @@ function buildBriefOutline(query, templateType) {
     ].join('\n');
   }
   return [
-    `## Start simple with the biggest impact`,
-    `## Practical ${title} tips for beginners`,
-    `### Budget-friendly options`,
-    `### Small-space or renter-friendly options`,
+    `## Start with the core idea`,
+    `## Practical ${title} guidance`,
+    `### Strong examples and scenarios`,
+    `### Tradeoffs or edge cases`,
     `## What to avoid`,
-    `## Easy routine to maintain results`
+    `## How to keep improving over time`
   ].join('\n');
 }
 
-function buildTopicBrief(query, templateType) {
+function buildTopicBrief(query, templateType, blueprint) {
+  const primaryNiche = String(blueprint?.niche?.primaryNiche || blueprint?.brandName || 'the publication').trim();
+  const editorialPrompt = getEditorialPrompt(blueprint);
+  const nicheClause = editorialPrompt
+    ? `Align the framing with this editorial context: ${editorialPrompt}`
+    : `Keep the framing aligned with the publication focus on ${primaryNiche}.`;
+
   return {
-    angle: 'Practical, beginner-friendly, low-cost improvements with minimal tools and no advanced repairs.',
-    audience: 'Beginners, renters, and homeowners looking for simple home and DIY improvements.',
+    angle: `Deliver useful, specific, publication-quality coverage of ${query}. ${nicheClause}`,
+    audience: `Readers interested in ${primaryNiche} who expect clear, relevant, well-structured coverage.`,
     outlineMarkdown: buildBriefOutline(query, templateType),
     faqIdeas: [
-      `What is the easiest way to start ${query}?`,
-      `How can I keep costs low for ${query}?`,
+      `What should readers understand first about ${query}?`,
+      `What are the most useful examples or use cases for ${query}?`,
       `What mistakes should I avoid with ${query}?`
     ]
   };
@@ -575,21 +586,20 @@ function buildTopicBrief(query, templateType) {
 function generateTopicQueries(seedTopics, targetCount) {
   const modifiers = [
     'for beginners',
-    'for small spaces',
-    'for renters',
-    'on a budget',
+    'explained clearly',
+    'best practices',
     'step by step',
     'mistakes to avoid',
-    'easy wins',
-    'that are easy to maintain',
-    'for apartments'
+    'examples',
+    'use cases',
+    'trends'
   ];
 
   const prefixes = [
     'simple',
     'practical',
     'beginner-friendly',
-    'low-cost'
+    'expert'
   ];
 
   const perSeedVariants = [];
@@ -834,14 +844,14 @@ async function discoverTopicQueriesByCategory({
   return output.slice(0, targetCount);
 }
 
-function buildTopicCandidateDoc(siteSlug, query, index, status, workflowRunId, categorySlug) {
+function buildTopicCandidateDoc(siteSlug, query, index, status, workflowRunId, categorySlug, blueprint) {
   const normalizedQuery = String(query).trim();
   const templateType = inferTemplateType(normalizedQuery);
   const targetKeyword = normalizedQuery;
   const supportingKeywords = uniqueStrings([
     `${normalizedQuery} for beginners`,
     `${normalizedQuery} checklist`,
-    `${normalizedQuery} budget tips`
+    `${normalizedQuery} examples`
   ]).slice(0, 3);
 
   return {
@@ -857,7 +867,7 @@ function buildTopicCandidateDoc(siteSlug, query, index, status, workflowRunId, c
     categorySlug: categorySlug || undefined,
     evergreenScore: 75,
     riskScore: 10,
-    brief: buildTopicBrief(normalizedQuery, templateType),
+    brief: buildTopicBrief(normalizedQuery, templateType, blueprint),
     workflowRunId
   };
 }
@@ -1037,7 +1047,7 @@ function serializeEnv(envMap) {
 
 function commandNew(siteSlug, flags) {
   if (!siteSlug) throw new Error('Missing <site-slug>');
-  const templateId = String(flags.blueprint || 'home-diy-magazine');
+  const templateId = String(flags.blueprint || 'generic-editorial-magazine');
   const templatePath = resolveTemplatePath(templateId);
   if (!exists(templatePath)) {
     throw new Error(`Unknown blueprint template '${templateId}'. Try: ${listBlueprintTemplates().join(', ')}`);
@@ -1449,7 +1459,7 @@ async function commandSeedTopics(siteSlug, flags) {
   const workflowRunId = `seed-topics-${new Date().toISOString()}`;
   const safeSiteSlug = sanitizeSiteSlug(siteSlug);
   const docs = discovered
-    .map((item, index) => buildTopicCandidateDoc(safeSiteSlug, item.query, index, status, workflowRunId, item.categorySlug))
+    .map((item, index) => buildTopicCandidateDoc(safeSiteSlug, item.query, index, status, workflowRunId, item.categorySlug, blueprint))
     .slice(0, count);
 
   const mutationOp = flags.replace ? 'createOrReplace' : 'createIfNotExists';
@@ -1496,7 +1506,7 @@ async function commandSeedTopics(siteSlug, flags) {
 async function commandLaunchSite(siteSlug, flags) {
   if (!siteSlug) throw new Error('Missing <site-slug>');
 
-  const blueprint = String(flags.blueprint || 'home-diy-magazine');
+  const blueprint = String(flags.blueprint || 'generic-editorial-magazine');
   const topicCount = Math.max(1, Number(flags['topic-count'] || 60));
   const source = String(flags.source || 'suggest');
   const applySanity = Boolean(flags['apply-sanity']);

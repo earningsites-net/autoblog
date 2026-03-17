@@ -1,7 +1,7 @@
 # Brief Generation Prompt v1
 
 ## Goal
-Turn a topic candidate into a structured editorial brief for an EN-US Home & DIY article.
+Turn a topic candidate into a structured editorial brief for an EN-US professional digital magazine article.
 
 ## Required Output
 JSON with:
@@ -15,4 +15,4 @@ JSON with:
 ## Constraints
 - Informational only
 - No risky claims
-- Practical, beginner-safe framing
+- Clear, useful, niche-aware framing

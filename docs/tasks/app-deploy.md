@@ -4,6 +4,10 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Valutato il fit del flusso attuale per un sito automatico a tema `AI news`:
+  - pipeline presente end-to-end (`topic` -> `brief` -> `article`), ma oggi specializzata su `Home & DIY` evergreen
+  - discovery topic supporta `suggest` via Google Suggest e fallback `synthetic`, quindi non dipende da feed news live
+  - prompt/runtime n8n restano hardcoded su `Home & DIY informational`, quindi il cambio nicchia non è solo di branding/tema
 - Impostato task attivo su `app-deploy` (`docs/tasks/_active.md`).
 - Aggiunti script operativi di rilascio:
   - `scripts/release/init-env-files.sh` (bootstrap env staging/production)
@@ -259,6 +263,49 @@
   - rimosse dal `site_access` dell'admin `info@earningsites.net` le assegnazioni bootstrap a `factory-smoke-demo`, `hammer-hearth`, `lux-living-01`
   - verifica post-restart: `site_access` admin resta vuota (`[]`), quindi il nuovo bootstrap non reintroduce più i siti del repo
   - verifica applicativa via login reale `portal` su VPS: `GET /api/portal/sites` ritorna `count=0`, `sites=[]`
+- Allineamento Git eseguito sul repo locale:
+  - commit creato: `531a1f8 Fix portal bootstrap site assignments`
+  - push completato su `origin/main`
+  - fuori commit restano solo i file SQLite temporanei locali `apps/engine/data/portal.db-shm` e `apps/engine/data/portal.db-wal`
+- Diagnosi E2E factory reale su `couple-wellness`:
+  - `launch` ha completato con successo i passi `create-site`, `niche`, `theme`, `provision`, `init-content`, `seed-cms`, `applySanity`, `discover-topics`
+  - fallimento localizzato solo su `prepopulate`: `404` dal webhook production `factory-prepopulate`
+  - root cause verificata su VPS: workflow n8n `prepopulate_bulk_runner` importato ma `inactive`
+  - attivati via API n8n i workflow webhook-driven:
+    - `prepopulate_bulk_runner`
+    - `plan_generation_scheduler_worker`
+  - verifica stato runtime del sito su VPS:
+    - `sites/registry.json` contiene gia `couple-wellness`
+    - `sites/couple-wellness/.env.generated` e gia presente con credenziali Sanity valide
+    - il sito va quindi rilanciato come retry con `Force overwrite`, non come prima creazione
+- Verifica attivazione workflow n8n production completata:
+  - attivi al momento:
+    - `plan_generation_scheduler_worker`
+    - `prepopulate_bulk_runner`
+  - inattivi al momento:
+    - `article_generation_worker`
+    - `brief_generation_worker`
+    - `budget_monitor_and_alerts`
+    - `engine_pipeline_trigger`
+    - `image_generation_worker`
+    - `internal_link_refresh`
+    - `publish_scheduler_worker`
+    - `qa_scoring_and_publish_worker`
+    - `topic_discovery_daily`
+  - conclusione operativa: non attivare tutto indiscriminatamente; i worker `Execute Workflow Trigger` possono restare inattivi, mentre gli scheduler/webhook vanno attivati solo se fanno davvero parte del runtime desiderato
+- Correzione webhook engine production completata:
+  - root cause del `404` factory confermata: `/etc/autoblog/engine.env` puntava ancora a URL webhook n8n legacy con workflow IDs obsoleti
+  - primo tentativo di switch ai path published `/webhook/factory-prepopulate` e `/webhook/plan-automation` non ha funzionato: n8n continuava a non registrarli
+  - diagnosi completata su Postgres n8n:
+    - `webhook_entity` contiene solo path draft con workflow ID nel mezzo
+    - `workflow_published_version` e vuota
+  - webhook reali verificati con `curl`:
+    - `https://n8n.earningsites.net/webhook/kxgzGonI286ZGpao/webhook%2520trigger/factory-prepopulate`
+    - `https://n8n.earningsites.net/webhook/hV5sUOLtf4ih8wLP/webhook%2520trigger/plan-automation`
+  - `PREPOPULATE_TRIGGER_URL` aggiornato su VPS al path draft reale del workflow `prepopulate_bulk_runner`
+  - `PLAN_AUTOMATION_TRIGGER_URL` aggiornato su VPS al path draft reale del workflow `plan_generation_scheduler_worker`
+  - `autoblog-engine` riavviato e verificato `healthz`
+  - `.env.production` locale riallineato agli stessi path webhook reali, per evitare di reintrodurre gli URL vecchi al prossimo sync
 
 ## Decisions
 - Pilot operativo fissato su `lux-living-01`.
@@ -353,6 +400,9 @@
 - Decisione proposta:
   - breve termine: completare pilot con progetto Sanity condiviso + hardening query per `siteSlug`.
   - medio termine: introdurre isolamento forte per cliente (project Sanity per sito o n8n per-tenant).
+- Per un verticale `AI news` non perfettamente aggiornato:
+  - il flusso attuale è riusabile come base editoriale/semi-news
+  - servono almeno blueprint, categorie, seed topics e prompt dedicati alla nicchia AI; senza questi il sistema continuerà a produrre output in stile `Home & DIY`
 - Eseguire bootstrap engine su VPS con `ENGINE_PORT=8787`, systemd + reverse proxy HTTPS, poi validare `health` e accesso portal.
 - Eseguire di nuovo `npm run release:pilot:check:production` con i nuovi criteri strict per-site (attesi meno falsi negativi legacy).
 - Reimportare il workflow `plan_generation_scheduler_worker` in n8n (`npm run n8n:import:changed`) e verificare che lo scheduler riceva target da `automation-targets`.
@@ -364,6 +414,10 @@
   - import automazioni n8n
   - reachability engine/factory/webhook
 - Dopo il test E2E reale, decidere se reassegnare manualmente `lux-living-01` al portal admin oppure lasciarlo solo come pilot web pubblico.
+- Se si apre il task verticale `AI news`, fare prima questi adattamenti minimi:
+  - nuovo blueprint/template per AI
+  - prompt `topic/brief/article` non più hardcoded `Home & DIY`
+  - definizione della policy editoriale: recap/news analysis/roundup invece di news factual in tempo reale
 
 ## Risks
 - I gate `release:pilot:check:*` assumono file env dedicati (`.env.staging/.env.production` e varianti n8n): senza questi file il check fallisce immediatamente.
@@ -388,3 +442,141 @@
   - deploy diretto del fix su `apps/engine/src/index.ts`
   - report/history generati da `docs/ops/n8n-flow-checks/*`
   - prima del prossimo `git pull --ff-only` sul server va previsto un riallineamento esplicito.
+- `couple-wellness` esiste gia in production clone e registry anche se il `launch` non ha completato il post-step portal; un retry senza `Force overwrite` fallira o restera ambiguo.
+- Se si usa il flusso attuale su `AI news` senza adattare prompt e blueprint, l'AI tenderà a generare contenuti fuori nicchia oppure pseudo-news non affidabili/stale.
+- Gli ID `N8N_WORKFLOW_ID_*` possono diventare stantii dopo import bootstrap su istanze n8n nuove; senza riallineamento gli orchestratori falliscono con `Workflow does not exist`.
+
+## Done
+- E2E Factory reale `couple-wellness` completato lato factory:
+  - `Launch Site (One Click)` ha chiuso con `ok:true`
+  - `ownerProvisioned=true` per `d.ciamprone@gmail.com`
+  - portal verificato: `couple-wellness` ora compare come sito `owner`
+- Diagnosi errore runtime nel nodo `Run article_generation_worker`:
+  - errore n8n verificato su execution `206`: `Workflow does not exist`
+  - causa: `/etc/autoblog/n8n.env` aveva ID stale per `N8N_WORKFLOW_ID_ARTICLE_GENERATION|IMAGE_GENERATION|QA_PUBLISH`
+  - ID reali verificati via API n8n production:
+    - `article_generation_worker=P8zuzSfblYcrH3PA`
+    - `image_generation_worker=vn06sSxBlwZ1xfNb`
+    - `qa_scoring_and_publish_worker=GdOE2HirPcw9DpU8`
+  - fix applicato sul VPS e riallineato anche `infra/n8n/.env.production` locale
+- Diagnosi secondo blocco a valle:
+  - execution `211` mostrava `Workflow is not active and cannot be executed`
+  - attivati sul VPS i tre worker `article_generation_worker`, `image_generation_worker`, `qa_scoring_and_publish_worker`
+- Diagnosi e fix separato sul planner:
+  - execution `220` del `plan_generation_scheduler_worker` falliva su `Build scheduled payload` con `Unexpected token 'if'`
+  - causa a codice: regex corrotta `replace(//$/, '')` in `infra/n8n/workflows/plan_generation_scheduler_worker.json`
+  - fix applicato nel repo, workflow copiato sul VPS e reimportato con `npm run n8n:import:changed`
+  - verifica runtime: execution `242` del planner `success`
+  - verifica worker chain dopo il fix: execution `232` (`article_generation_worker`), `241` (`image_generation_worker`) e molte execution `qa_scoring_and_publish_worker` `success`
+- Verifica contenuti reali su Sanity per `couple-wellness`:
+  - dataset interrogato direttamente sul VPS con le credenziali del sito (`q1kgerq4 / production`)
+  - conteggi articoli:
+    - `draft=0`
+    - `ready_to_publish=0`
+    - `published=33`
+    - `rejected_auto=0`
+  - campione ultimi pubblicati conferma `publishedAt`, `qaScore=75` e `coverImage` presente
+- Tentativo deploy `Sanity Studio` per `couple-wellness` avviato:
+  - deploy locale provato con `SANITY_STUDIO_PROJECT_ID=q1kgerq4`, `SANITY_STUDIO_DATASET=production`, `SANITY_STUDIO_SITE_SLUG=couple-wellness`
+  - blocco attuale: CLI Sanity non autenticato (`sanity deploy` richiede prima `sanity login`)
+- Deploy `Sanity Studio` completato:
+  - aggiornato `apps/studio/sanity.cli.ts` per supportare `SANITY_STUDIO_HOSTNAME`
+  - login CLI Sanity eseguito nel `XDG_CONFIG_HOME` usato dal progetto
+  - Studio deployato con successo a `https://couple-wellness.sanity.studio/`
+  - URL collegata sul VPS a `couple-wellness` in:
+    - `sites/couple-wellness/.env.generated`
+    - `sites/registry.json`
+
+## Decisions
+- In questa istanza n8n production, i worker richiamati via `Execute Workflow` devono essere sia referenziati con gli ID reali dell'istanza sia attivi; non basta importarli.
+
+## Next
+- Verificare il sito pubblico del nuovo slug una volta definito il deploy web dedicato.
+- Dopo il primo login CLI Sanity, automatizzare il deploy Studio con `SANITY_AUTH_TOKEN` e naming deploy stabile.
+- Verificare da browser che `Publishing Controls (Sanity)` nel portal apra correttamente `https://couple-wellness.sanity.studio/`.
+
+## Risks
+- Il `plan_generation_scheduler_worker` continua a produrre execution `error` ogni minuto finché non viene verificato dopo il fix dei worker; potrebbe avere un blocco ulteriore indipendente dal prepopulate.
+- Il planner è stato corretto e verificato `success` manualmente, ma resta da confermare il comportamento del webhook `prepopulate_bulk_runner`, che nelle ultime execution storiche registrate risulta ancora con soli run `error`.
+- Senza login CLI o `SANITY_AUTH_TOKEN`, il deploy dello Studio non è automatizzabile e resta dipendente da autenticazione manuale dell'operatore.
+- Audit contenuti multi-nicchia eseguito dopo il launch reale `couple-wellness`:
+  - il problema fuori tema non nasce solo dai prompt article/image, ma già dalla generazione `brief_ready` in `scripts/autoblog.mjs`
+  - hardcode Home & DIY rilevati in:
+    - `scripts/autoblog.mjs` (`buildBriefOutline`, `buildTopicBrief`, `generateTopicQueries`)
+    - `infra/n8n/workflows/brief_generation_worker.json`
+    - `infra/n8n/workflows/article_generation_worker.json`
+    - `infra/n8n/workflows/image_generation_worker.json`
+    - `infra/n8n/workflows/topic_discovery_daily.json`
+    - `apps/engine/src/adapters/workflow-runners.ts` (stub/mock output)
+- `nichePreset` in Factory non è solo un prompt selector:
+  - oggi popola anche `primaryNiche`, `siteDescription`, `categories`, `seedTopics`, `allowedSubtopics`, `excludedSubtopics`
+  - una rimozione diretta della select senza sostituto romperebbe il bootstrap strutturale dei nuovi siti
+
+## Decisions
+- Direzione raccomandata per rendere il sistema davvero multi-nicchia:
+  - fase 1: introdurre `NICHE_PROMPT` end-to-end e rimuovere gli hardcode DIY dai generatori mantenendo temporaneamente i preset per bootstrap strutturale
+  - fase 2: sostituire `nichePreset` con sintesi guidata da prompt (categorie, seed topics, allowed/excluded subtopics) o con un nuovo profilo sito generato
+
+## Next
+- Correggere prima i punti editoriali più tossici per l'output:
+  - `scripts/autoblog.mjs` per eliminare `renters/homeowners/low-cost/budget/apartments`
+  - prompt system in `brief_generation_worker`, `article_generation_worker`, `image_generation_worker`, `topic_discovery_daily`
+  - fallback category/image prompt in `article_generation_worker` e `image_generation_worker`
+- Disegnare il payload/shape del nuovo `NICHE_PROMPT` in Factory senza togliere subito il ruolo strutturale dei preset.
+
+## Risks
+- Se si sostituisce subito `nichePreset` con una textarea senza un layer che generi categorie/seed topics, il sito viene creato ma con struttura editoriale incompleta o incoerente.
+- Anche dopo la pulizia dei prompt n8n, `scripts/autoblog.mjs` continuerà a contaminare discovery/brief finché non viene reso neutro o guidato dal nuovo `NICHE_PROMPT`.
+
+## Done
+- Implementato bootstrap multi-nicchia senza dipendenza operativa dai preset:
+  - nuovo blueprint template `sites/templates/generic-editorial-magazine/site.blueprint.template.json`
+  - mirror in `packages/blueprints/src/index.ts`
+  - default blueprint spostato da `home-diy-magazine` a `generic-editorial-magazine` in Factory UI e script `autoblog`
+- Esteso il modello blueprint:
+  - `packages/factory-sdk/src/types.ts` + `packages/factory-sdk/src/schemas.ts`
+  - nuovo campo `niche.editorialPrompt`
+- Refactor Factory UI e API:
+  - rimossa la select `Niche preset` dalla pagina `ops/factory`
+  - aggiunti campi `Primary niche`, `Niche prompt`, `Categories`, `Seed topics`
+  - payload/backend aggiornati in `apps/engine/src/index.ts`
+- Refactor `FactoryOpsService`:
+  - supporto `nichePrompt`, `primaryNiche`, `categoryLabels`, `seedTopicLabels`
+  - aggiunto bootstrap custom che scrive nel blueprint:
+    - `niche.primaryNiche`
+    - `niche.editorialPrompt`
+    - `categories`
+    - `seedTopics`
+    - `allowedSubtopics`
+    - `excludedSubtopics`
+  - i preset restano retrocompatibili ma vengono superati dal custom niche se presente
+- Puliti gli hardcode editoriali più tossici:
+  - `scripts/autoblog.mjs` non genera più `renters/homeowners/low-cost/on a budget/for apartments`
+  - prompt docs aggiornati in `docs/prompts/*.md`
+  - stub diretti aggiornati in `apps/engine/src/adapters/workflow-runners.ts`
+- Workflow n8n riallineati:
+  - `infra/n8n/workflows/brief_generation_worker.json`
+  - `infra/n8n/workflows/article_generation_worker.json`
+  - `infra/n8n/workflows/image_generation_worker.json`
+  - `infra/n8n/workflows/topic_discovery_daily.json`
+  - rimossi i prompt `Home & DIY` e il prompt immagine casa-only; seed/topic discovery fallback resi neutri
+- Verifiche:
+  - `npm run typecheck` -> OK
+  - `node --check scripts/autoblog.mjs` -> OK
+  - parse JSON dei workflow/template modificati -> OK
+
+## Decisions
+- Per nicchie fuori catalogo il flusso corretto è:
+  - usare `generic-editorial-magazine`
+  - lasciare vuoto il preset
+  - compilare manualmente `Primary niche`, `Niche prompt`, `Categories`, `Seed topics`
+- I preset non sono più il centro della strategia editoriale; restano solo come shortcut retrocompatibile per alcuni verticali già modellati.
+
+## Next
+- Reimportare su production i workflow n8n modificati e riallineare l'istanza VPS.
+- Test E2E con un sito non preset-driven (es. AI blog) creato solo con blueprint generico + bootstrap manuale.
+- Ripassare il fallback category mapping di `article_generation_worker` se emergono pipeline che producono topic senza `categorySlug`.
+
+## Risks
+- Il bootstrap manuale riduce l'accoppiamento coi preset, ma richiede disciplina operativa: categorie e seed topics scritti male produrranno contenuti incoerenti anche con prompt puliti.
+- `article_generation_worker` contiene ancora fallback category mapping legacy se `categorySlug` manca; il path principale è coperto, ma il fallback va ancora generalizzato.

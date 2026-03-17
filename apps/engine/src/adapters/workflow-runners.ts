@@ -28,8 +28,8 @@ export class DirectEngineRunner implements WorkflowRunner {
     if (request.stage === 'topics') {
       simulatedOutput.items = [
         {
-          query: 'entryway organization ideas for small homes',
-          targetKeyword: 'entryway organization ideas',
+          query: 'practical ai workflow examples',
+          targetKeyword: 'ai workflow examples',
           evergreenScore: 84,
           riskScore: 12,
           templateType: 'list',
@@ -41,18 +41,18 @@ export class DirectEngineRunner implements WorkflowRunner {
 
     if (request.stage === 'articles') {
       simulatedOutput.article = {
-        title: '10 Entryway Organization Ideas for Small Homes',
-        slug: 'entryway-organization-ideas-small-homes',
-        excerpt: 'Practical ways to organize shoes, bags, and daily clutter in a small entryway.',
-        seoTitle: '10 Entryway Organization Ideas for Small Homes',
-        seoDescription: 'Use these beginner-friendly entryway organization ideas to reduce clutter in small homes.'
+        title: 'Practical AI Workflow Examples for Teams',
+        slug: 'practical-ai-workflow-examples-for-teams',
+        excerpt: 'Concrete ways teams can use AI workflows to improve speed, clarity, and execution.',
+        seoTitle: 'Practical AI Workflow Examples for Teams',
+        seoDescription: 'Useful examples of AI workflows that teams can adapt to real operational needs.'
       };
       result.costEstimateUsd = 0.06;
     }
 
     if (request.stage === 'images') {
       simulatedOutput.image = {
-        prompt: 'Editorial home & DIY hero image, warm modern entryway, no logos, no text overlay, photorealistic, 16:9',
+        prompt: 'Photorealistic editorial hero image for a professional digital magazine article, modern workspace scene, no logos, no text overlay, 16:9',
         aspectRatio: '16:9'
       };
       result.costEstimateUsd = 0.03;

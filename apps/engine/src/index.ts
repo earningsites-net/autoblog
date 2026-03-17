@@ -2955,6 +2955,10 @@ app.post('/api/factory/site/create', async (req, reply) => {
     locale?: string;
     businessMode?: 'transfer_first' | 'managed';
     nichePreset?: 'home_diy' | 'luxury_living' | 'couple_wellness' | 'kids_play';
+    nichePrompt?: string;
+    primaryNiche?: string;
+    categoryLabels?: string[];
+    seedTopicLabels?: string[];
     themeTone?: 'auto' | 'editorial' | 'luxury' | 'wellness' | 'playful' | 'technical';
     themeRecipe?:
       | 'bold_magazine'
@@ -2985,6 +2989,10 @@ app.post('/api/factory/site/create', async (req, reply) => {
     locale: body.locale,
     businessMode: body.businessMode,
     nichePreset: body.nichePreset,
+    nichePrompt: body.nichePrompt,
+    primaryNiche: body.primaryNiche,
+    categoryLabels: body.categoryLabels,
+    seedTopicLabels: body.seedTopicLabels,
     themeTone: body.themeTone,
     themeRecipe: body.themeRecipe,
     applyCmsMutations: body.applyCmsMutations,
@@ -3026,6 +3034,10 @@ app.post('/api/factory/site/launch', async (req, reply) => {
     locale?: string;
     businessMode?: 'transfer_first' | 'managed';
     nichePreset?: 'home_diy' | 'luxury_living' | 'couple_wellness' | 'kids_play';
+    nichePrompt?: string;
+    primaryNiche?: string;
+    categoryLabels?: string[];
+    seedTopicLabels?: string[];
     themeTone?: 'auto' | 'editorial' | 'luxury' | 'wellness' | 'playful' | 'technical';
     themeRecipe?:
       | 'bold_magazine'
@@ -3063,6 +3075,10 @@ app.post('/api/factory/site/launch', async (req, reply) => {
     locale: body.locale,
     businessMode: body.businessMode,
     nichePreset: body.nichePreset,
+    nichePrompt: body.nichePrompt,
+    primaryNiche: body.primaryNiche,
+    categoryLabels: body.categoryLabels,
+    seedTopicLabels: body.seedTopicLabels,
     themeTone: body.themeTone,
     themeRecipe: body.themeRecipe,
     topicCount: body.topicCount,
@@ -3165,6 +3181,10 @@ app.post('/v1/factory/sites', async (req, reply) => {
     locale?: string;
     businessMode?: 'transfer_first' | 'managed';
     nichePreset?: 'home_diy' | 'luxury_living' | 'couple_wellness' | 'kids_play';
+    nichePrompt?: string;
+    primaryNiche?: string;
+    categoryLabels?: string[];
+    seedTopicLabels?: string[];
     themeTone?: 'auto' | 'editorial' | 'luxury' | 'wellness' | 'playful' | 'technical';
     themeRecipe?:
       | 'bold_magazine'
@@ -3193,6 +3213,10 @@ app.post('/v1/factory/sites', async (req, reply) => {
     locale?: string;
     businessMode?: 'transfer_first' | 'managed';
     nichePreset?: 'home_diy' | 'luxury_living' | 'couple_wellness' | 'kids_play';
+    nichePrompt?: string;
+    primaryNiche?: string;
+    categoryLabels?: string[];
+    seedTopicLabels?: string[];
     themeTone?: 'auto' | 'editorial' | 'luxury' | 'wellness' | 'playful' | 'technical';
     themeRecipe?:
       | 'bold_magazine'
@@ -3321,7 +3345,7 @@ app.get('/ops/factory', async (req, reply) => {
       <div class="row">
         <div class="col-3">
           <label>Blueprint</label>
-          <input id="blueprint" value="home-diy-magazine" />
+          <input id="blueprint" value="generic-editorial-magazine" />
         </div>
         <div class="col-3">
           <label>Business mode</label>
@@ -3331,14 +3355,8 @@ app.get('/ops/factory', async (req, reply) => {
           </select>
         </div>
         <div class="col-3">
-          <label>Niche preset</label>
-          <select id="nichePreset">
-            <option value="">(none)</option>
-            <option value="home_diy">home_diy</option>
-            <option value="luxury_living">luxury_living</option>
-            <option value="couple_wellness">couple_wellness</option>
-            <option value="kids_play">kids_play</option>
-          </select>
+          <label>Primary niche</label>
+          <input id="primaryNiche" placeholder="Artificial Intelligence" />
         </div>
         <div class="col-3">
           <label>Theme tone</label>
@@ -3350,6 +3368,22 @@ app.get('/ops/factory', async (req, reply) => {
             <option value="playful">playful</option>
             <option value="technical">technical</option>
           </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-12">
+          <label>Niche prompt</label>
+          <textarea id="nichePrompt" rows="10" placeholder="Describe the editorial niche, content scope, angles, tone, and exclusions."></textarea>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-6">
+          <label>Categories (one per line)</label>
+          <textarea id="categoryLabels" rows="6" placeholder="AI News&#10;AI Tools & Platforms&#10;Use Cases & Industry Insights"></textarea>
+        </div>
+        <div class="col-6">
+          <label>Seed topics (one per line)</label>
+          <textarea id="seedTopicLabels" rows="6" placeholder="AI tools comparison&#10;AI trends and developments&#10;Practical AI applications"></textarea>
         </div>
       </div>
       <div class="row">
@@ -3462,6 +3496,13 @@ app.get('/ops/factory', async (req, reply) => {
       return String(el.value || '').trim();
     }
 
+    function getMultilineValues(id) {
+      return String(getValue(id) || '')
+        .split(/\\r?\\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+
     function setStatus(message, type) {
       status.textContent = message;
       status.className = 'status' + (type ? ' ' + type : '');
@@ -3474,7 +3515,10 @@ app.get('/ops/factory', async (req, reply) => {
         locale: getValue('locale') || undefined,
         blueprint: getValue('blueprint') || undefined,
         businessMode: getValue('businessMode') || undefined,
-        nichePreset: getValue('nichePreset') || undefined,
+        primaryNiche: getValue('primaryNiche') || undefined,
+        nichePrompt: getValue('nichePrompt') || undefined,
+        categoryLabels: getMultilineValues('categoryLabels'),
+        seedTopicLabels: getMultilineValues('seedTopicLabels'),
         themeTone: getValue('themeTone') || undefined,
         themeRecipe: getValue('themeRecipe') || undefined,
         topicCount: Number(getValue('topicCount') || 60),
@@ -3495,9 +3539,12 @@ app.get('/ops/factory', async (req, reply) => {
         force: Boolean(getValue('force'))
       };
       if (!payload.themeRecipe) delete payload.themeRecipe;
-      if (!payload.nichePreset) delete payload.nichePreset;
       if (!payload.brandName) delete payload.brandName;
       if (!payload.locale) delete payload.locale;
+      if (!payload.primaryNiche) delete payload.primaryNiche;
+      if (!payload.nichePrompt) delete payload.nichePrompt;
+      if (!payload.categoryLabels.length) delete payload.categoryLabels;
+      if (!payload.seedTopicLabels.length) delete payload.seedTopicLabels;
       if (!payload.sanityProjectId) delete payload.sanityProjectId;
       if (!payload.sanityDataset) delete payload.sanityDataset;
       if (!payload.sanityApiVersion) delete payload.sanityApiVersion;
@@ -3603,16 +3650,6 @@ app.get('/ops/factory', async (req, reply) => {
         });
         if (!res.ok) return;
         const data = await res.json();
-        const nicheSelect = document.getElementById('nichePreset');
-        if (nicheSelect && Array.isArray(data.nichePresets)) {
-          nicheSelect.innerHTML = '<option value="">(none)</option>';
-          for (const preset of data.nichePresets) {
-            const option = document.createElement('option');
-            option.value = preset.id;
-            option.textContent = preset.id + ' - ' + preset.label;
-            nicheSelect.appendChild(option);
-          }
-        }
       } catch {}
     })();
   </script>

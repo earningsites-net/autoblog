@@ -97,10 +97,23 @@ This file stores durable project context shared across tasks.
   - report ultimo run: `docs/ops/n8n-flow-checks/latest-report.json`
   - su un VPS pulito/nuovo bootstrap, `changed-only` può restituire `Checked workflows: 0`; in quel caso usare `npm run n8n:test:flows:all` con env sourced da `/etc/autoblog/n8n.env`
   - per import/smoke via API n8n, configurare `N8N_API_KEY` (e opzionalmente `N8N_API_BASE_URL`) in `infra/n8n/.env*` o `/etc/autoblog/n8n.env`; la sola Basic Auth UI non basta in modo affidabile
+  - gli ID `N8N_WORKFLOW_ID_*` sono specifici dell'istanza n8n: dopo import bootstrap su una nuova istanza vanno riallineati ai workflow importati realmente
+  - su questo runtime n8n, i workflow richiamati via `Execute Workflow` per ID devono risultare `active`, altrimenti il parent fallisce con `Workflow is not active and cannot be executed`
 - Runtime ops templates for VPS deploy:
   - systemd engine service: `infra/ops/systemd/autoblog-engine.service.example`
   - systemd n8n stack service: `infra/ops/systemd/autoblog-n8n.service.example`
   - nginx reverse proxy + private factory example: `infra/ops/nginx/engine-and-factory.conf.example`
+- Sanity Studio deploy:
+  - `apps/studio/sanity.cli.ts` supporta `SANITY_STUDIO_HOSTNAME` per un hostname stabile del deploy
+  - per deploy non interattivi servono `SANITY_STUDIO_PROJECT_ID`, `SANITY_STUDIO_DATASET`, `SANITY_STUDIO_SITE_SLUG`, `SANITY_STUDIO_HOSTNAME` e autenticazione CLI valida o `SANITY_AUTH_TOKEN`
+- Factory multi-nicchia:
+  - il bootstrap nuovi siti non deve dipendere da preset verticali fissi
+  - blueprint default consigliato: `generic-editorial-magazine`
+  - `ops/factory` supporta `Primary niche`, `Niche prompt`, `Categories` e `Seed topics` manuali
+  - `nichePrompt` viene persistito nel blueprint come `niche.editorialPrompt`
+  - i preset restano solo come retrocompatibilità/override strutturale, non come unica fonte della strategia editoriale
+- Pulizia hardcode editoriali:
+  - `scripts/autoblog.mjs` e i workflow n8n principali (`brief_generation_worker`, `article_generation_worker`, `image_generation_worker`, `topic_discovery_daily`) non devono più assumere `Home & DIY` come nicchia di default
 - Provider VPS baseline per il pilot ops: `IONOS VPS`; runbook step-by-step su `docs/deploy/ionos-vps-ops.md`.
 - `Hetzner Cloud` resta documentato come fallback tecnico.
 - Hostname ops production correnti:

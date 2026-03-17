@@ -72,7 +72,7 @@
       ],
       "parameters": {
         "language": "JavaScript",
-        "jsCode": "const seeds = ['entryway organization','weekly kitchen reset','spring patio cleanup checklist','small garden bed layout'];\nreturn seeds.map((query, i) => ({ json: { ...$json, seedIndex: i, query } }));"
+        "jsCode": "const seeds = ['foundational concepts explained','practical guide for beginners','common mistakes and best practices','trends and developments overview'];\nreturn seeds.map((query, i) => ({ json: { ...$json, seedIndex: i, query } }));"
       }
     },
     {
@@ -98,7 +98,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"model\": \"{{$env.TEXT_MODEL_DRAFT || 'gpt-4.1-mini'}}\", \"input\": [{\"role\":\"system\",\"content\":\"Return JSON with keyword suggestions, evergreen score, and risk score for Home & DIY informational topics. Exclude YMYL and hazardous tasks.\"},{\"role\":\"user\",\"content\":\"Topic seed: {{$json.query}}\"}]}"
+        "jsonBody": "={\"model\": \"{{$env.TEXT_MODEL_DRAFT || 'gpt-4.1-mini'}}\", \"input\": [{\"role\":\"system\",\"content\":\"Return JSON with keyword suggestions, evergreen score, and risk score for publication-quality informational topics aligned with the site niche. Exclude unsupported claims and risky YMYL guidance.\"},{\"role\":\"user\",\"content\":\"Topic seed: {{$json.query}}\"}]}"
       }
     },
     {

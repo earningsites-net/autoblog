@@ -1,10 +1,10 @@
 # Image Generation Prompt v1
 
 ## Goal
-Create one 16:9 editorial hero image for a Home & DIY article.
+Create one 16:9 editorial hero image for a professional digital magazine article.
 
 ## Prompt Pattern
-"Editorial home & DIY hero image, warm modern setting, photorealistic, natural light, no logos, no brands, no text overlays, no watermark, 16:9. Topic: <ARTICLE_TITLE>."
+"Photorealistic editorial hero image aligned with the article topic and niche, realistic scene selection, no logos, no brands, no text overlays, no watermark, 16:9. Topic: <ARTICLE_TITLE>."
 
 ## Negative Constraints
 - No brand names/logos

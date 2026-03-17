@@ -1,11 +1,11 @@
 # Topic Discovery Prompt v1
 
 ## Goal
-Generate evergreen Home & DIY informational topic candidates that are ad-safe, non-YMYL, and suitable for medium-depth articles.
+Generate evergreen, ad-safe, non-YMYL informational topic candidates aligned with the site's editorial niche.
 
 ## Constraints
 - Exclude medical, legal, financial, electrical, structural, and advanced plumbing guidance.
-- Prefer practical, seasonal, beginner-friendly topics.
+- Prefer useful, specific, publication-quality topics with clear reader value.
 - Return JSON only.
 
 ## Output Schema (conceptual)
