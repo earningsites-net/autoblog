@@ -119,6 +119,10 @@ This file stores durable project context shared across tasks.
 - Hostname ops production correnti:
   - engine / portal / factory: `https://aiblogs.earningsites.net`
   - n8n editor / webhook: `https://n8n.earningsites.net`
+- Deploy caveat su VPS production:
+  - il clone in `/srv/auto-blog-project` contiene anche stato runtime (`sites/registry.json`, siti creati in `sites/<slug>/`, report `docs/ops/n8n-flow-checks/*`)
+  - finché questi artefatti restano tracciati o residenti nel repo di produzione, evitare `git pull --ff-only` cieco
+  - strategia sicura corrente: `git fetch origin` seguito da `git checkout origin/main -- <lista-file-sorgente>` e restart/import mirati
 - Pilot release checks read env files:
   - root: `.env.staging` / `.env.production`
   - n8n: `infra/n8n/.env.staging` / `infra/n8n/.env.production`

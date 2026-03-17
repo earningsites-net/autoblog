@@ -564,6 +564,14 @@
   - `npm run typecheck` -> OK
   - `node --check scripts/autoblog.mjs` -> OK
   - parse JSON dei workflow/template modificati -> OK
+  - commit creato e pushato su `origin/main`: `cd45842` (`Generalize factory niche bootstrap and prompts`)
+  - deploy VPS IONOS eseguito con checkout mirato dei file sorgente da `origin/main`, preservando `sites/registry.json` e `sites/couple-wellness/`
+  - `autoblog-engine` riavviato con successo; smoke locale `/healthz` OK
+  - reimport/smoke workflow production: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`
+  - smoke pubblici post-deploy:
+    - `https://aiblogs.earningsites.net/v1/sites/couple-wellness/health` -> `ok:true`
+    - `https://aiblogs.earningsites.net/portal` -> `200`
+    - `https://n8n.earningsites.net/` -> `200`
 
 ## Decisions
 - Per nicchie fuori catalogo il flusso corretto è:
@@ -571,12 +579,14 @@
   - lasciare vuoto il preset
   - compilare manualmente `Primary niche`, `Niche prompt`, `Categories`, `Seed topics`
 - I preset non sono più il centro della strategia editoriale; restano solo come shortcut retrocompatibile per alcuni verticali già modellati.
+- Finché il repo production ospita anche stato runtime, il deploy engine/n8n sul VPS va fatto con `git fetch origin` + `git checkout origin/main -- <file sorgente>` invece di `git pull --ff-only`.
 
 ## Next
-- Reimportare su production i workflow n8n modificati e riallineare l'istanza VPS.
 - Test E2E con un sito non preset-driven (es. AI blog) creato solo con blueprint generico + bootstrap manuale.
 - Ripassare il fallback category mapping di `article_generation_worker` se emergono pipeline che producono topic senza `categorySlug`.
+- Estrarre o desincronizzare dallo stato Git del VPS gli artefatti runtime (`sites/registry.json`, nuovi slug, report flow-guard`) per tornare a un deploy pulito con pull fast-forward.
 
 ## Risks
 - Il bootstrap manuale riduce l'accoppiamento coi preset, ma richiede disciplina operativa: categorie e seed topics scritti male produrranno contenuti incoerenti anche con prompt puliti.
 - `article_generation_worker` contiene ancora fallback category mapping legacy se `categorySlug` manca; il path principale è coperto, ma il fallback va ancora generalizzato.
+- Il clone Git sul VPS resta deliberatamente sporco perché contiene stato runtime e report operativi; senza pulizia architetturale del layout, i prossimi deploy continueranno a richiedere checkout mirati per non sovrascrivere dati live.
