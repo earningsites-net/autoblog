@@ -18,7 +18,7 @@ Poi riavvia:
 npm run dev:down
 npm run dev:up
 
-## Procedura corretta quando cambi le env:
+## Procedura corretta per importare le env aggiornate sul server vps quando vengono cambiate:
 
 scp -i ~/.ssh/autoblog_ionos .env.production root@87.106.29.31:/tmp/engine.env
 scp -i ~/.ssh/autoblog_ionos infra/n8n/.env.production root@87.106.29.31:/tmp/n8n.env
@@ -41,6 +41,9 @@ Verifica:
 sudo systemctl status autoblog-engine --no-pager
 sudo systemctl status autoblog-n8n --no-pager
 
-# Login con username autoblog
+# Login al vps con username autoblog
 
 ssh -i ~/.ssh/autoblog_ionos autoblog@87.106.29.31
+
+# Pull repo github sul server VPS:
+sudo -u autoblog -H bash -lc 'cd /srv/auto-blog-project && git fetch origin && git pull --ff-only origin main'

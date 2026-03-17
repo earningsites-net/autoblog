@@ -226,6 +226,17 @@ sudo mkdir -p /var/lib/autoblog
 sudo chown autoblog:autoblog /var/lib/autoblog
 ```
 
+Nota operativa:
+
+- se in seguito ricopi `/etc/autoblog/n8n.env` con `install -m 600`, ripeti sempre:
+
+```bash
+sudo chown root:autoblog /etc/autoblog/n8n.env
+sudo chmod 640 /etc/autoblog/n8n.env
+```
+
+- altrimenti `autoblog-n8n` può fallire in restart perché il service gira come utente `autoblog`
+
 Valori da allineare in `/etc/autoblog/engine.env`:
 
 - `PORTAL_BASE_URL=https://aiblogs.earningsites.net`
@@ -246,6 +257,8 @@ Valori da allineare in `/etc/autoblog/n8n.env`:
 - `N8N_PROTOCOL=https`
 - `WEBHOOK_URL=https://n8n.earningsites.net/`
 - `N8N_EDITOR_BASE_URL=https://n8n.earningsites.net/`
+- `N8N_API_BASE_URL=https://n8n.earningsites.net`
+- `N8N_API_KEY=<api-key-creata-in-n8n>`
 - `CONTENT_ENGINE_URL=https://aiblogs.earningsites.net`
 - `WEB_APP_URL=https://lux-living-01.tuodominio.com`
 - `SITE_SLUG=` (opzionale; solo fallback legacy single-site)
@@ -287,9 +300,21 @@ Installa il service dello stack n8n:
 
 ```bash
 sudo cp /srv/auto-blog-project/infra/ops/systemd/autoblog-n8n.service.example /etc/systemd/system/autoblog-n8n.service
+sudo mkdir -p /srv/auto-blog-project/infra/n8n/data
+sudo chown -R 1000:1000 /srv/auto-blog-project/infra/n8n/data
 sudo systemctl daemon-reload
 sudo systemctl enable --now autoblog-n8n
 sudo systemctl status autoblog-n8n --no-pager
+```
+
+Se `autoblog-n8n` entra in restart loop con errore `EACCES: permission denied, open '/home/node/.n8n/config'`,
+significa che il bind mount host `infra/n8n/data` non è scrivibile dal container `n8n`.
+Correzione:
+
+```bash
+sudo mkdir -p /srv/auto-blog-project/infra/n8n/data
+sudo chown -R 1000:1000 /srv/auto-blog-project/infra/n8n/data
+sudo systemctl restart autoblog-n8n
 ```
 
 Verifica container:
@@ -402,9 +427,23 @@ Importa e verifica i workflow:
 
 ```bash
 cd /srv/auto-blog-project
-sudo -u autoblog npm run n8n:import:changed
-sudo -u autoblog npm run n8n:test:flows
+sudo -u autoblog bash -lc 'set -a; source /etc/autoblog/n8n.env; set +a; cd /srv/auto-blog-project; npm run n8n:test:flows:all'
 ```
+
+Nota:
+
+- `n8n:import:changed` e `n8n:test:flows` usano `--mode changed-only`
+- su un VPS appena clonato, senza modifiche git locali, possono restituire `Checked workflows: 0`
+- per il primo bootstrap/validazione production usa `npm run n8n:test:flows:all` con env sourced da `/etc/autoblog/n8n.env`
+- se il report mostra `401 unauthorized` su `/api/v1/workflows`, crea una API key in n8n e valorizza `N8N_API_KEY` in `/etc/autoblog/n8n.env`
+
+Creazione API key n8n:
+
+1. accedi a `https://n8n.earningsites.net`
+2. vai su `Settings > n8n API`
+3. crea una nuova chiave API
+4. copia il valore in `/etc/autoblog/n8n.env` come `N8N_API_KEY=...`
+5. riesegui il test workflow completo
 
 Controlli finali:
 

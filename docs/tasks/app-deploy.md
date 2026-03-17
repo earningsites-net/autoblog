@@ -201,6 +201,41 @@
   - `docs/deploy/ionos-vps-ops.md` non richiede più `sed` sui domini e include il fix permessi per `/etc/autoblog/n8n.env`
   - `docs/deploy/pilot-lux-living-01.md`, `sites/lux-living-01/deploy-plan.md` e `docs/context.md` aggiornati con `https://aiblogs.earningsites.net` e `https://n8n.earningsites.net`
   - caveat TLS registrato: `certbot --nginx -d aiblogs... -d n8n...` sul VPS ha emesso un singolo certificato SAN con nome `aiblogs.earningsites.net`, quindi entrambi i server block HTTPS devono puntare a `/etc/letsencrypt/live/aiblogs.earningsites.net/*`
+- Verifica HTTPS su VPS:
+  - `https://aiblogs.earningsites.net/v1/sites/lux-living-01/health` risponde `ok:true`
+  - `https://aiblogs.earningsites.net/` ritorna `404` JSON: atteso, perché l'engine non espone una homepage su `/`
+  - `https://n8n.earningsites.net/` ritorna `502`: nginx è attivo ma l'upstream `127.0.0.1:5678` non risponde ancora; serve diagnosi su stack `autoblog-n8n`
+- Diagnosi stack `n8n` completata:
+  - `postgres` è `healthy`
+  - `n8n` è in restart loop
+  - errore reale nel container: `EACCES: permission denied, open '/home/node/.n8n/config'`
+  - causa probabile: permessi del bind mount host `infra/n8n/data` incompatibili con l'utente del container `n8n`
+- Chiarimento flow-guard su VPS pulito:
+  - `npm run n8n:import:changed` e `npm run n8n:test:flows` usano `--mode changed-only`
+  - su clone production senza workflow modificati localmente è normale ottenere `Checked workflows: 0`
+  - aggiunti script repo `n8n:import:all` e `n8n:test:flows:all`; il runbook IONOS ora usa `n8n:test:flows:all` con env sourced da `/etc/autoblog/n8n.env`
+- Stato attuale import workflow su VPS:
+  - eseguito check completo `--mode all` con env production sourced da `/etc/autoblog/n8n.env`
+  - scope rilevato correttamente: `Checked workflows: 11`
+  - esito attuale: `pass=0 warn=0 fail=11`, `smoke skipped=11`
+  - dettaglio reale dal handoff/report VPS: tutti i fail sono `401 unauthorized` su `GET /api/v1/workflows?limit=250`
+  - interpretazione: n8n è raggiungibile, ma il flow-guard non ha una credenziale API valida; serve configurare `N8N_API_KEY` in `/etc/autoblog/n8n.env`
+  - aggiornati `infra/n8n/.env.example`, `docs/deploy/ionos-vps-ops.md` e `docs/context.md` per richiedere esplicitamente `N8N_API_KEY` / `N8N_API_BASE_URL` nel bootstrap VPS
+- Stato applicativo n8n sul VPS:
+  - accesso browser su `https://n8n.earningsites.net` reindirizza a `/setup`
+  - interpretazione: l'istanza self-hosted è ancora in setup iniziale user-management; manca l'owner account iniziale e quindi manca anche una API key utilizzabile per import workflow
+- Caveat operativo ripetibile su env n8n:
+  - ricopiando `/etc/autoblog/n8n.env` con `install -m 600` si possono perdere i permessi necessari al service
+  - dopo ogni update del file conviene riallineare `root:autoblog` + `chmod 640` prima del restart di `autoblog-n8n`
+- Operazioni dirette su VPS eseguite via SSH:
+  - ispezionati `systemctl status` di `autoblog-engine`, `autoblog-n8n`, `nginx`
+  - confermato `autoblog-engine` `active (running)` e `nginx` `active (running)`
+  - identificato nuovo fail di `autoblog-n8n` dopo aggiornamento env: di nuovo `permission denied` su `/etc/autoblog/n8n.env`
+  - applicato fix diretto su VPS: `chown root:autoblog /etc/autoblog/n8n.env` + `chmod 640 /etc/autoblog/n8n.env`
+  - riavviato con successo `autoblog-n8n`; container `autoblog-n8n` ora `Up`
+  - verificato `n8n` operativo sia su `http://127.0.0.1:5678` che su `https://n8n.earningsites.net` (`200 OK`)
+  - verificato test API key n8n con successo (`GET /api/v1/workflows?limit=1` -> `{"data":[],"nextCursor":null}`)
+  - `certbot renew --dry-run` resta da rieseguire: un tentativo diretto successivo ha risposto `Another instance of Certbot is already running`, ma senza processi/lock evidenti residui
 
 ## Decisions
 - Pilot operativo fissato su `lux-living-01`.

@@ -28,7 +28,9 @@
     "typecheck": "npm --workspace @autoblog/web run typecheck && npm --workspace @autoblog/studio run typecheck",
     "n8n:check:flows": "node skills/n8n-flow-guard/scripts/check_n8n_flows.mjs --mode changed-only --write-report --import",
     "n8n:import:changed": "node skills/n8n-flow-guard/scripts/check_n8n_flows.mjs --mode changed-only --write-report --import --no-smoke",
-    "n8n:test:flows": "node skills/n8n-flow-guard/scripts/check_n8n_flows.mjs --mode changed-only --write-report --import --smoke"
+    "n8n:test:flows": "node skills/n8n-flow-guard/scripts/check_n8n_flows.mjs --mode changed-only --write-report --import --smoke",
+    "n8n:import:all": "node skills/n8n-flow-guard/scripts/check_n8n_flows.mjs --mode all --write-report --import --no-smoke",
+    "n8n:test:flows:all": "node skills/n8n-flow-guard/scripts/check_n8n_flows.mjs --mode all --write-report --import --smoke"
   },
   "bin": {
     "autoblog": "./scripts/autoblog.mjs"

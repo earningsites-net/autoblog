@@ -94,6 +94,8 @@ This file stores durable project context shared across tasks.
   - comando standard: `npm run n8n:import:changed`
   - script: `skills/n8n-flow-guard/scripts/check_n8n_flows.mjs`
   - report ultimo run: `docs/ops/n8n-flow-checks/latest-report.json`
+  - su un VPS pulito/nuovo bootstrap, `changed-only` può restituire `Checked workflows: 0`; in quel caso usare `npm run n8n:test:flows:all` con env sourced da `/etc/autoblog/n8n.env`
+  - per import/smoke via API n8n, configurare `N8N_API_KEY` (e opzionalmente `N8N_API_BASE_URL`) in `infra/n8n/.env*` o `/etc/autoblog/n8n.env`; la sola Basic Auth UI non basta in modo affidabile
 - Runtime ops templates for VPS deploy:
   - systemd engine service: `infra/ops/systemd/autoblog-engine.service.example`
   - systemd n8n stack service: `infra/ops/systemd/autoblog-n8n.service.example`
