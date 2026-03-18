@@ -125,6 +125,8 @@ This file stores durable project context shared across tasks.
   - il clone in `/srv/auto-blog-project` contiene anche stato runtime (`sites/registry.json`, siti creati in `sites/<slug>/`, report `docs/ops/n8n-flow-checks/*`)
   - finché questi artefatti restano tracciati o residenti nel repo di produzione, evitare `git pull --ff-only` cieco
   - strategia sicura corrente: `git fetch origin` seguito da `git checkout origin/main -- <lista-file-sorgente>` e restart/import mirati
+  - i siti creati via Factory in production non esistono automaticamente nel workspace locale; per ispezionarli in dev usare uno sync esplicito (`scp` del sito dal VPS) oppure uno Studio deployato dedicato
+  - non usare auto-commit/auto-push dal VPS production verso `main`: `sites/<slug>/.env.generated`, `registry` e handoff sono stato runtime, non source of truth Git
 - Pilot release checks read env files:
   - root: `.env.staging` / `.env.production`
   - n8n: `infra/n8n/.env.staging` / `infra/n8n/.env.production`

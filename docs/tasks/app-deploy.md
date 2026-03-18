@@ -625,6 +625,10 @@
     - reimport/smoke workflow production: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`
     - retry prepopulate `ai-blog-1` rilanciato via `POST /api/factory/site/prepopulate`
     - verifica n8n: esecuzione recente `article_generation_worker` (`workflowId=P8zuzSfblYcrH3PA`, execution `1486`) conclusa `success`
+  - sincronizzato `sites/ai-blog-1` dal VPS production al workspace locale per ispezione Studio:
+    - copiato `sites/ai-blog-1/` con `scp` dal VPS
+    - `npm run site:use -- ai-blog-1 --root-env .env` eseguito con successo
+    - `.env` locale ora punta a `SANITY_PROJECT_ID=ekqu5dyw`, dataset `production`, `SITE_SLUG=ai-blog-1`
 
 ## Decisions
 - Per nicchie fuori catalogo il flusso corretto è:
@@ -643,10 +647,12 @@
 - Finché non esiste una sintesi strutturale automatica da prompt, il bootstrap deve partire da un singolo default interno: `generic-editorial-magazine`.
 - Eliminare il concetto interno di blueprint oggi sarebbe un refactor troppo ampio rispetto al beneficio immediato; la semplificazione corretta è togliere la selezione utente, non il file/runtime model.
 - I test E2E multi-nicchia non devono usare prompt utente per "coprire" hardcode legacy nel codice: eventuali riferimenti fuori nicchia (`DIY`, `homeowners`, ecc.) vanno lasciati emergere e corretti a monte in workflow/script.
+- I siti creati via Factory in production vanno trattati come runtime state: per consultarli in locale serve uno sync esplicito o uno Studio deployato, non un push automatico dal VPS verso GitHub.
 
 ## Next
 - Verificare qualità reale di `ai-blog-1` sui primi contenuti generati (topic -> brief -> article -> image prompt) per scovare eventuali hardcode verticali residui.
 - Valutare se rigenerare `ai-blog-1` per sfruttare anche il fix categorie `6` -> `6` completo, dato che il launch iniziale ha scritto solo `4` categorie nel blueprint.
+- Disegnare un flusso esplicito di sync/export dei siti creati in production (`sites/<slug>`) fuori dal working tree runtime, evitando auto-push da VPS.
 - Ripassare il fallback category mapping di `article_generation_worker` se emergono pipeline che producono topic senza `categorySlug`.
 - Estrarre o desincronizzare dallo stato Git del VPS gli artefatti runtime (`sites/registry.json`, nuovi slug, report flow-guard`) per tornare a un deploy pulito con pull fast-forward.
 - Aggiornare lo smoke production del Factory dopo la rimozione del campo blueprint (`/api/factory/options` non deve più esporre `blueprints`).
@@ -655,5 +661,6 @@
 - Il bootstrap manuale riduce l'accoppiamento coi preset, ma richiede disciplina operativa: categorie e seed topics scritti male produrranno contenuti incoerenti anche con prompt puliti.
 - `article_generation_worker` contiene ancora fallback category mapping legacy se `categorySlug` manca; il path principale è coperto, ma il fallback va ancora generalizzato.
 - I siti già creati prima del fix categorie conservano il blueprint già scritto; per vedere `6` categorie va rifatto il launch o rigenerato il blueprint del sito.
+- Lo sync locale di `sites/ai-blog-1` porta anche `.env.generated` con secret runtime: il sito sincronizzato va trattato come copia operativa locale e non va committato.
 - Anche se il clone VPS ora è pulito, il rischio architetturale resta: finché lo stato runtime viene scritto dentro il working tree (`sites/registry.json`, nuovi slug, report flow-guard`), i futuri deploy possono tornare a sporcare il repo di produzione.
 - Il concetto `site.blueprint.json` resta ancora ampiamente accoppiato a CLI/runtime (`init-content`, `discover-topics`, `provision-env`, registry, doctor, theme engine`); eliminarlo del tutto oggi sarebbe un refactor più ampio del beneficio immediato.
