@@ -340,6 +340,12 @@
   - il prompt immagini è stato semplificato: ora deriva da `title` + `excerpt` + `targetKeyword` con guardrail generici, senza scene verticali preclassificate
   - `coverImageAlt` non usa più il prefisso visibile `AI-generated ...`, ma `Editorial hero image for ...`
   - `apps/web/src/app/disclaimer/page.tsx` generalizzato: non menziona più `Home & DIY` nel metadata/copy
+  - fix pushato su `origin/main`: commit `67bbbcc` (`Reduce image prompt hardcoding`)
+  - production aggiornata:
+    - `apps/engine/src/adapters/workflow-runners.ts` riallineato sul VPS
+    - `image_generation_worker.json` reimportato via flow-guard
+    - `autoblog-engine` riavviato con successo
+    - verifica import workflow production: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`
 
 ## Decisions
 - Pilot operativo fissato su `lux-living-01`.
