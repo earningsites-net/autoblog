@@ -104,6 +104,7 @@ function main() {
   const writeToken = required(siteEnv.SANITY_WRITE_TOKEN, 'SANITY_WRITE_TOKEN in .env.generated');
 
   const rootEnvPath = path.resolve(WORKSPACE_ROOT, String(flags['root-env'] || '.env'));
+  const studioEnvPath = path.join(WORKSPACE_ROOT, 'apps', 'studio', '.env');
   const updates = {
     SITE_BLUEPRINT_PATH: `./sites/${siteSlug}/site.blueprint.json`,
     SITE_SLUG: siteSlug,
@@ -119,12 +120,19 @@ function main() {
   };
 
   upsertEnvFile(rootEnvPath, updates);
+  upsertEnvFile(studioEnvPath, {
+    SANITY_PROJECT_ID: projectId,
+    SANITY_DATASET: dataset,
+    SANITY_STUDIO_PROJECT_ID: projectId,
+    SANITY_STUDIO_DATASET: dataset
+  });
 
   const masked = (token) => (token.length <= 10 ? '***' : `${token.slice(0, 4)}...${token.slice(-4)}`);
   const output = {
     ok: true,
     siteSlug,
     updatedEnv: path.relative(WORKSPACE_ROOT, rootEnvPath) || '.env',
+    updatedStudioEnv: path.relative(WORKSPACE_ROOT, studioEnvPath),
     sanity: {
       projectId,
       dataset,

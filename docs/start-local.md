@@ -47,7 +47,7 @@ Note utili:
 
 ### Cambio sito locale (web + studio) con un comando
 
-Per passare rapidamente a un altro sito locale e aggiornare in automatico le variabili Sanity/SITE nel `.env` root:
+Per passare rapidamente a un altro sito locale e aggiornare in automatico le variabili Sanity/SITE nel `.env` root e in `apps/studio/.env`:
 
 ```bash
 cd "/Users/danilociamprone/Documents/Auto blog project"
@@ -60,7 +60,7 @@ Esempio:
 npm run site:use -- lux-living-01
 ```
 
-Poi riavvia i servizi:
+Poi riavvia i servizi. In particolare `Sanity Studio` legge il progetto all'avvio, quindi se `npm run dev:studio` è già acceso va fermato e riavviato:
 
 ```bash
 npm run dev:down

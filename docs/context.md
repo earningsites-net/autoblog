@@ -127,6 +127,7 @@ This file stores durable project context shared across tasks.
   - strategia sicura corrente: `git fetch origin` seguito da `git checkout origin/main -- <lista-file-sorgente>` e restart/import mirati
   - i siti creati via Factory in production non esistono automaticamente nel workspace locale; per ispezionarli in dev usare uno sync esplicito (`scp` del sito dal VPS) oppure uno Studio deployato dedicato
   - non usare auto-commit/auto-push dal VPS production verso `main`: `sites/<slug>/.env.generated`, `registry` e handoff sono stato runtime, non source of truth Git
+  - il comando locale `npm run site:use -- <site-slug>` deve riallineare sia il root `.env` sia `apps/studio/.env`; dopo lo switch va riavviato `sanity dev` per vedere il progetto Sanity corretto
 - Pilot release checks read env files:
   - root: `.env.staging` / `.env.production`
   - n8n: `infra/n8n/.env.staging` / `infra/n8n/.env.production`

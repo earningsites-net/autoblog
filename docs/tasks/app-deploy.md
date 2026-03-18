@@ -629,6 +629,9 @@
     - copiato `sites/ai-blog-1/` con `scp` dal VPS
     - `npm run site:use -- ai-blog-1 --root-env .env` eseguito con successo
     - `.env` locale ora punta a `SANITY_PROJECT_ID=ekqu5dyw`, dataset `production`, `SITE_SLUG=ai-blog-1`
+  - corretto il gap locale dello Studio:
+    - `scripts/site-use.mjs` aggiornato per riallineare anche `apps/studio/.env`, non solo il root `.env`
+    - verificato localmente: dopo `npm run site:use -- ai-blog-1 --root-env .env`, `apps/studio/.env` punta a `SANITY_STUDIO_PROJECT_ID=ekqu5dyw`
 
 ## Decisions
 - Per nicchie fuori catalogo il flusso corretto è:
@@ -648,11 +651,13 @@
 - Eliminare il concetto interno di blueprint oggi sarebbe un refactor troppo ampio rispetto al beneficio immediato; la semplificazione corretta è togliere la selezione utente, non il file/runtime model.
 - I test E2E multi-nicchia non devono usare prompt utente per "coprire" hardcode legacy nel codice: eventuali riferimenti fuori nicchia (`DIY`, `homeowners`, ecc.) vanno lasciati emergere e corretti a monte in workflow/script.
 - I siti creati via Factory in production vanno trattati come runtime state: per consultarli in locale serve uno sync esplicito o uno Studio deployato, non un push automatico dal VPS verso GitHub.
+- `site:use` deve essere la fonte unica di verità per lo switch locale sito->Sanity; lasciare `apps/studio/.env` scollegato dal root `.env` porta a mostrare il progetto sbagliato nello Studio.
 
 ## Next
 - Verificare qualità reale di `ai-blog-1` sui primi contenuti generati (topic -> brief -> article -> image prompt) per scovare eventuali hardcode verticali residui.
 - Valutare se rigenerare `ai-blog-1` per sfruttare anche il fix categorie `6` -> `6` completo, dato che il launch iniziale ha scritto solo `4` categorie nel blueprint.
 - Disegnare un flusso esplicito di sync/export dei siti creati in production (`sites/<slug>`) fuori dal working tree runtime, evitando auto-push da VPS.
+- Valutare se ignorare Git-localmente `sites/<slug>/.env.generated` e le copie sincronizzate da production per ridurre il rischio di commit accidentali.
 - Ripassare il fallback category mapping di `article_generation_worker` se emergono pipeline che producono topic senza `categorySlug`.
 - Estrarre o desincronizzare dallo stato Git del VPS gli artefatti runtime (`sites/registry.json`, nuovi slug, report flow-guard`) per tornare a un deploy pulito con pull fast-forward.
 - Aggiornare lo smoke production del Factory dopo la rimozione del campo blueprint (`/api/factory/options` non deve più esporre `blueprints`).
