@@ -3,7 +3,7 @@ import { PageHero } from '@web/components/page-hero';
 
 export const metadata: Metadata = {
   title: 'Disclaimer',
-  description: 'Informational content disclaimer for Home & DIY articles.'
+  description: 'Informational content disclaimer for editorial articles.'
 };
 
 export default function DisclaimerPage() {
@@ -12,14 +12,14 @@ export default function DisclaimerPage() {
       <PageHero
         eyebrow="Legal"
         title="Disclaimer"
-        description="The content published on this site is informational and general in nature. It is not a substitute for professional advice or licensed trade services."
+        description="The content published on this site is informational and general in nature. It is not a substitute for professional, legal, medical, financial, or other licensed advice."
       />
       <section className="rounded-3xl border border-black/5 bg-white p-6 shadow-card text-sm leading-7 text-ink/80 sm:p-8">
         <p>
-          Home improvement and maintenance tasks can involve safety risks. Always assess your situation, use appropriate protective equipment, and consult a qualified professional for work beyond your skill level.
+          Always evaluate the context of any article before acting on it. Some topics may require professional judgment, additional verification, or advice from a qualified expert.
         </p>
         <p className="mt-4">
-          This site excludes advanced electrical, structural, legal, financial, and medical guidance from its editorial scope. If such content is introduced later, add topic-specific disclaimers and review procedures.
+          This site is designed for general informational publishing, not regulated or personalized advice. If higher-risk topics are introduced later, they should include topic-specific disclaimers and stricter editorial review.
         </p>
       </section>
     </div>

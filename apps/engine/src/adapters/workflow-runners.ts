@@ -12,6 +12,20 @@ function makeBaseResult(request: GenerationJobRequest): GenerationJobResult {
   };
 }
 
+function deriveStubHeadline(request: GenerationJobRequest) {
+  const input = (request.input && typeof request.input === 'object') ? (request.input as Record<string, unknown>) : {};
+  return String(
+    input.title ||
+      input.query ||
+      input.targetKeyword ||
+      input.primaryNiche ||
+      input.topic ||
+      `${request.stage} editorial feature`
+  )
+    .trim()
+    .slice(0, 140);
+}
+
 export class DirectEngineRunner implements WorkflowRunner {
   readonly kind = 'direct' as const;
 
@@ -26,10 +40,11 @@ export class DirectEngineRunner implements WorkflowRunner {
 
     // Minimal stage-specific stub outputs to make the contract concrete.
     if (request.stage === 'topics') {
+      const seedTopic = deriveStubHeadline(request) || 'editorial topic';
       simulatedOutput.items = [
         {
-          query: 'practical ai workflow examples',
-          targetKeyword: 'ai workflow examples',
+          query: seedTopic,
+          targetKeyword: seedTopic.toLowerCase(),
           evergreenScore: 84,
           riskScore: 12,
           templateType: 'list',
@@ -40,19 +55,26 @@ export class DirectEngineRunner implements WorkflowRunner {
     }
 
     if (request.stage === 'articles') {
+      const headline = deriveStubHeadline(request) || 'Editorial feature';
+      const slug = headline
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 120);
       simulatedOutput.article = {
-        title: 'Practical AI Workflow Examples for Teams',
-        slug: 'practical-ai-workflow-examples-for-teams',
-        excerpt: 'Concrete ways teams can use AI workflows to improve speed, clarity, and execution.',
-        seoTitle: 'Practical AI Workflow Examples for Teams',
-        seoDescription: 'Useful examples of AI workflows that teams can adapt to real operational needs.'
+        title: headline,
+        slug: slug || 'editorial-feature',
+        excerpt: `A stub article summary for ${headline}. Replace the direct runner with a real workflow backend before relying on this output.`,
+        seoTitle: headline,
+        seoDescription: `A stub SEO description for ${headline}.`
       };
       result.costEstimateUsd = 0.06;
     }
 
     if (request.stage === 'images') {
+      const headline = deriveStubHeadline(request) || 'editorial feature';
       simulatedOutput.image = {
-        prompt: 'Photorealistic editorial hero image for a professional digital magazine article, modern workspace scene, no logos, no text overlay, 16:9',
+        prompt: `Photorealistic editorial hero image for a professional digital magazine article. Primary subject: ${headline}. Use a scene aligned with the story. No logos, no text overlay, 16:9.`,
         aspectRatio: '16:9'
       };
       result.costEstimateUsd = 0.03;

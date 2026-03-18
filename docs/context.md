@@ -120,6 +120,8 @@ This file stores durable project context shared across tasks.
   - il brief deve fornire guidance strutturale, non headings rigide ripetute articolo dopo articolo
   - `article_generation_worker` può inserire al massimo `0-2` riferimenti esterni inline nel body, solo se pertinenti e non inventati; niente sezione finale `sources`
   - ogni sito può avere `authorProfile` seedati automaticamente; i workflow possono assegnare un autore reale agli articoli via reference Sanity
+  - `image_generation_worker` non deve imporre scene verticali preclassificate (es. `modern workspace scene`) come default; il prompt immagini deve derivare soprattutto da titolo + excerpt articolo con guardrail generici
+  - `apps/engine/src/adapters/workflow-runners.ts` è solo uno stub/fallback engine e non deve contenere esempi hardcoded di nicchia che possano falsare test o debugging
 - Provider VPS baseline per il pilot ops: `IONOS VPS`; runbook step-by-step su `docs/deploy/ionos-vps-ops.md`.
 - `Hetzner Cloud` resta documentato come fallback tecnico.
 - Hostname ops production correnti:

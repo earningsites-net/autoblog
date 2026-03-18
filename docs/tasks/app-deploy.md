@@ -334,6 +334,12 @@
     - seed/autori applicati su Sanity (`17` mutation nel seed CMS)
     - patchati `30` articoli esistenti per valorizzare `article.author`
     - verifica finale dataset: `total=30`, `missingAuthor=0`
+- Hardcode scan aggiuntiva su immagini/contenuti completata:
+  - `apps/engine/src/adapters/workflow-runners.ts` conteneva stub AI-specifici (`Practical AI Workflow Examples...`, `modern workspace scene`); resi neutrali e derivati dal payload request
+  - `infra/n8n/workflows/image_generation_worker.json` conteneva un classificatore di scene che forzava output ripetitivi (`modern workspace, product, or digital technology scene`)
+  - il prompt immagini è stato semplificato: ora deriva da `title` + `excerpt` + `targetKeyword` con guardrail generici, senza scene verticali preclassificate
+  - `coverImageAlt` non usa più il prefisso visibile `AI-generated ...`, ma `Editorial hero image for ...`
+  - `apps/web/src/app/disclaimer/page.tsx` generalizzato: non menziona più `Home & DIY` nel metadata/copy
 
 ## Decisions
 - Pilot operativo fissato su `lux-living-01`.
@@ -690,6 +696,8 @@
 - Per questo pass non aggiungiamo una sezione finale `sources[]`: i riferimenti esterni, quando utili, restano inline nel body con massimo `0-2` link e `rel=nofollow`.
 - Gli autori devono essere parte del bootstrap CMS per-sito; aggiungerli solo nel renderer non basta, perché i workflow devono poter assegnare una reference reale già in fase di generazione.
 - Per il rollout immediato non serve un deploy Vercel aggiuntivo: il cambiamento che impatta i prossimi contenuti vive soprattutto in `autoblog.mjs` + workflow n8n + dataset Sanity; il rendering web aggiornato resta pronto nel repo per il prossimo deploy frontend.
+- Gli stub `direct` dell'engine non devono mai diventare una seconda fonte di prompt/editorial assumptions; vanno tenuti neutrali per non contaminare debug o smoke locali.
+- Il prompt immagini deve restare article-driven: titolo ed excerpt decidono il concept, mentre il workflow aggiunge solo guardrail generici e limiti di sicurezza/branding.
 
 ## Next
 - Verificare qualità reale di `ai-blog-1` sui primi contenuti generati (topic -> brief -> article -> image prompt) per scovare eventuali hardcode verticali residui.
@@ -712,6 +720,10 @@
   - link inline cliccabili quando il modello ne inserisce
   - eventuali residui editoriali fuori nicchia
 - Valutare se fare ora anche un deploy frontend/Vercel per mostrare pubblicamente byline/bio/link nel rendering produzione del sito pubblico, non solo in Studio/local.
+- Push/deploy del fix immagini/stub:
+  - commit locale selettivo dei file `workflow-runners.ts`, `image_generation_worker.json`, `disclaimer/page.tsx`, `docs/*`
+  - update production del workflow immagini e reimport n8n
+  - rieseguire un batch ridotto immagini su `ai-blog-1` per validare che sparisca il bias `modern workspace scene`
 
 ## Risks
 - Il bootstrap manuale riduce l'accoppiamento coi preset, ma richiede disciplina operativa: categorie e seed topics scritti male produrranno contenuti incoerenti anche con prompt puliti.
@@ -723,3 +735,4 @@
 - Il fallback category mapping legacy di `article_generation_worker` resta ancora Home & DIY-oriented se manca `categorySlug`; il pass qualità attuale non lo tocca e può riemergere in edge case.
 - Gli autori sui siti già creati non appaiono automaticamente finché non viene rieseguito il seed CMS/autori sul dataset relativo.
 - Il pass attuale migliora molto il prompt e la struttura, ma non garantisce da solo qualità alta costante: restano da osservare i primi articoli post-deploy per capire se servono ulteriori strette su style guide, excerpt e prompt immagini.
+- Rischio attivo ancora aperto: in `article_generation_worker`, se `categorySlug` manca, il fallback categoria punta ancora a slug Home & DIY (`home-organization`, `cleaning-maintenance`, `garden-basics`); questo non dovrebbe attivarsi nel path normale, ma resta un edge case da correggere.
