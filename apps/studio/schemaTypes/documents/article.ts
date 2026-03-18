@@ -39,6 +39,12 @@ export const articleType = defineType({
       validation: (Rule) => Rule.required()
     }),
     defineField({
+      name: 'author',
+      type: 'reference',
+      to: [{ type: 'authorProfile' }],
+      group: 'content'
+    }),
+    defineField({
       name: 'tags',
       type: 'array',
       of: [
@@ -62,7 +68,20 @@ export const articleType = defineType({
             { title: 'H3', value: 'h3' }
           ],
           lists: [],
-          marks: { decorators: [], annotations: [] }
+          marks: {
+            decorators: [],
+            annotations: [
+              defineArrayMember({
+                name: 'link',
+                title: 'Link',
+                type: 'object',
+                fields: [
+                  defineField({ name: 'href', type: 'url', validation: (Rule) => Rule.required() }),
+                  defineField({ name: 'nofollow', type: 'boolean', initialValue: true })
+                ]
+              })
+            ]
+          }
         })
       ]
     }),

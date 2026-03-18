@@ -16,6 +16,7 @@ export const deskStructure = (siteSlug?: string): DeskBuilder => {
       .title(`Buyer Ops${titleSuffix}`)
       .items([
         S.listItem().title('Articles').child(listByType(S, 'article', 'Articles')),
+        S.listItem().title('Authors').child(listByType(S, 'authorProfile', 'Authors')),
         S.listItem().title('Categories').child(listByType(S, 'category', 'Categories')),
         S.listItem().title('Tags').child(listByType(S, 'tag', 'Tags')),
         S.divider(),

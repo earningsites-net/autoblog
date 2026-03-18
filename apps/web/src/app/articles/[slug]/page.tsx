@@ -100,6 +100,9 @@ export default async function ArticlePage({ params }: Props) {
     { name: article.title, item: absoluteUrl(`/articles/${article.slug}`) }
   ]);
   const faqLd = faqJsonLd(faqItems);
+  const authorMeta = article.author
+    ? [article.author.name, article.author.role].filter(Boolean).join(' • ')
+    : '';
   const headerClass = isDark
     ? isNoirSharp
       ? 'border border-white/15 bg-coal/78 p-6 shadow-[0_22px_58px_-32px_rgba(0,0,0,0.74)] sm:p-8'
@@ -169,6 +172,8 @@ export default async function ArticlePage({ params }: Props) {
               <Link href={`/categories/${article.category.slug}`} className={categoryPillClass}>
                 {article.category.title}
               </Link>
+              {authorMeta ? <span>{authorMeta}</span> : null}
+              {authorMeta ? <span aria-hidden>•</span> : null}
               <span>{formatDate(article.publishedAt)}</span>
               <span aria-hidden>•</span>
               <span>{article.readTimeMinutes} min read</span>
@@ -177,6 +182,11 @@ export default async function ArticlePage({ params }: Props) {
             </div>
             <h1 className="mt-4 font-display text-4xl leading-tight text-ink sm:text-5xl">{article.title}</h1>
             <p className={excerptClass}>{article.excerpt}</p>
+            {article.author?.bio ? (
+              <p className={isDark ? 'mt-4 max-w-3xl text-sm leading-6 text-paper/72' : 'mt-4 max-w-3xl text-sm leading-6 text-ink/68'}>
+                {article.author.bio}
+              </p>
+            ) : null}
             <div className={coverImageFrameClass}>
               <Image src={article.coverImage} alt={article.coverImageAlt} fill className="object-cover" sizes="100vw" priority />
             </div>

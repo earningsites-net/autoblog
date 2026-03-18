@@ -522,45 +522,72 @@ function getEditorialPrompt(blueprint) {
   return String(blueprint?.niche?.editorialPrompt || '').trim();
 }
 
+function buildSiteAuthorProfiles(blueprint, siteSlug) {
+  const safeSiteSlug = sanitizeSiteSlug(siteSlug);
+  const primaryNiche = String(blueprint?.niche?.primaryNiche || blueprint?.brandName || 'the publication').trim();
+  const focus = primaryNiche.toLowerCase();
+  const profiles = [
+    {
+      slug: 'maya-chen',
+      name: 'Maya Chen',
+      role: 'Senior Staff Writer',
+      bio: `Maya covers ${focus} with an emphasis on practical analysis, products, and real-world impact.`
+    },
+    {
+      slug: 'jordan-blake',
+      name: 'Jordan Blake',
+      role: 'Features Editor',
+      bio: `Jordan specializes in turning complex ${focus} topics into clear, useful explainers for everyday readers.`
+    },
+    {
+      slug: 'avery-patel',
+      name: 'Avery Patel',
+      role: 'Industry Analyst',
+      bio: `Avery writes about trends, platforms, and strategic shifts in ${focus}, with attention to what matters in practice.`
+    }
+  ];
+
+  return profiles.map((profile) => ({
+    _id: scopedDocId('author', safeSiteSlug, profile.slug),
+    _type: 'authorProfile',
+    siteSlug: safeSiteSlug,
+    name: profile.name,
+    slug: { current: profile.slug },
+    role: profile.role,
+    bio: profile.bio
+  }));
+}
+
 function buildBriefOutline(query, templateType) {
-  const title = String(query || 'editorial topic');
   if (templateType === 'checklist') {
     return [
-      `## What to prepare before you start`,
-      `## Checklist for ${title}`,
-      `### Highest-impact priorities`,
-      `### Practical considerations`,
-      `## Common mistakes to avoid`,
-      `## How to keep momentum after the first step`
+      '- Open by clarifying why this checklist matters for the reader right now.',
+      '- Organize the checklist into phases or priorities that make sense for this specific topic.',
+      '- Keep only the sections that materially help the reader; do not add generic filler headings.',
+      '- End with a short takeaway or next-step note if it improves clarity.'
     ].join('\n');
   }
   if (templateType === 'list') {
     return [
-      `## Start with the strongest options`,
-      `## Best ${title} approaches`,
-      `### Foundational ideas`,
-      `### Advanced or differentiated angles`,
-      `## How to apply the insight in practice`,
-      `## Mistakes to avoid`
+      '- Lead with the strongest or most relevant options first.',
+      '- Group ideas into distinctive angles instead of repeating a stock list structure.',
+      '- Use sub-sections only when they clarify differences, examples, or tradeoffs.',
+      '- Avoid generic headings unless they are genuinely the best fit for this topic.'
     ].join('\n');
   }
   if (templateType === 'how-to') {
     return [
-      `## What you need before starting`,
-      `## Step-by-step process`,
-      `### Setup`,
-      `### Main work`,
-      `### Final checks`,
-      `## Safety notes and mistakes to avoid`
+      '- Explain prerequisites only if they are truly necessary for this topic.',
+      '- Structure the process around real steps, decisions, or milestones specific to the query.',
+      '- Add examples, caveats, or troubleshooting only where they create real value.',
+      '- Finish with a concise validation, recap, or next-step section if appropriate.'
     ].join('\n');
   }
   return [
-    `## Start with the core idea`,
-    `## Practical ${title} guidance`,
-    `### Strong examples and scenarios`,
-    `### Tradeoffs or edge cases`,
-    `## What to avoid`,
-    `## How to keep improving over time`
+    '- Choose a structure that fits the topic instead of reusing stock headings.',
+    '- Use 3 to 5 topic-specific sections with bespoke H2/H3 labels.',
+    '- Include examples, comparisons, tradeoffs, or edge cases only when genuinely relevant.',
+    '- End with a concise takeaway, future-looking note, or practical next step when useful.'
   ].join('\n');
 }
 
@@ -1150,11 +1177,13 @@ function commandInitContent(siteSlug) {
   }));
 
   const tags = [
-    { _id: scopedDocId('tag', safeSiteSlug, 'small-spaces'), _type: 'tag', siteSlug: safeSiteSlug, title: 'Small Spaces', slug: { current: 'small-spaces' } },
-    { _id: scopedDocId('tag', safeSiteSlug, 'checklists'), _type: 'tag', siteSlug: safeSiteSlug, title: 'Checklists', slug: { current: 'checklists' } },
-    { _id: scopedDocId('tag', safeSiteSlug, 'seasonal'), _type: 'tag', siteSlug: safeSiteSlug, title: 'Seasonal', slug: { current: 'seasonal' } },
+    { _id: scopedDocId('tag', safeSiteSlug, 'analysis'), _type: 'tag', siteSlug: safeSiteSlug, title: 'Analysis', slug: { current: 'analysis' } },
+    { _id: scopedDocId('tag', safeSiteSlug, 'explained'), _type: 'tag', siteSlug: safeSiteSlug, title: 'Explained', slug: { current: 'explained' } },
+    { _id: scopedDocId('tag', safeSiteSlug, 'trends'), _type: 'tag', siteSlug: safeSiteSlug, title: 'Trends', slug: { current: 'trends' } },
     { _id: scopedDocId('tag', safeSiteSlug, 'beginner'), _type: 'tag', siteSlug: safeSiteSlug, title: 'Beginner', slug: { current: 'beginner' } }
   ];
+
+  const authors = buildSiteAuthorProfiles(blueprint, safeSiteSlug);
 
   const promptPresets = Object.entries(blueprint.promptPresetVersions || {}).map(([stageKey, version]) => ({
     _id: scopedDocId('prompt', safeSiteSlug, `${String(stageKey)}-${String(version)}`),
@@ -1170,6 +1199,7 @@ function commandInitContent(siteSlug) {
 
   writeJson(path.join(seedDir, 'categories.json'), categories);
   writeJson(path.join(seedDir, 'tags.json'), tags);
+  writeJson(path.join(seedDir, 'authors.json'), authors);
   writeJson(path.join(seedDir, 'prompt-presets.json'), promptPresets);
   writeJson(path.join(seedDir, 'topic-seeds.json'), {
     siteSlug,
@@ -1370,9 +1400,9 @@ function commandSeedCms(siteSlug) {
   }
 
   const defaultTags = [
-    { slug: 'small-spaces', title: 'Small Spaces' },
-    { slug: 'checklists', title: 'Checklists' },
-    { slug: 'seasonal', title: 'Seasonal' },
+    { slug: 'analysis', title: 'Analysis' },
+    { slug: 'explained', title: 'Explained' },
+    { slug: 'trends', title: 'Trends' },
     { slug: 'beginner', title: 'Beginner' }
   ];
 
@@ -1385,6 +1415,12 @@ function commandSeedCms(siteSlug) {
         title: tag.title,
         slug: { current: tag.slug }
       }
+    });
+  }
+
+  for (const author of buildSiteAuthorProfiles(blueprint, safeSiteSlug)) {
+    mutations.push({
+      createOrReplace: author
     });
   }
 

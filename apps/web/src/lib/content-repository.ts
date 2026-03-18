@@ -20,6 +20,7 @@ const articleProjection = groq`{
   "coverImage": coverImage.asset->url,
   coverImageAlt,
   category->{_id, title, "slug": slug.current, description, accent},
+  author->{_id, name, role, bio},
   "tags": tags[]->{_id, title, "slug": slug.current},
   body,
   faqItems,

@@ -71,10 +71,16 @@ export function articleJsonLd(article: Article) {
     inLanguage: siteConfig.locale,
     mainEntityOfPage: url,
     image: [article.coverImage],
-    author: {
-      '@type': 'Organization',
-      name: siteConfig.name
-    },
+    author: article.author
+      ? {
+          '@type': 'Person',
+          name: article.author.name,
+          description: article.author.role || article.author.bio || undefined
+        }
+      : {
+          '@type': 'Organization',
+          name: siteConfig.name
+        },
     publisher: {
       '@type': 'Organization',
       name: siteConfig.name,

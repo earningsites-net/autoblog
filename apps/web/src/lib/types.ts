@@ -7,7 +7,7 @@ export type TextBlock = {
   style?: 'normal' | 'h2' | 'h3' | 'h4';
   listItem?: 'bullet' | 'number';
   children: Array<{ _key: string; _type: 'span'; text: string; marks?: string[] }>;
-  markDefs?: Array<{ _key: string; _type: string; href?: string }>;
+  markDefs?: Array<{ _key: string; _type: string; href?: string; nofollow?: boolean }>;
 };
 
 export type FAQItem = {
@@ -29,6 +29,13 @@ export type Tag = {
   slug: string;
 };
 
+export type AuthorProfile = {
+  _id: string;
+  name: string;
+  role: string;
+  bio: string;
+};
+
 export type Article = {
   _id: string;
   title: string;
@@ -37,6 +44,7 @@ export type Article = {
   coverImage: string;
   coverImageAlt: string;
   category: Category;
+  author?: AuthorProfile;
   tags: Tag[];
   body: TextBlock[];
   faqItems: FAQItem[];

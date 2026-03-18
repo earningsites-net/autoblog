@@ -116,6 +116,10 @@ This file stores durable project context shared across tasks.
   - i preset restano solo come retrocompatibilità/override strutturale, non come unica fonte della strategia editoriale
 - Pulizia hardcode editoriali:
   - `scripts/autoblog.mjs` e i workflow n8n principali (`brief_generation_worker`, `article_generation_worker`, `image_generation_worker`, `topic_discovery_daily`) non devono più assumere `Home & DIY` come nicchia di default
+- Qualità editoriale runtime:
+  - il brief deve fornire guidance strutturale, non headings rigide ripetute articolo dopo articolo
+  - `article_generation_worker` può inserire al massimo `0-2` riferimenti esterni inline nel body, solo se pertinenti e non inventati; niente sezione finale `sources`
+  - ogni sito può avere `authorProfile` seedati automaticamente; i workflow possono assegnare un autore reale agli articoli via reference Sanity
 - Provider VPS baseline per il pilot ops: `IONOS VPS`; runbook step-by-step su `docs/deploy/ionos-vps-ops.md`.
 - `Hetzner Cloud` resta documentato come fallback tecnico.
 - Hostname ops production correnti:

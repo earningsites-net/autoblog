@@ -306,6 +306,20 @@
   - `PLAN_AUTOMATION_TRIGGER_URL` aggiornato su VPS al path draft reale del workflow `plan_generation_scheduler_worker`
   - `autoblog-engine` riavviato e verificato `healthz`
   - `.env.production` locale riallineato agli stessi path webhook reali, per evitare di reintrodurre gli URL vecchi al prossimo sync
+- Pass qualità editoriale implementato localmente:
+  - `scripts/autoblog.mjs`: `buildBriefOutline()` alleggerito da outline H2/H3 rigide a linee guida editoriali più libere e topic-specific
+  - `scripts/autoblog.mjs`: introdotto seed automatico di `authorProfile` per sito (`Maya Chen`, `Jordan Blake`, `Avery Patel`) con bio coerenti con la nicchia
+  - `commandInitContent()` / `commandSeedCms()` aggiornati per scrivere e applicare autori e tag editoriali generici (`analysis`, `explained`, `trends`, `beginner`)
+  - `infra/n8n/workflows/brief_generation_worker.json`: prompt brief reso meno template-driven e più orientato a varietà strutturale, angolo forte ed esempi concreti
+  - `infra/n8n/workflows/article_generation_worker.json`: base prompt rafforzato per evitare intro dizionariali, headings stock e frasi meta; supporta `0-2` riferimenti esterni inline solo se pertinenti e non inventati
+  - `infra/n8n/workflows/article_generation_worker.json`: aggiunto step `Fetch site authors` e assegnazione deterministica dell'autore all'articolo
+  - `infra/n8n/workflows/article_generation_worker.json`: `bodyMarkdown` viene convertito in Portable Text preservando link inline come `markDefs` con `nofollow=true`
+  - schema Studio/frontend aggiornati per supportare:
+    - `article.author` come reference a `authorProfile`
+    - link annotations nel body articolo
+    - byline + bio autore nella pagina articolo
+    - JSON-LD autore come `Person` quando disponibile
+  - `scripts/site-use.mjs` già corretto in precedenza per riallineare anche `apps/studio/.env`; il typecheck completo post-change è di nuovo `OK`
 
 ## Decisions
 - Pilot operativo fissato su `lux-living-01`.
@@ -632,6 +646,12 @@
   - corretto il gap locale dello Studio:
     - `scripts/site-use.mjs` aggiornato per riallineare anche `apps/studio/.env`, non solo il root `.env`
     - verificato localmente: dopo `npm run site:use -- ai-blog-1 --root-env .env`, `apps/studio/.env` punta a `SANITY_STUDIO_PROJECT_ID=ekqu5dyw`
+  - analisi qualità contenuti `ai-blog-1` completata:
+    - la struttura H2/H3 ripetitiva nasce da `buildBriefOutline()` in `scripts/autoblog.mjs`
+    - l'articolo LLM riceve sempre `brief.outlineMarkdown`, quindi la ripetizione è strutturale e non solo di prompt model
+    - `publishedAt` è già presente nel model e già reso nel frontend/SEO
+    - il model `article` oggi non ha un campo autore/byline
+    - le fonti/link esterni non possono essere ottenuti solo via prompt: `article.body` non supporta annotazioni link e il renderer frontend tratta i mark `link` come `span`, non `<a>`
 
 ## Decisions
 - Per nicchie fuori catalogo il flusso corretto è:
@@ -652,15 +672,32 @@
 - I test E2E multi-nicchia non devono usare prompt utente per "coprire" hardcode legacy nel codice: eventuali riferimenti fuori nicchia (`DIY`, `homeowners`, ecc.) vanno lasciati emergere e corretti a monte in workflow/script.
 - I siti creati via Factory in production vanno trattati come runtime state: per consultarli in locale serve uno sync esplicito o uno Studio deployato, non un push automatico dal VPS verso GitHub.
 - `site:use` deve essere la fonte unica di verità per lo switch locale sito->Sanity; lasciare `apps/studio/.env` scollegato dal root `.env` porta a mostrare il progetto sbagliato nello Studio.
+- Per migliorare la qualità editoriale conviene spostare struttura/varietà nel prompt base del worker articolo e alleggerire o rimuovere le outline rigide generate a monte in `autoblog.mjs`.
+- Per questo pass non aggiungiamo una sezione finale `sources[]`: i riferimenti esterni, quando utili, restano inline nel body con massimo `0-2` link e `rel=nofollow`.
+- Gli autori devono essere parte del bootstrap CMS per-sito; aggiungerli solo nel renderer non basta, perché i workflow devono poter assegnare una reference reale già in fase di generazione.
 
 ## Next
 - Verificare qualità reale di `ai-blog-1` sui primi contenuti generati (topic -> brief -> article -> image prompt) per scovare eventuali hardcode verticali residui.
 - Valutare se rigenerare `ai-blog-1` per sfruttare anche il fix categorie `6` -> `6` completo, dato che il launch iniziale ha scritto solo `4` categorie nel blueprint.
 - Disegnare un flusso esplicito di sync/export dei siti creati in production (`sites/<slug>`) fuori dal working tree runtime, evitando auto-push da VPS.
 - Valutare se ignorare Git-localmente `sites/<slug>/.env.generated` e le copie sincronizzate da production per ridurre il rischio di commit accidentali.
+- Aprire un pass dedicato alla qualità editoriale:
+  - ridurre la rigidità di `buildBriefOutline()`
+  - rafforzare il base prompt del worker articolo
+  - introdurre autore/byline nel model `article`
+  - progettare supporto reale a fonti esterne con `rel=nofollow`
 - Ripassare il fallback category mapping di `article_generation_worker` se emergono pipeline che producono topic senza `categorySlug`.
 - Estrarre o desincronizzare dallo stato Git del VPS gli artefatti runtime (`sites/registry.json`, nuovi slug, report flow-guard`) per tornare a un deploy pulito con pull fast-forward.
 - Aggiornare lo smoke production del Factory dopo la rimozione del campo blueprint (`/api/factory/options` non deve più esporre `blueprints`).
+- Commit/push del pass qualità editoriale e deploy mirato su production:
+  - aggiornare codice `scripts/autoblog.mjs` sul VPS
+  - reimportare i workflow n8n modificati
+  - fare backfill autori sul sito esistente `ai-blog-1` prima del prossimo prepopulate
+- Validare un nuovo ciclo reale su `ai-blog-1` controllando:
+  - varietà outline nel brief
+  - byline valorizzata
+  - link inline cliccabili quando il modello ne inserisce
+  - eventuali residui editoriali fuori nicchia
 
 ## Risks
 - Il bootstrap manuale riduce l'accoppiamento coi preset, ma richiede disciplina operativa: categorie e seed topics scritti male produrranno contenuti incoerenti anche con prompt puliti.
@@ -669,3 +706,5 @@
 - Lo sync locale di `sites/ai-blog-1` porta anche `.env.generated` con secret runtime: il sito sincronizzato va trattato come copia operativa locale e non va committato.
 - Anche se il clone VPS ora è pulito, il rischio architetturale resta: finché lo stato runtime viene scritto dentro il working tree (`sites/registry.json`, nuovi slug, report flow-guard`), i futuri deploy possono tornare a sporcare il repo di produzione.
 - Il concetto `site.blueprint.json` resta ancora ampiamente accoppiato a CLI/runtime (`init-content`, `discover-topics`, `provision-env`, registry, doctor, theme engine`); eliminarlo del tutto oggi sarebbe un refactor più ampio del beneficio immediato.
+- Il fallback category mapping legacy di `article_generation_worker` resta ancora Home & DIY-oriented se manca `categorySlug`; il pass qualità attuale non lo tocca e può riemergere in edge case.
+- Gli autori sui siti già creati non appaiono automaticamente finché non viene rieseguito il seed CMS/autori sul dataset relativo.

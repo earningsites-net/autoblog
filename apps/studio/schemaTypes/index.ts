@@ -2,6 +2,7 @@ import { aiMetaType } from './objects/aiMeta';
 import { faqItemType } from './objects/faqItem';
 import { internalLinkType } from './objects/internalLink';
 import { articleType } from './documents/article';
+import { authorProfileType } from './documents/authorProfile';
 import { categoryType } from './documents/category';
 import { generationRunType } from './documents/generationRun';
 import { legalPageType } from './documents/legalPage';
@@ -16,6 +17,7 @@ export const schemaTypes = [
   aiMetaType,
   internalLinkType,
   siteSettingsType,
+  authorProfileType,
   categoryType,
   tagType,
   topicCandidateType,

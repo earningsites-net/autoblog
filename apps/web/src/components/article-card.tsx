@@ -16,6 +16,7 @@ type PortableTextMarkDef = {
   _key?: string;
   _type?: string;
   href?: string;
+  nofollow?: boolean;
 };
 
 
@@ -71,10 +72,17 @@ function renderInlineMarkdown(text: string, keyPrefix: string) {
     } else if (full.startsWith('[')) {
       const linkMatch = full.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
       const linkLabel = linkMatch?.[1] || full;
+      const href = String(linkMatch?.[2] || '').trim();
       nodes.push(
-        <span key={`${keyPrefix}-link-${matchIndex}`} className="underline decoration-current/45 underline-offset-2">
+        <a
+          key={`${keyPrefix}-link-${matchIndex}`}
+          href={href || undefined}
+          target="_blank"
+          rel="nofollow noopener noreferrer"
+          className="underline decoration-current/45 underline-offset-2"
+        >
           {linkLabel}
-        </span>
+        </a>
       );
     } else {
       nodes.push(full);
@@ -202,10 +210,18 @@ function applyInlineMarks(
         </span>
       );
     } else if (markDef?._type === 'link') {
+      const href = String(markDef.href || '').trim();
+      const rel = markDef.nofollow === false ? 'noopener noreferrer' : 'nofollow noopener noreferrer';
       node = (
-        <span key={`${keyPrefix}-link-${markIndex}`} className="underline decoration-current/45 underline-offset-2">
+        <a
+          key={`${keyPrefix}-link-${markIndex}`}
+          href={href || undefined}
+          target="_blank"
+          rel={rel}
+          className="underline decoration-current/45 underline-offset-2"
+        >
           {node}
-        </span>
+        </a>
       );
     }
 
