@@ -618,6 +618,13 @@
   - corretto anche il taglio silenzioso delle categorie manuali nel Factory:
     - `FactoryOpsService.buildCategorySeeds()` limitava le categorie a `4`
     - il limite operativo è stato portato a `6`, coerente con i test custom multi-nicchia
+  - fix categoria/article worker deployato su production:
+    - commit `8825885` (`Fix factory category cap and article workflow prompt`) pushato su `origin/main`
+    - VPS aggiornato con `git pull --ff-only origin main`
+    - `autoblog-engine` riavviato con successo
+    - reimport/smoke workflow production: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`
+    - retry prepopulate `ai-blog-1` rilanciato via `POST /api/factory/site/prepopulate`
+    - verifica n8n: esecuzione recente `article_generation_worker` (`workflowId=P8zuzSfblYcrH3PA`, execution `1486`) conclusa `success`
 
 ## Decisions
 - Per nicchie fuori catalogo il flusso corretto è:
@@ -638,8 +645,8 @@
 - I test E2E multi-nicchia non devono usare prompt utente per "coprire" hardcode legacy nel codice: eventuali riferimenti fuori nicchia (`DIY`, `homeowners`, ecc.) vanno lasciati emergere e corretti a monte in workflow/script.
 
 ## Next
-- Test E2E pulito con un nuovo sito non preset-driven (es. AI blog) creato solo con blueprint generico + bootstrap manuale.
-- Deployare su production il fix del workflow `article_generation_worker` e il nuovo limite categorie, poi rilanciare il prepopulate di `ai-blog-1`.
+- Verificare qualità reale di `ai-blog-1` sui primi contenuti generati (topic -> brief -> article -> image prompt) per scovare eventuali hardcode verticali residui.
+- Valutare se rigenerare `ai-blog-1` per sfruttare anche il fix categorie `6` -> `6` completo, dato che il launch iniziale ha scritto solo `4` categorie nel blueprint.
 - Ripassare il fallback category mapping di `article_generation_worker` se emergono pipeline che producono topic senza `categorySlug`.
 - Estrarre o desincronizzare dallo stato Git del VPS gli artefatti runtime (`sites/registry.json`, nuovi slug, report flow-guard`) per tornare a un deploy pulito con pull fast-forward.
 - Aggiornare lo smoke production del Factory dopo la rimozione del campo blueprint (`/api/factory/options` non deve più esporre `blueprints`).
