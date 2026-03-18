@@ -198,7 +198,6 @@ Per usare il toggle `Run prepopulate`, configura `PREPOPULATE_TRIGGER_URL` nell'
 ```bash
 cd "/Users/danilociamprone/Documents/Auto blog project"
 npm run factory:launch -- my-new-site \
-  --blueprint home-diy-magazine \
   --theme-tone auto \
   --topic-count 60 \
   --source suggest

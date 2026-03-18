@@ -134,7 +134,7 @@
   "legalTemplates": {
     "privacyTemplate": "mvp-standard-v1",
     "cookieTemplate": "mvp-standard-v1",
-    "disclaimerTemplate": "home-diy-informational-v1",
+    "disclaimerTemplate": "general-informational-v1",
     "contactEmailPlaceholder": "hello@example.com"
   },
   "providerRefs": {

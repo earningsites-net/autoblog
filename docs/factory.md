@@ -1,6 +1,6 @@
 # Site Factory (API-first, n8n optional)
 
-This repo now includes a factory-ready scaffolding layer to create repeatable AI-content sites from per-site blueprints.
+This repo now includes a factory-ready scaffolding layer to create repeatable AI-content sites from per-site site blueprints.
 
 ## Goals
 - Reuse the same `apps/web` frontend template across niches/brands.
@@ -13,20 +13,20 @@ This repo now includes a factory-ready scaffolding layer to create repeatable AI
 - `apps/web`: reads site settings from blueprint + env overrides.
 - `apps/engine`: Content Generation API scaffold (contract-first, runner/publisher pluggable).
 - `packages/factory-sdk`: shared types/contracts/client.
-- `packages/blueprints`: template blueprints (TS package scaffolding).
+- `packages/blueprints`: internal default blueprint scaffolding.
 - `packages/publishers`: CMS publisher adapter stubs (`sanity`, `wordpress`, `directus`).
 - `scripts/autoblog.mjs`: CLI for site bootstrap and repeatable setup tasks.
 
 ## Quick CLI Examples
 ```bash
 node scripts/autoblog.mjs list-blueprints
-node scripts/autoblog.mjs new my-garden-notes --blueprint home-diy-magazine --brand-name "Garden Notes"
+node scripts/autoblog.mjs new my-garden-notes --brand-name "Garden Notes"
 node scripts/autoblog.mjs theme-generate my-garden-notes --tone auto
 node scripts/autoblog.mjs provision-env my-garden-notes
 node scripts/autoblog.mjs init-content my-garden-notes
 node scripts/autoblog.mjs seed-cms my-garden-notes
 node scripts/autoblog.mjs discover-topics my-garden-notes --count 60 --source suggest --replace
-node scripts/autoblog.mjs launch-site my-garden-notes --blueprint home-diy-magazine --theme-tone auto --topic-count 60 --source suggest --apply-sanity
+node scripts/autoblog.mjs launch-site my-garden-notes --theme-tone auto --topic-count 60 --source suggest --apply-sanity
 node scripts/autoblog.mjs doctor my-garden-notes
 node scripts/autoblog.mjs handoff-pack my-garden-notes
 ```
@@ -60,7 +60,7 @@ node scripts/autoblog.mjs handoff-pack my-garden-notes
 
 ## One-Click Factory Flow (internal)
 1. Open `GET /ops/factory`.
-2. Fill `siteSlug`, `brandName`, business mode, niche preset, theme options, and topic settings.
+2. Fill `siteSlug`, `brandName`, business mode, primary niche, niche prompt, categories, seed topics, theme options, and topic settings.
 3. Optional toggles:
    - `Apply Sanity mutations`
    - `Run prepopulate`

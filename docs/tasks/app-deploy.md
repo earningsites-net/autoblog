@@ -600,6 +600,12 @@
     - production VPS aggiornato con `git pull --ff-only origin main`
     - `autoblog-engine` riavviato con successo
     - smoke `GET /api/factory/options` su production -> `200` con `blueprints=["generic-editorial-magazine","home-diy-magazine"]`
+  - semplificazione blueprint completata:
+    - rimosso `home-diy-magazine` dal package `packages/blueprints`
+    - rimosso il template file `sites/templates/home-diy-magazine/site.blueprint.template.json`
+    - rimosso il campo `Blueprint` dalla UI `/ops/factory`
+    - `generic-editorial-magazine` resta l'unico template di bootstrap operativo
+    - `generic-editorial-magazine` riallineato su `disclaimerTemplate=general-informational-v1`
 
 ## Decisions
 - Per nicchie fuori catalogo il flusso corretto è:
@@ -614,14 +620,17 @@
   - cleanup portal DB + registry + directory `sites/<slug>`
   - solo dopo `git reset --hard origin/main` / `git clean -fd` sul clone VPS
 - Il campo `Blueprint` resta necessario nel Factory finché non esiste una sintesi automatica che costruisce il template strutturale a partire dal solo prompt nicchia.
-- Dato che i blueprint/template disponibili sono oggi un set chiuso e piccolo, la UI del Factory deve esporli come `select`, non come `input` arbitrario.
+- Il concetto di blueprint va mantenuto come struttura interna per-sito (`site.blueprint.json`), ma non come scelta user-facing del Factory.
+- Finché non esiste una sintesi strutturale automatica da prompt, il bootstrap deve partire da un singolo default interno: `generic-editorial-magazine`.
 
 ## Next
 - Test E2E pulito con un nuovo sito non preset-driven (es. AI blog) creato solo con blueprint generico + bootstrap manuale.
 - Ripassare il fallback category mapping di `article_generation_worker` se emergono pipeline che producono topic senza `categorySlug`.
 - Estrarre o desincronizzare dallo stato Git del VPS gli artefatti runtime (`sites/registry.json`, nuovi slug, report flow-guard`) per tornare a un deploy pulito con pull fast-forward.
+- Aggiornare lo smoke production del Factory dopo la rimozione del campo blueprint (`/api/factory/options` non deve più esporre `blueprints`).
 
 ## Risks
 - Il bootstrap manuale riduce l'accoppiamento coi preset, ma richiede disciplina operativa: categorie e seed topics scritti male produrranno contenuti incoerenti anche con prompt puliti.
 - `article_generation_worker` contiene ancora fallback category mapping legacy se `categorySlug` manca; il path principale è coperto, ma il fallback va ancora generalizzato.
 - Anche se il clone VPS ora è pulito, il rischio architetturale resta: finché lo stato runtime viene scritto dentro il working tree (`sites/registry.json`, nuovi slug, report flow-guard`), i futuri deploy possono tornare a sporcare il repo di produzione.
+- Il concetto `site.blueprint.json` resta ancora ampiamente accoppiato a CLI/runtime (`init-content`, `discover-topics`, `provision-env`, registry, doctor, theme engine`); eliminarlo del tutto oggi sarebbe un refactor più ampio del beneficio immediato.

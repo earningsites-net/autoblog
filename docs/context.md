@@ -109,6 +109,8 @@ This file stores durable project context shared across tasks.
 - Factory multi-nicchia:
   - il bootstrap nuovi siti non deve dipendere da preset verticali fissi
   - blueprint default consigliato: `generic-editorial-magazine`
+  - `home-diy-magazine` non va più mantenuto come template operativo separato
+  - nel Factory user-facing non esiste più una scelta blueprint: il bootstrap parte sempre da `generic-editorial-magazine`
   - `ops/factory` supporta `Primary niche`, `Niche prompt`, `Categories` e `Seed topics` manuali
   - `nichePrompt` viene persistito nel blueprint come `niche.editorialPrompt`
   - i preset restano solo come retrocompatibilità/override strutturale, non come unica fonte della strategia editoriale

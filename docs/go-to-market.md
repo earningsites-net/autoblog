@@ -36,4 +36,4 @@
   - `POST /api/factory/site/handoff-pack`
   - `GET /api/factory/site/:siteSlug/status`
 - Internal lightweight form available at `GET /ops/factory`.
-- The internal form now supports one-click launch with niche preset, theme profile, topic discovery config, and optional prepopulate.
+- The internal form now supports one-click launch with manual niche bootstrap, theme profile, topic discovery config, and optional prepopulate.

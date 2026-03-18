@@ -3,7 +3,6 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import Fastify from 'fastify';
 import { z } from 'zod';
-import { listBlueprintTemplateIds } from '@autoblog/blueprints';
 import { generationJobRequestSchema } from '@autoblog/factory-sdk';
 import { createWorkflowRunner } from './adapters/workflow-runners';
 import { AuthService } from './services/auth-service';
@@ -2929,7 +2928,6 @@ app.get('/api/factory/site/:siteSlug/status', async (req, reply) => {
 app.get('/api/factory/options', async (req, reply) => {
   if (!requireFactoryAccess(req, reply)) return;
   return {
-    blueprints: listBlueprintTemplateIds(),
     nichePresets: factoryOps.listNichePresets(),
     businessModes: ['transfer_first', 'managed'],
     themeTones: ['auto', 'editorial', 'luxury', 'wellness', 'playful', 'technical'],
@@ -3323,7 +3321,7 @@ app.get('/ops/factory', async (req, reply) => {
 </head>
 <body>
   <h1>Factory Ops</h1>
-  <p class="hint">Pannello interno: crea un nuovo sito con un click (create + seed + discover + handoff), con prepopulate opzionale.</p>
+  <p class="hint">Pannello interno: crea un nuovo sito con un click (create + seed + discover + handoff), con bootstrap editoriale manuale e prepopulate opzionale.</p>
   <div class="grid">
     <section class="panel">
       <h2>Launch Site</h2>
@@ -3346,24 +3344,18 @@ app.get('/ops/factory', async (req, reply) => {
         </div>
       </div>
       <div class="row">
-        <div class="col-3">
-          <label>Blueprint</label>
-          <select id="blueprint">
-            <option value="generic-editorial-magazine">generic-editorial-magazine</option>
-          </select>
-        </div>
-        <div class="col-3">
+        <div class="col-4">
           <label>Business mode</label>
           <select id="businessMode">
             <option value="transfer_first">transfer_first</option>
             <option value="managed">managed</option>
           </select>
         </div>
-        <div class="col-3">
+        <div class="col-4">
           <label>Primary niche</label>
           <input id="primaryNiche" placeholder="Artificial Intelligence" />
         </div>
-        <div class="col-3">
+        <div class="col-4">
           <label>Theme tone</label>
           <select id="themeTone">
             <option value="auto">auto</option>
@@ -3516,7 +3508,6 @@ app.get('/ops/factory', async (req, reply) => {
         siteSlug: getValue('siteSlug'),
         brandName: getValue('brandName') || undefined,
         locale: getValue('locale') || undefined,
-        blueprint: getValue('blueprint') || undefined,
         businessMode: getValue('businessMode') || undefined,
         primaryNiche: getValue('primaryNiche') || undefined,
         nichePrompt: getValue('nichePrompt') || undefined,
@@ -3653,18 +3644,6 @@ app.get('/ops/factory', async (req, reply) => {
         });
         if (!res.ok) return;
         const data = await res.json();
-        const blueprintSelect = document.getElementById('blueprint');
-        if (blueprintSelect && Array.isArray(data.blueprints) && data.blueprints.length) {
-          const currentValue = blueprintSelect.value || 'generic-editorial-magazine';
-          blueprintSelect.innerHTML = '';
-          for (const blueprintId of data.blueprints) {
-            const option = document.createElement('option');
-            option.value = blueprintId;
-            option.textContent = blueprintId;
-            blueprintSelect.appendChild(option);
-          }
-          blueprintSelect.value = data.blueprints.includes(currentValue) ? currentValue : 'generic-editorial-magazine';
-        }
       } catch {}
     })();
   </script>
