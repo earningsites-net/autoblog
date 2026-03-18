@@ -4,6 +4,29 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Implementato `npm run site:sync:source` con `scripts/site-sync-source.mjs`:
+  - importa un sito da una directory sorgente
+  - copia solo `site.blueprint.json` e `README.md`
+  - ignora per design `.env.generated`, `seed-content/`, `handoff/`
+  - smoke locale eseguito con output coerente verso `/tmp/site-sync-output`
+- Implementato `npm run ops:backup:runtime` con `scripts/ops-backup-runtime.mjs`:
+  - snapshotta `apps/engine/data/portal.db*`, `sites/registry.json` e i file runtime per-sito
+  - scrive `manifest.json`
+  - smoke locale eseguito con output coerente verso `/tmp/autoblog-runtime-backups`
+- Rifattorizzata la discovery topic in `scripts/autoblog.mjs` verso un modello ibrido:
+  - pool grezzo da `seedTopics` + Google Suggest
+  - selezione finale configurabile `auto|heuristic|hybrid|llm`
+  - `auto` usa OpenAI solo se `OPENAI_API_KEY` è disponibile, altrimenti fallback locale
+  - dedupe semantica intra-batch e contro topic/article già noti del sito
+  - fallback locale al preview `seed-content/topic-candidates.generated.json` quando Sanity non è raggiungibile
+  - migliore classificazione delle categorie tramite keyword hints (`news`, `tools`, `real life`, `industry`, `guides`, `trends`)
+- Verifiche locali sui topic:
+  - `discover-topics --selector heuristic` e `discover-topics --selector auto` girano senza errori in locale
+  - la distribuzione categoria nel primo smoke post-fix è tornata bilanciata `3/3/3/3` sul sito di test storico
+- Aggiornata la documentazione operativa:
+  - `docs/factory.md` ora descrive il workflow `Factory prod -> site:sync:source -> commit/push -> deploy web`
+  - `docs/deploy/ionos-vps-ops.md` documenta il backup runtime fuori da Git
+  - `docs/context.md` registra i nuovi comandi e il modello ibrido di `discover-topics`
 - Corretto un bug di propagazione contesto nel worker `article_generation_worker` emerso nel clean test `ai-blog-1`:
   - il nodo `Load Budget Mode` leggeva `siteSlug` solo da `$json`, ma a runtime riceveva la risposta `authorProfile` del nodo precedente
   - fix: fallback esplicito a `$('When Executed by Another Workflow').item.json` e `$('Resolve Site Context').item.json`
@@ -369,6 +392,9 @@
     - verifica import workflow production: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`
 
 ## Decisions
+- Il gap Git tra VPS production e repo locale va chiuso con sync esplicito source-safe, non con auto-commit/auto-push dal server.
+- Il source of truth Git per i siti creati via Factory resta `sites/<slug>/site.blueprint.json` (+ opzionale `README.md`); `.env.generated`, `registry` e artefatti runtime restano fuori da Git.
+- La maggiore varietà dei topic va perseguita con un modello ibrido: pool grezzo non-LLM + selezione finale LLM opzionale, non con una crescita continua delle regex locali.
 - Per un reset E2E realmente pulito non basta cancellare `article`/`qaLog`: bisogna includere anche `topicCandidate`, altrimenti il dataset mantiene backlog invisibile ai controlli rapidi.
 - Nei subworkflow n8n chiamati via `Execute Workflow`, i code node a valle di HTTP request/transform devono leggere il contesto sito dal nodo `Resolve Site Context` e non assumere che `$json.siteSlug` sopravviva intatto.
 - I check rapidi su Sanity per `article` e `topicCandidate` vanno fatti su `siteSlug`, non su `site.slug.current`.
@@ -410,6 +436,10 @@
   - rimosse solo le righe `site_access` dell'admin, senza cancellare `site_settings` o `entitlements`, per evitare perdita non necessaria di storico/config
 
 ## Next
+- Verificare il nuovo workflow su un sito creato ex novo con `6` categorie manuali, così chiudiamo il regression check storico `4 vs 6`.
+- Fare uno smoke su VPS/production di `discover-topics` con Sanity raggiungibile, per validare anche il ramo di dedupe contro topic/article remoti.
+- Fare uno smoke con `OPENAI_API_KEY` disponibile per verificare la selezione `auto/hybrid` su un run reale, non solo il fallback locale.
+- Decidere se il fallback sintetico di categoria debba riempire sempre il quota target o se sia meglio accettare underfill per evitare query generiche residue.
 - Ispezionare piu' a fondo il body dei 9 articoli pubblicati del clean test per rifinire FAQ, excerpt e variabilita' strutturale residua.
 - Verificare i prompt immagine/output visivi reali, non solo `coverImageAlt`, per confermare che il bias `modern workspace scene` sia davvero sparito.
 - Decidere se il prepopulate deve rispettare un hard cap reale: oggi `targetPublishedCount=3` puo' produrre `9` publish quando `ARTICLE_BATCH_SIZE=3` e ci sono piu' cicli.
@@ -487,6 +517,9 @@
   - definizione della policy editoriale: recap/news analysis/roundup invece di news factual in tempo reale
 
 ## Risks
+- Se Sanity non è raggiungibile, `discover-topics` usa il preview locale come fallback: ottimo per il loop dev, ma la dedupe contro gli articoli pubblicati remoti va comunque verificata su un run con accesso rete reale.
+- Il path `auto/hybrid` non è ancora verificato con una chiamata OpenAI reale in questo workspace: oggi è coperto solo il fallback senza chiave e la compatibilità sintattica.
+- Alcune categorie molto larghe possono ancora degradare verso un fallback sintetico generico quando i seed distinti non bastano a saturare il quota target.
 - `targetPublishedCount` non e' un tetto stretto: con batch worker >1 il prepopulate puo' overshootare in modo consistente, come visto con `3 -> 9` articoli pubblicati.
 - Il clean test ha validato testo/categorie/autori e il completamento publish, ma non ancora il contenuto visivo effettivo delle immagini generate.
 - I gate `release:pilot:check:*` assumono file env dedicati (`.env.staging/.env.production` e varianti n8n): senza questi file il check fallisce immediatamente.

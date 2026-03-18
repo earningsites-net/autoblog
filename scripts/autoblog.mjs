@@ -16,8 +16,8 @@ Usage:
   autoblog init-content <site-slug>
   autoblog provision-env <site-slug> [--force]
   autoblog seed-cms <site-slug>
-  autoblog seed-topics <site-slug> [--count 30] [--status brief_ready] [--replace] [--source suggest|synthetic]
-  autoblog discover-topics <site-slug> [--count 30] [--status brief_ready] [--replace] [--source suggest|synthetic]
+  autoblog seed-topics <site-slug> [--count 30] [--status brief_ready] [--replace] [--source suggest|synthetic] [--selector auto|heuristic|hybrid|llm]
+  autoblog discover-topics <site-slug> [--count 30] [--status brief_ready] [--replace] [--source suggest|synthetic] [--selector auto|heuristic|hybrid|llm]
   autoblog launch-site <site-slug> [--blueprint generic-editorial-magazine] [--brand-name "Brand"] [--topic-count 60] [--source suggest|synthetic] [--theme-tone auto|editorial|luxury|wellness|playful|technical] [--theme-recipe <recipe>] [--apply-sanity]
   autoblog release-site <site-slug> [--from-sanity]
   autoblog deploy <site-slug>
@@ -610,59 +610,226 @@ function buildTopicBrief(query, templateType, blueprint) {
   };
 }
 
-function generateTopicQueries(seedTopics, targetCount) {
-  const modifiers = [
-    'for beginners',
-    'explained clearly',
-    'best practices',
-    'step by step',
-    'mistakes to avoid',
-    'examples',
-    'use cases',
-    'trends'
-  ];
+const TOPIC_STOPWORDS = new Set([
+  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'best', 'by', 'for', 'from', 'how', 'in', 'into', 'is', 'it',
+  'its', 'of', 'on', 'or', 'the', 'their', 'this', 'to', 'vs', 'versus', 'what', 'why', 'with'
+]);
 
-  const prefixes = [
-    'simple',
-    'practical',
-    'beginner-friendly',
-    'expert'
-  ];
+const TOPIC_FORMAT_TOKENS = new Set([
+  'analysis', 'approach', 'approaches', 'beginner', 'beginners', 'case', 'cases', 'checklist', 'clearly',
+  'compare', 'comparison', 'comparisons', 'example', 'examples', 'explained', 'future', 'guide', 'guides',
+  'idea', 'ideas', 'impact', 'industry', 'mistake', 'mistakes', 'outlook', 'overview', 'practice',
+  'practices', 'step', 'tips', 'trend', 'trends', 'use', 'usecase', 'workflow', 'workflows', 'year'
+]);
 
-  const perSeedVariants = [];
-  for (const seed of seedTopics) {
-    const base = String(seed || '').trim();
-    if (!base) continue;
-    const local = [base];
-
-    for (const modifier of modifiers) {
-      if (base.toLowerCase().includes(modifier)) continue;
-      local.push(`${base} ${modifier}`);
-    }
-
-    for (const prefix of prefixes) {
-      if (base.toLowerCase().startsWith(`${prefix} `)) continue;
-      local.push(`${prefix} ${base}`);
-    }
-
-    if (!/checklist/i.test(base)) local.push(`${base} checklist`);
-    if (!/ideas/i.test(base)) local.push(`${base} ideas`);
-    if (!/tips/i.test(base)) local.push(`${base} tips`);
-
-    perSeedVariants.push(uniqueStrings(local));
+const TOPIC_VARIETY_PATTERNS = [
+  {
+    format: 'guide',
+    when: () => true,
+    build: (base) => base
+  },
+  {
+    format: 'guide',
+    when: (base) => !/\bguide\b/i.test(base),
+    build: (base) => `${base} guide`
+  },
+  {
+    format: 'examples',
+    when: (base) => !/\bexamples?\b/i.test(base),
+    build: (base) => `${base} examples`
+  },
+  {
+    format: 'use-cases',
+    when: (base) => !/\buse cases?\b|\bapplications?\b/i.test(base),
+    build: (base) => `${base} use cases`
+  },
+  {
+    format: 'trends',
+    when: (base) => /\b(ai|automation|tool|platform|market|industry|future|content|finance|healthcare|education|cybersecurity|commerce)\b/i.test(base)
+      && !/\btrends?\b|\bfuture\b|\boutlook\b|\bforecast\b|20\d{2}/i.test(base),
+    build: (base) => `${base} trends`
+  },
+  {
+    format: 'comparison',
+    when: (base) => /\btools?\b|\bplatforms?\b|\bsoftware\b|\bapps?\b|\bassistants?\b/i.test(base)
+      && !/\bcompare\b|\bcomparison\b|\bversus\b|\bvs\b/i.test(base),
+    build: (base) => `${base} comparison`
+  },
+  {
+    format: 'industry-analysis',
+    when: (base) => /\bindustry\b|\bmarket\b|\bbusiness\b|\bbusinesses\b|\bstartup\b|\bstartups\b|\bfinance\b|\bbanking\b|\be-commerce\b|\bmarketing\b|\bcustomer support\b/i.test(base)
+      && !/\bindustry analysis\b|\bmarket analysis\b/i.test(base),
+    build: (base) => `${base} industry analysis`
+  },
+  {
+    format: 'guide',
+    when: (base) => !/\bexplained\b/i.test(base),
+    build: (base) => `${base} explained`
   }
+];
+
+function singularizeToken(token) {
+  if (!token) return token;
+  if (token.endsWith('ies') && token.length > 4) return `${token.slice(0, -3)}y`;
+  if (token.endsWith('ses') && token.length > 4) return token.slice(0, -2);
+  if (token.endsWith('s') && token.length > 4 && !token.endsWith('ss')) return token.slice(0, -1);
+  return token;
+}
+
+function normalizeTopicToken(token) {
+  let value = String(token || '').toLowerCase().trim();
+  if (!value) return '';
+  if (/^20\d{2}$/.test(value)) return 'year';
+  value = value.replace(/[^a-z0-9]+/g, '');
+  if (!value) return '';
+
+  const aliases = {
+    changing: 'impact',
+    transforming: 'impact',
+    reshaping: 'impact',
+    revolutionizing: 'impact',
+    redefining: 'impact',
+    application: 'usecase',
+    applications: 'usecase',
+    example: 'usecase',
+    examples: 'usecase',
+    case: 'usecase',
+    cases: 'usecase',
+    businesses: 'business',
+    owners: 'owner',
+    platforms: 'platform',
+    tools: 'tool',
+    trends: 'trend',
+    comparisons: 'comparison',
+    guides: 'guide'
+  };
+
+  value = aliases[value] || value;
+  return singularizeToken(value);
+}
+
+function tokenizeTopicQuery(query, options = {}) {
+  const semantic = Boolean(options.semantic);
+  const stopwords = semantic ? TOPIC_STOPWORDS : null;
+
+  return String(query || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .map((part) => normalizeTopicToken(part))
+    .filter(Boolean)
+    .filter((part) => !stopwords || !stopwords.has(part))
+    .filter((part) => !(semantic && TOPIC_FORMAT_TOKENS.has(part)));
+}
+
+function canonicalizeTopicQuery(query) {
+  return tokenizeTopicQuery(query).join(' ');
+}
+
+function buildTopicSemanticKey(query) {
+  return tokenizeTopicQuery(query, { semantic: true }).join(' ');
+}
+
+function topicTokenSet(query) {
+  return new Set(tokenizeTopicQuery(query, { semantic: true }));
+}
+
+function jaccardSimilarity(left, right) {
+  if (!left.size || !right.size) return 0;
+  let intersection = 0;
+  for (const token of left) {
+    if (right.has(token)) intersection += 1;
+  }
+  const union = new Set([...left, ...right]).size;
+  return union ? intersection / union : 0;
+}
+
+function areTopicQueriesNearDuplicate(left, right) {
+  const leftCanonical = canonicalizeTopicQuery(left);
+  const rightCanonical = canonicalizeTopicQuery(right);
+  if (!leftCanonical || !rightCanonical) return false;
+  if (leftCanonical === rightCanonical) return true;
+
+  const leftSemantic = buildTopicSemanticKey(left);
+  const rightSemantic = buildTopicSemanticKey(right);
+  if (leftSemantic && rightSemantic && leftSemantic === rightSemantic) return true;
+
+  const leftTokens = topicTokenSet(left);
+  const rightTokens = topicTokenSet(right);
+  const overlap = jaccardSimilarity(leftTokens, rightTokens);
+  return overlap >= 0.74;
+}
+
+function extractTopicFormat(query) {
+  const raw = String(query || '').toLowerCase();
+  if (/compare|comparison|versus|\bvs\b/.test(raw)) return 'comparison';
+  if (/use cases?|applications?/.test(raw)) return 'use-cases';
+  if (/examples?/.test(raw)) return 'examples';
+  if (/trend|forecast|future|outlook|20\d{2}/.test(raw)) return 'trends';
+  if (/industry analysis|market analysis|\bindustry\b|\bmarket\b/.test(raw)) return 'industry-analysis';
+  return 'guide';
+}
+
+function buildSyntheticTopicVariants(seed) {
+  const base = String(seed || '').trim();
+  if (!base) return [];
 
   const out = [];
-  const seen = new Set();
+  for (const pattern of TOPIC_VARIETY_PATTERNS) {
+    if (typeof pattern.when === 'function' && !pattern.when(base)) continue;
+    const query = String(pattern.build(base) || '').trim();
+    if (!query) continue;
+    if (out.some((item) => areTopicQueriesNearDuplicate(item.query, query))) continue;
+    out.push({ query, format: pattern.format, source: 'synthetic' });
+  }
+  return out;
+}
+
+function stripCodeFences(text) {
+  const trimmed = String(text || '').trim();
+  if (!trimmed.startsWith('```')) return trimmed;
+  const firstNewline = trimmed.indexOf('\n');
+  let content = firstNewline >= 0 ? trimmed.slice(firstNewline + 1) : trimmed.slice(3);
+  if (content.endsWith('```')) content = content.slice(0, -3);
+  return content.trim();
+}
+
+function extractOpenAiResponseText(payload) {
+  if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
+    return payload.output_text;
+  }
+
+  if (Array.isArray(payload?.output)) {
+    for (const item of payload.output) {
+      if (!Array.isArray(item?.content)) continue;
+      for (const content of item.content) {
+        if (typeof content?.text === 'string' && content.text.trim()) return content.text;
+      }
+    }
+  }
+
+  if (Array.isArray(payload?.choices) && typeof payload.choices[0]?.message?.content === 'string') {
+    return payload.choices[0].message.content;
+  }
+
+  throw new Error('Unable to extract text from OpenAI response');
+}
+
+function generateTopicQueries(seedTopics, targetCount) {
+  const perSeedVariants = seedTopics
+    .map((seed) => buildSyntheticTopicVariants(seed).map((item) => item.query))
+    .filter((items) => items.length > 0);
+
+  const out = [];
+  const accepted = [];
   let cursor = 0;
   while (out.length < Math.max(1, targetCount)) {
     let addedThisRound = false;
     for (const list of perSeedVariants) {
       const candidate = list[cursor];
       if (!candidate) continue;
-      const key = candidate.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
+      if (accepted.some((existing) => areTopicQueriesNearDuplicate(existing, candidate))) continue;
+      accepted.push(candidate);
       out.push(candidate);
       addedThisRound = true;
       if (out.length >= targetCount) break;
@@ -683,6 +850,32 @@ function tokenizeForMatching(input) {
     .filter((part) => part.length >= 3 && !['and', 'the', 'for', 'with', 'from', 'into'].includes(part));
 }
 
+function inferCategoryHintKeywords(slug, title, description) {
+  const haystack = `${slug} ${title} ${description}`.toLowerCase();
+  const hints = [];
+
+  if (/news|updates/.test(haystack)) {
+    hints.push('news', 'update', 'updates', 'latest', 'release', 'launch', 'announced');
+  }
+  if (/tools?|platform/.test(haystack)) {
+    hints.push('tool', 'tools', 'platform', 'platforms', 'software', 'assistant', 'comparison', 'productivity');
+  }
+  if (/real[- ]life|use cases?|applications?/.test(haystack)) {
+    hints.push('application', 'applications', 'usecase', 'usecases', 'example', 'examples', 'workflow', 'healthcare', 'education', 'support', 'personal');
+  }
+  if (/industry|business/.test(haystack)) {
+    hints.push('industry', 'business', 'market', 'marketing', 'startup', 'finance', 'banking', 'commerce', 'operations', 'enterprise');
+  }
+  if (/guides?|tutorials?/.test(haystack)) {
+    hints.push('guide', 'guides', 'tutorial', 'tutorials', 'explained', 'basics');
+  }
+  if (/trend|future/.test(haystack)) {
+    hints.push('trend', 'trends', 'future', 'forecast', 'outlook');
+  }
+
+  return tokenizeForMatching(hints.join(' '));
+}
+
 function buildCategoryProfiles(categories) {
   return (Array.isArray(categories) ? categories : []).map((category, index) => {
     const slug = String(category?.slug || '').trim();
@@ -691,7 +884,8 @@ function buildCategoryProfiles(categories) {
     const keywordSet = new Set([
       ...tokenizeForMatching(slug.replace(/-/g, ' ')),
       ...tokenizeForMatching(title),
-      ...tokenizeForMatching(description)
+      ...tokenizeForMatching(description),
+      ...inferCategoryHintKeywords(slug, title, description)
     ]);
     return {
       index,
@@ -749,6 +943,18 @@ function isSafeTopicQuery(query, excludedSubtopics) {
 }
 
 function buildCategorySeedMap(seedTopics, categoryProfiles) {
+  const buildCategoryAnchor = (profile) => {
+    const title = String(profile?.title || '').trim();
+    const description = String(profile?.description || '').trim();
+    if (!description) return title;
+    const withinMatch = description.match(/\bwithin\s+([^.,]+)/i);
+    const context = String(withinMatch?.[1] || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    if (!context) return title;
+    if (title.toLowerCase().includes(context.toLowerCase())) return title;
+    if (/\bartificial intelligence\b/i.test(context) && /\bai\b/i.test(title)) return title;
+    return `${context} ${title}`;
+  };
+
   const map = new Map();
   for (const profile of categoryProfiles) map.set(profile.slug, []);
   for (const seed of seedTopics) {
@@ -760,14 +966,93 @@ function buildCategorySeedMap(seedTopics, categoryProfiles) {
   }
   for (const profile of categoryProfiles) {
     const list = map.get(profile.slug) || [];
-    list.push(profile.title);
-    list.push(`${profile.title} tips`);
-    list.push(`${profile.title} ideas`);
-    list.push(`${profile.title} checklist`);
-    list.push(`${profile.title} for beginners`);
+    const anchor = buildCategoryAnchor(profile);
+    list.push(`${anchor} use cases`);
+    list.push(`${anchor} trends`);
+    list.push(`${anchor} comparison`);
+    list.push(`${anchor} industry analysis`);
+    list.push(`${anchor} guide`);
+    list.push(`${anchor} examples`);
     map.set(profile.slug, uniqueStrings(list));
   }
   return map;
+}
+
+function selectDiverseTopicCandidates(candidatePool, targetCount, tracker) {
+  const selected = [];
+  const usedFormats = new Set();
+
+  for (let pass = 0; pass < 2 && selected.length < targetCount; pass += 1) {
+    for (const candidate of candidatePool) {
+      if (selected.length >= targetCount) break;
+      if (selected.some((item) => item.query === candidate.query)) continue;
+      if (pass === 0 && usedFormats.has(candidate.format)) continue;
+      if (tracker.has(candidate.query)) continue;
+      selected.push(candidate);
+      usedFormats.add(candidate.format);
+      tracker.add(candidate.query);
+    }
+  }
+
+  return selected;
+}
+
+function selectBalancedHeuristicTopics(profiles, candidatePools, targetCount, tracker) {
+  const output = [];
+  const flatPool = [];
+  for (const profile of profiles) {
+    const items = candidatePools.get(profile.slug) || [];
+    for (const item of items) flatPool.push(item);
+  }
+
+  while (output.length < targetCount) {
+    let addedThisPass = false;
+    for (const profile of profiles) {
+      if (output.length >= targetCount) break;
+      const selected = selectDiverseTopicCandidates(candidatePools.get(profile.slug) || [], 1, tracker);
+      if (!selected.length) continue;
+      output.push(selected[0]);
+      addedThisPass = true;
+    }
+    if (!addedThisPass) break;
+  }
+
+  if (output.length < targetCount) {
+    output.push(...selectDiverseTopicCandidates(flatPool, targetCount - output.length, tracker));
+  }
+
+  return output.slice(0, targetCount);
+}
+
+function createTopicUniquenessTracker(existingQueries = []) {
+  const entries = [];
+  const canonicalSet = new Set();
+  const semanticSet = new Set();
+
+  const register = (query) => {
+    const canonical = canonicalizeTopicQuery(query);
+    if (!canonical) return;
+    const semantic = buildTopicSemanticKey(query);
+    entries.push({ query, canonical, semantic, tokens: topicTokenSet(query) });
+    canonicalSet.add(canonical);
+    if (semantic) semanticSet.add(semantic);
+  };
+
+  for (const query of existingQueries) register(query);
+
+  return {
+    has(query) {
+      const canonical = canonicalizeTopicQuery(query);
+      if (!canonical) return true;
+      const semantic = buildTopicSemanticKey(query);
+      if (canonicalSet.has(canonical)) return true;
+      if (semantic && semanticSet.has(semantic)) return true;
+      return entries.some((entry) => areTopicQueriesNearDuplicate(entry.query, query));
+    },
+    add(query) {
+      register(query);
+    }
+  };
 }
 
 async function fetchGoogleSuggest(query, locale = 'en-US') {
@@ -788,17 +1073,167 @@ async function fetchGoogleSuggest(query, locale = 'en-US') {
     .filter(Boolean);
 }
 
+function resolveTopicDiscoverySelector(flags = {}) {
+  const selector = String(
+    flags.selector ||
+      flags.selection ||
+      process.env.TOPIC_DISCOVERY_SELECTOR ||
+      process.env.TOPIC_DISCOVERY_SELECTION_MODE ||
+      'auto'
+  )
+    .trim()
+    .toLowerCase();
+  const model = String(
+    flags['selector-model'] ||
+      flags['selection-model'] ||
+      process.env.TOPIC_DISCOVERY_MODEL ||
+      process.env.TEXT_MODEL_DRAFT ||
+      'gpt-4.1-mini'
+  ).trim();
+
+  return {
+    selector,
+    model,
+    useLlm:
+      selector === 'llm' ||
+      selector === 'hybrid' ||
+      (selector === 'auto' && Boolean(String(process.env.OPENAI_API_KEY || '').trim()))
+  };
+}
+
 function synthesizeQueriesForCategory(baseSeeds, perCategoryTarget) {
-  const synthetic = generateTopicQueries(baseSeeds, Math.max(perCategoryTarget * 2, 10));
-  return synthetic.slice(0, perCategoryTarget);
+  const synthetic = generateTopicQueries(baseSeeds, Math.max(perCategoryTarget * 3, 12));
+  return synthetic.slice(0, Math.max(perCategoryTarget * 2, 8));
+}
+
+function buildCandidatePool(queries, categorySlug, source, existingCandidates = []) {
+  const out = [...existingCandidates];
+  for (const query of queries) {
+    const normalizedQuery = String(query || '').trim();
+    if (!normalizedQuery) continue;
+    if (out.some((item) => areTopicQueriesNearDuplicate(item.query, normalizedQuery))) continue;
+    out.push({
+      query: normalizedQuery,
+      categorySlug,
+      source,
+      format: extractTopicFormat(normalizedQuery)
+    });
+  }
+  return out.slice(existingCandidates.length);
+}
+
+async function selectTopicCandidatesWithLlm({
+  siteSlug,
+  blueprint,
+  profiles,
+  candidatePool,
+  targetCount,
+  existingQueries,
+  model,
+  tracker
+}) {
+  const apiKey = String(process.env.OPENAI_API_KEY || '').trim();
+  if (!apiKey) return { ok: false, reason: 'missing-openai-api-key', selected: [] };
+  if (!candidatePool.length) return { ok: false, reason: 'empty-candidate-pool', selected: [] };
+
+  const categories = profiles.map((profile) => ({
+    slug: profile.slug,
+    title: profile.title,
+    description: profile.description
+  }));
+  const editorialPrompt = getEditorialPrompt(blueprint);
+  const payload = {
+    siteSlug,
+    primaryNiche: String(blueprint?.niche?.primaryNiche || blueprint?.brandName || '').trim(),
+    editorialPrompt,
+    targetCount,
+    categories,
+    existingQueries: existingQueries.slice(0, 40),
+    candidates: candidatePool.slice(0, 80).map((candidate) => ({
+      query: candidate.query,
+      categorySlug: candidate.categorySlug,
+      format: candidate.format,
+      source: candidate.source
+    }))
+  };
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: 'system',
+          content:
+            'Return ONLY valid JSON with schema {"selected":[{"query":string,"categorySlug":string,"reason":string}]}. You are curating topic candidates for a professional editorial site. Choose ONLY from the provided candidates. Do not invent new queries, categories, dates, or entities. Prefer distinct semantic stems, strong editorial variety, balanced category coverage, and search-friendly phrasing. Reject trivial rewrites and near-duplicates of existing site topics or articles.'
+        },
+        {
+          role: 'user',
+          content: JSON.stringify(payload)
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`OpenAI topic selection failed (${response.status}): ${text}`);
+  }
+
+  const raw = await response.json();
+  const parsed = JSON.parse(stripCodeFences(extractOpenAiResponseText(raw)));
+  const requested = Array.isArray(parsed?.selected) ? parsed.selected : [];
+  const selected = [];
+  const used = new Set();
+
+  for (const item of requested) {
+    if (selected.length >= targetCount) break;
+    const query = String(item?.query || '').trim();
+    if (!query) continue;
+    const matched =
+      candidatePool.find((candidate) => candidate.query === query) ||
+      candidatePool.find((candidate) => candidate.query.toLowerCase() === query.toLowerCase());
+    if (!matched) continue;
+    if (used.has(matched.query.toLowerCase())) continue;
+    if (tracker.has(matched.query)) continue;
+
+    const requestedCategorySlug = String(item?.categorySlug || '').trim();
+    const categorySlug = profiles.some((profile) => profile.slug === requestedCategorySlug)
+      ? requestedCategorySlug
+      : matched.categorySlug;
+
+    tracker.add(matched.query);
+    used.add(matched.query.toLowerCase());
+    selected.push({
+      query: matched.query,
+      categorySlug,
+      format: matched.format,
+      source: matched.source,
+      reason: String(item?.reason || '').trim()
+    });
+  }
+
+  return {
+    ok: selected.length > 0,
+    reason: selected.length ? 'selected' : 'empty-selection',
+    selected
+  };
 }
 
 async function discoverTopicQueriesByCategory({
+  siteSlug,
+  blueprint,
   seedTopics,
   categories,
   targetCount,
   locale,
-  excludedSubtopics
+  excludedSubtopics,
+  existingQueries = [],
+  selectorConfig = resolveTopicDiscoverySelector()
 }) {
   const profiles = buildCategoryProfiles(categories);
   if (!profiles.length) {
@@ -807,17 +1242,16 @@ async function discoverTopicQueriesByCategory({
 
   const perCategoryTarget = Math.max(1, Math.ceil(targetCount / profiles.length));
   const categorySeedMap = buildCategorySeedMap(seedTopics, profiles);
-  const globalSeen = new Set();
-  const output = [];
+  const candidatePools = new Map();
+  const tracker = createTopicUniquenessTracker(existingQueries);
 
   for (const profile of profiles) {
     const seeds = categorySeedMap.get(profile.slug) || [];
-    const collected = [];
+    const candidatePool = [];
     let requestCount = 0;
     const maxRequestsPerCategory = 18;
 
     for (const seed of seeds) {
-      if (collected.length >= perCategoryTarget) break;
       if (requestCount >= maxRequestsPerCategory) break;
       requestCount += 1;
 
@@ -829,46 +1263,76 @@ async function discoverTopicQueriesByCategory({
       }
 
       for (const suggestion of suggestions) {
-        if (collected.length >= perCategoryTarget) break;
         if (!isSafeTopicQuery(suggestion, excludedSubtopics)) continue;
         const assigned = classifyQueryToCategory(suggestion, profiles);
         if (!assigned || assigned.slug !== profile.slug) continue;
-        const key = suggestion.toLowerCase();
-        if (globalSeen.has(key)) continue;
-        globalSeen.add(key);
-        collected.push({ query: suggestion, categorySlug: profile.slug });
+        candidatePool.push(...buildCandidatePool([suggestion], profile.slug, 'suggest', candidatePool));
       }
     }
 
-    if (collected.length < perCategoryTarget) {
+    if (candidatePool.length < perCategoryTarget) {
       const fallback = synthesizeQueriesForCategory(seeds, perCategoryTarget);
-      for (const suggestion of fallback) {
-        if (collected.length >= perCategoryTarget) break;
-        if (!isSafeTopicQuery(suggestion, excludedSubtopics)) continue;
-        const key = suggestion.toLowerCase();
-        if (globalSeen.has(key)) continue;
-        globalSeen.add(key);
-        collected.push({ query: suggestion, categorySlug: profile.slug });
-      }
+      candidatePool.push(...buildCandidatePool(fallback, profile.slug, 'synthetic', candidatePool));
     }
 
-    output.push(...collected);
+    candidatePools.set(
+      profile.slug,
+      candidatePool.filter((candidate) => isSafeTopicQuery(candidate.query, excludedSubtopics))
+    );
+  }
+
+  const candidatePool = [];
+  for (const profile of profiles) {
+    for (const candidate of candidatePools.get(profile.slug) || []) {
+      if (candidatePool.some((existing) => areTopicQueriesNearDuplicate(existing.query, candidate.query))) continue;
+      candidatePool.push(candidate);
+    }
+  }
+
+  let output = [];
+  if (selectorConfig.useLlm) {
+    try {
+      const llm = await selectTopicCandidatesWithLlm({
+        siteSlug,
+        blueprint,
+        profiles,
+        candidatePool,
+        targetCount,
+        existingQueries,
+        model: selectorConfig.model,
+        tracker
+      });
+      output = llm.selected;
+    } catch (error) {
+      console.warn(`[autoblog] Warning: LLM topic selection failed, falling back to heuristics: ${error.message || error}`);
+    }
   }
 
   if (output.length < targetCount) {
-    const fallbackAll = generateTopicQueries(seedTopics, targetCount * 3);
-    for (const query of fallbackAll) {
+    output.push(...selectBalancedHeuristicTopics(profiles, candidatePools, targetCount - output.length, tracker));
+  }
+
+  if (output.length < targetCount) {
+    const fallbackAll = buildCandidatePool(generateTopicQueries(seedTopics, targetCount * 4), '', 'synthetic');
+    for (const candidate of fallbackAll) {
       if (output.length >= targetCount) break;
-      if (!isSafeTopicQuery(query, excludedSubtopics)) continue;
-      const key = query.toLowerCase();
-      if (globalSeen.has(key)) continue;
-      globalSeen.add(key);
-      const assigned = classifyQueryToCategory(query, profiles) || profiles[0];
-      output.push({ query, categorySlug: assigned.slug });
+      if (!isSafeTopicQuery(candidate.query, excludedSubtopics)) continue;
+      if (tracker.has(candidate.query)) continue;
+      const assigned = classifyQueryToCategory(candidate.query, profiles) || profiles[0];
+      tracker.add(candidate.query);
+      output.push({
+        query: candidate.query,
+        categorySlug: assigned.slug,
+        format: candidate.format,
+        source: candidate.source
+      });
     }
   }
 
-  return output.slice(0, targetCount);
+  return output.slice(0, targetCount).map((candidate) => ({
+    query: candidate.query,
+    categorySlug: candidate.categorySlug
+  }));
 }
 
 function buildTopicCandidateDoc(siteSlug, query, index, status, workflowRunId, categorySlug, blueprint) {
@@ -974,6 +1438,75 @@ function loadWorkspaceEnv() {
     ...parseEnvFile(path.join(WORKSPACE_ROOT, '.env')),
     ...process.env
   };
+}
+
+function resolveSiteSanityReadConfig(siteSlug) {
+  const siteEnv = parseEnvFile(path.join(resolveSiteDir(siteSlug), '.env.generated'));
+  const workspaceEnv = loadWorkspaceEnv();
+  return {
+    projectId: siteEnv.SANITY_PROJECT_ID || workspaceEnv.SANITY_PROJECT_ID || '',
+    dataset: siteEnv.SANITY_DATASET || workspaceEnv.SANITY_DATASET || 'production',
+    apiVersion: siteEnv.SANITY_API_VERSION || workspaceEnv.SANITY_API_VERSION || '2025-01-01',
+    readToken: siteEnv.SANITY_READ_TOKEN || siteEnv.SANITY_WRITE_TOKEN || workspaceEnv.SANITY_READ_TOKEN || workspaceEnv.SANITY_WRITE_TOKEN || ''
+  };
+}
+
+async function runSanityQuery(config, query) {
+  if (!config.projectId || !config.readToken) return null;
+
+  const url = `https://${config.projectId}.api.sanity.io/v${config.apiVersion}/data/query/${config.dataset}?query=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${config.readToken}`
+    }
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Sanity query failed (${response.status}): ${text}`);
+  }
+
+  return response.json();
+}
+
+function loadLocalTopicQueryPreview(siteSlug) {
+  const previewPath = path.join(resolveSiteDir(siteSlug), 'seed-content', 'topic-candidates.generated.json');
+  if (!exists(previewPath)) return [];
+  try {
+    const payload = JSON.parse(fs.readFileSync(previewPath, 'utf8'));
+    const topics = Array.isArray(payload?.topics) ? payload.topics : [];
+    return uniqueStrings(topics.flatMap((doc) => [doc?.query, doc?.targetKeyword]).filter(Boolean));
+  } catch (error) {
+    console.warn(`[autoblog] Warning: failed to read local topic preview for '${siteSlug}': ${error.message || error}`);
+    return [];
+  }
+}
+
+async function fetchExistingSiteTopicQueries(siteSlug) {
+  const localQueries = loadLocalTopicQueryPreview(siteSlug);
+  const config = resolveSiteSanityReadConfig(siteSlug);
+  if (!config.projectId || !config.readToken) return localQueries;
+
+  const escapedSiteSlug = String(siteSlug).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const query = `{
+    "topics": *[_type=="topicCandidate" && siteSlug=="${escapedSiteSlug}"]{query,targetKeyword},
+    "articles": *[_type=="article" && siteSlug=="${escapedSiteSlug}"]{title,seoTitle,"sourceTopicQuery":aiMeta.sourceTopicQuery,"targetKeyword":aiMeta.targetKeyword}
+  }`;
+
+  try {
+    const payload = await runSanityQuery(config, query);
+    const topics = Array.isArray(payload?.result?.topics) ? payload.result.topics : [];
+    const articles = Array.isArray(payload?.result?.articles) ? payload.result.articles : [];
+    return uniqueStrings([
+      ...localQueries,
+      ...topics.flatMap((doc) => [doc?.query, doc?.targetKeyword]),
+      ...articles.flatMap((doc) => [doc?.title, doc?.seoTitle, doc?.sourceTopicQuery, doc?.targetKeyword])
+    ].filter(Boolean));
+  } catch (error) {
+    console.warn(`[autoblog] Warning: failed to fetch existing site topics for '${siteSlug}': ${error.message || error}`);
+    return localQueries;
+  }
 }
 
 function loadSiteRegistry() {
@@ -1453,6 +1986,7 @@ async function commandSeedTopics(siteSlug, flags) {
 
   const count = Math.max(1, Number(flags.count || 30));
   const source = String(flags.source || 'suggest').toLowerCase();
+  const selectorConfig = resolveTopicDiscoverySelector(flags);
   const locale = String(flags.locale || blueprint.locale || 'en-US');
   const status = ['queued', 'brief_ready', 'generated', 'skipped'].includes(String(flags.status || 'brief_ready'))
     ? String(flags.status || 'brief_ready')
@@ -1468,22 +2002,35 @@ async function commandSeedTopics(siteSlug, flags) {
   }
 
   const excludedSubtopics = blueprint.niche?.excludedSubtopics || [];
+  const existingQueries = await fetchExistingSiteTopicQueries(siteSlug);
   let discovered = [];
   if (source === 'suggest') {
     discovered = await discoverTopicQueriesByCategory({
+      siteSlug,
+      blueprint,
       seedTopics,
       categories,
       targetCount: count,
       locale,
-      excludedSubtopics
+      excludedSubtopics,
+      existingQueries,
+      selectorConfig
     });
   } else if (source === 'synthetic') {
     const profiles = buildCategoryProfiles(categories);
-    const fallback = generateTopicQueries(seedTopics, count * 3);
-    discovered = fallback.slice(0, count).map((query) => ({
-      query,
-      categorySlug: (classifyQueryToCategory(query, profiles) || profiles[0])?.slug
-    }));
+    const tracker = createTopicUniquenessTracker(existingQueries);
+    const fallback = buildCandidatePool(generateTopicQueries(seedTopics, count * 4), '', 'synthetic');
+    for (const candidate of fallback) {
+      if (discovered.length >= count) break;
+      if (!isSafeTopicQuery(candidate.query, excludedSubtopics)) continue;
+      if (tracker.has(candidate.query)) continue;
+      const assigned = classifyQueryToCategory(candidate.query, profiles) || profiles[0];
+      tracker.add(candidate.query);
+      discovered.push({
+        query: candidate.query,
+        categorySlug: assigned.slug
+      });
+    }
   } else {
     throw new Error(`Unknown --source value "${source}". Use "suggest" or "synthetic".`);
   }
@@ -1514,6 +2061,9 @@ async function commandSeedTopics(siteSlug, flags) {
     locale,
     status,
     workflowRunId,
+    existingQueryCount: existingQueries.length,
+    selector: selectorConfig.selector,
+    selectionModel: selectorConfig.model,
     topics: docs.map((doc) => ({
       _id: doc._id,
       query: doc.query,
@@ -1532,6 +2082,7 @@ async function commandSeedTopics(siteSlug, flags) {
 
   console.log(`Generated ${docs.length} topicCandidate documents for '${siteSlug}'`);
   console.log(`Discovery source: ${source}`);
+  console.log(`Selection mode: ${selectorConfig.selector}${selectorConfig.useLlm ? ` (${selectorConfig.model})` : ''}`);
   console.log(`Locale: ${locale}`);
   console.log(`Category distribution: ${JSON.stringify(categoryDistribution)}`);
   console.log(`Mutation strategy: ${mutationOp}`);

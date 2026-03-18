@@ -22,6 +22,8 @@ This file stores durable project context shared across tasks.
 - Stop local stack: `./scripts/dev-down.sh`
 - Import changed n8n workflows: `npm run n8n:import:changed`
 - Check + import + smoke changed n8n workflows: `npm run n8n:test:flows`
+- Sync source-safe site files into the repo: `npm run site:sync:source -- <site-dir>`
+- Backup runtime state outside Git: `npm run ops:backup:runtime -- --out-dir <snapshot-dir> --label <name>`
 - Pilot release checks (`lux-living-01`):
   - init env files: `npm run release:pilot:init-env`
   - staging readiness: `npm run release:pilot:check:staging`
@@ -138,8 +140,14 @@ This file stores durable project context shared across tasks.
   - finché questi artefatti restano tracciati o residenti nel repo di produzione, evitare `git pull --ff-only` cieco
   - strategia sicura corrente: `git fetch origin` seguito da `git checkout origin/main -- <lista-file-sorgente>` e restart/import mirati
   - i siti creati via Factory in production non esistono automaticamente nel workspace locale; per ispezionarli in dev usare uno sync esplicito (`scp` del sito dal VPS) oppure uno Studio deployato dedicato
+  - workflow consigliato per i nuovi siti: create via Factory in production -> copia locale del sito -> `npm run site:sync:source -- <dir-sito>` -> commit del solo `site.blueprint.json`/`README.md` -> deploy `apps/web`
   - non usare auto-commit/auto-push dal VPS production verso `main`: `sites/<slug>/.env.generated`, `registry` e handoff sono stato runtime, non source of truth Git
   - il comando locale `npm run site:use -- <site-slug>` deve riallineare sia il root `.env` sia `apps/studio/.env`; dopo lo switch va riavviato `sanity dev` per vedere il progetto Sanity corretto
+- Topic discovery:
+  - `scripts/autoblog.mjs discover-topics` usa un modello ibrido: pool grezzo da `seedTopics` + Google Suggest, poi selezione finale `auto|heuristic|hybrid|llm`
+  - `TOPIC_DISCOVERY_SELECTOR=auto` usa il pass LLM solo se `OPENAI_API_KEY` è disponibile; altrimenti resta sul fallback euristico
+  - la dedupe controlla: batch corrente, contenuti già presenti sul sito via Sanity, e in fallback l'ultimo preview locale `seed-content/topic-candidates.generated.json`
+  - l'obiettivo è evitare varianti banali dello stesso stem (`changing` vs `transforming`, `applications` vs `examples`, plurali/anni) prima del brief/article stage
 - Pilot release checks read env files:
   - root: `.env.staging` / `.env.production`
   - n8n: `infra/n8n/.env.staging` / `infra/n8n/.env.production`

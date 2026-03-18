@@ -20,3 +20,4 @@ infra/n8n/.env.staging
 infra/n8n/.env.production
 sites/*/seed-content
 sites/*/handoff
+.runtime-backups/

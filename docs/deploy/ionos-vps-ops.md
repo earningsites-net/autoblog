@@ -272,6 +272,34 @@ Nota su Sanity:
 - i workflow n8n risolvono la connessione Sanity via engine per `siteSlug`
 - quindi il server deve avere `sites/lux-living-01/.env.generated` con token e project id production coerenti
 
+## 10b. Backup runtime fuori da Git
+
+Il clone production contiene anche stato operativo (`portal.db`, `sites/registry.json`, `sites/<slug>/.env.generated`).
+Questo stato non va pushato su Git. Va invece salvato con backup espliciti.
+
+Dal VPS, dentro `/srv/auto-blog-project`:
+
+```bash
+sudo -u autoblog npm run ops:backup:runtime -- --out-dir /var/lib/autoblog/backups --label vps-runtime
+```
+
+Il backup include:
+
+- `apps/engine/data/portal.db*`
+- `sites/registry.json`
+- per ogni sito:
+  - `site.blueprint.json`
+  - `README.md`
+  - `.env.generated`
+
+Il comando scrive anche un `manifest.json` nello snapshot.
+
+Procedura consigliata:
+
+1. esegui un backup prima di cleanup importanti o deploy delicati sul VPS
+2. mantieni Git come source of truth solo per i file source-safe del sito
+3. usa `npm run site:sync:source -- <dir-sito-copiato-dal-vps>` sul tuo computer per riallineare il blueprint locale dopo una creazione fatta via Factory
+
 ## 11. Service systemd engine
 
 Installa il service engine:

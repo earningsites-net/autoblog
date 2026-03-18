@@ -68,6 +68,56 @@ node scripts/autoblog.mjs handoff-pack my-garden-notes
    - `Force overwrite existing site`
 4. Click `Launch Site (One Click)` to run: create -> niche/theme -> provision -> seed -> discover -> optional prepopulate -> handoff.
 
+## Source-Safe Git Sync After Production Creation
+Factory creation on the ops VPS is intentionally `prod-first`: it creates or updates `sites/<slug>/` on the server, including runtime-only files that must not be treated as Git source.
+
+After creating a site in production, the safe workflow is:
+
+1. Create the site from `/ops/factory`.
+2. Sync only source-safe files into your local repo:
+
+```bash
+npm run site:sync:source -- /path/to/exported-or-copied/site-dir
+```
+
+3. Review and commit only:
+   - `sites/<slug>/site.blueprint.json`
+   - optional `sites/<slug>/README.md`
+4. Push `main`.
+5. Deploy `apps/web` on Vercel for that site.
+
+The sync command intentionally ignores runtime artifacts:
+
+- `.env.generated`
+- `seed-content/`
+- `handoff/`
+
+Example:
+
+```bash
+npm run site:sync:source -- sites/ai-blog-1
+```
+
+If the source directory comes directly from the VPS, copy it locally first with `scp` and then run the sync command on the copied directory.
+
+## Topic Discovery Diversity
+`discover-topics` now supports a hybrid selector model:
+
+- build a raw candidate pool from `seedTopics` + Google Suggest
+- optionally ask an LLM to choose only from that candidate pool (`TOPIC_DISCOVERY_SELECTOR=auto|hybrid|llm`)
+- fall back to local heuristics when no API key is available or the LLM selection fails
+- canonicalize trivial query variants before dedupe
+- reject near-duplicates inside the same batch
+- reject near-duplicates against existing site topics/articles when Sanity is reachable
+- fall back to the last local generated topic preview if Sanity is not reachable
+- keep category quotas balanced when enough distinct stems exist
+
+Selector modes:
+
+- `auto`: use LLM only if `OPENAI_API_KEY` is available, otherwise use heuristics
+- `heuristic`: never call the LLM
+- `hybrid` / `llm`: force the LLM selection pass and fall back to heuristics only on failure
+
 ## Current State / What is stubbed
 - Factory API provisioning endpoints are wired to CLI-backed operations (`create/seed/discover/handoff`).
 - One-click flow supports passing per-site Sanity credentials and persisting to site env/registry.
