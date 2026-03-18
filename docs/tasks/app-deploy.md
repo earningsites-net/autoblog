@@ -606,6 +606,11 @@
     - rimosso il campo `Blueprint` dalla UI `/ops/factory`
     - `generic-editorial-magazine` resta l'unico template di bootstrap operativo
     - `generic-editorial-magazine` riallineato su `disclaimerTemplate=general-informational-v1`
+    - commit/push/deploy eseguiti:
+      - commit `5427f27` (`Simplify factory blueprint model`)
+      - production aggiornata con `git pull --ff-only origin main`
+      - `autoblog-engine` riavviato con successo
+      - smoke `GET /api/factory/options` su production -> `200`, `hasBlueprints=false`
 
 ## Decisions
 - Per nicchie fuori catalogo il flusso corretto è:
@@ -622,6 +627,7 @@
 - Il campo `Blueprint` resta necessario nel Factory finché non esiste una sintesi automatica che costruisce il template strutturale a partire dal solo prompt nicchia.
 - Il concetto di blueprint va mantenuto come struttura interna per-sito (`site.blueprint.json`), ma non come scelta user-facing del Factory.
 - Finché non esiste una sintesi strutturale automatica da prompt, il bootstrap deve partire da un singolo default interno: `generic-editorial-magazine`.
+- Eliminare il concetto interno di blueprint oggi sarebbe un refactor troppo ampio rispetto al beneficio immediato; la semplificazione corretta è togliere la selezione utente, non il file/runtime model.
 
 ## Next
 - Test E2E pulito con un nuovo sito non preset-driven (es. AI blog) creato solo con blueprint generico + bootstrap manuale.
