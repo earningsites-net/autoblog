@@ -445,7 +445,7 @@ export class FactoryOpsService {
 
   private buildCategorySeeds(labels: string[], primaryNiche: string) {
     return uniqueStrings(labels)
-      .slice(0, 4)
+      .slice(0, 6)
       .map((label, index) => {
         const title = titleCase(compactText(label, 80));
         return {

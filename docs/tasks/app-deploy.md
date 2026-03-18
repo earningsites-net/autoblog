@@ -611,6 +611,13 @@
       - production aggiornata con `git pull --ff-only origin main`
       - `autoblog-engine` riavviato con successo
       - smoke `GET /api/factory/options` su production -> `200`, `hasBlueprints=false`
+  - fixato il crash del worker `article_generation_worker` emerso nel test `ai-blog-1`:
+    - il nodo `Generate Article JSON` conteneva newline letterali dentro una stringa JS in `jsonBody`, causando `invalid syntax` in n8n
+    - il prompt user ora viene composto con array + `.join('\\n')`, compatibile con l'espressione n8n
+    - parse JSON del workflow modificato verificato localmente
+  - corretto anche il taglio silenzioso delle categorie manuali nel Factory:
+    - `FactoryOpsService.buildCategorySeeds()` limitava le categorie a `4`
+    - il limite operativo è stato portato a `6`, coerente con i test custom multi-nicchia
 
 ## Decisions
 - Per nicchie fuori catalogo il flusso corretto è:
@@ -628,9 +635,11 @@
 - Il concetto di blueprint va mantenuto come struttura interna per-sito (`site.blueprint.json`), ma non come scelta user-facing del Factory.
 - Finché non esiste una sintesi strutturale automatica da prompt, il bootstrap deve partire da un singolo default interno: `generic-editorial-magazine`.
 - Eliminare il concetto interno di blueprint oggi sarebbe un refactor troppo ampio rispetto al beneficio immediato; la semplificazione corretta è togliere la selezione utente, non il file/runtime model.
+- I test E2E multi-nicchia non devono usare prompt utente per "coprire" hardcode legacy nel codice: eventuali riferimenti fuori nicchia (`DIY`, `homeowners`, ecc.) vanno lasciati emergere e corretti a monte in workflow/script.
 
 ## Next
 - Test E2E pulito con un nuovo sito non preset-driven (es. AI blog) creato solo con blueprint generico + bootstrap manuale.
+- Deployare su production il fix del workflow `article_generation_worker` e il nuovo limite categorie, poi rilanciare il prepopulate di `ai-blog-1`.
 - Ripassare il fallback category mapping di `article_generation_worker` se emergono pipeline che producono topic senza `categorySlug`.
 - Estrarre o desincronizzare dallo stato Git del VPS gli artefatti runtime (`sites/registry.json`, nuovi slug, report flow-guard`) per tornare a un deploy pulito con pull fast-forward.
 - Aggiornare lo smoke production del Factory dopo la rimozione del campo blueprint (`/api/factory/options` non deve più esporre `blueprints`).
@@ -638,5 +647,6 @@
 ## Risks
 - Il bootstrap manuale riduce l'accoppiamento coi preset, ma richiede disciplina operativa: categorie e seed topics scritti male produrranno contenuti incoerenti anche con prompt puliti.
 - `article_generation_worker` contiene ancora fallback category mapping legacy se `categorySlug` manca; il path principale è coperto, ma il fallback va ancora generalizzato.
+- I siti già creati prima del fix categorie conservano il blueprint già scritto; per vedere `6` categorie va rifatto il launch o rigenerato il blueprint del sito.
 - Anche se il clone VPS ora è pulito, il rischio architetturale resta: finché lo stato runtime viene scritto dentro il working tree (`sites/registry.json`, nuovi slug, report flow-guard`), i futuri deploy possono tornare a sporcare il repo di produzione.
 - Il concetto `site.blueprint.json` resta ancora ampiamente accoppiato a CLI/runtime (`init-content`, `discover-topics`, `provision-env`, registry, doctor, theme engine`); eliminarlo del tutto oggi sarebbe un refactor più ampio del beneficio immediato.
