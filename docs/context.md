@@ -79,6 +79,7 @@ This file stores durable project context shared across tasks.
   - `ARTICLE_BATCH_SIZE`
   - `IMAGE_BATCH_SIZE`
   - `QA_BATCH_SIZE`
+  - `prepopulate_bulk_runner` usa questi batch size per ciclo: `targetPublishedCount` non e' un hard cap se i worker processano piu' di 1 item per ciclo; per smoke stretti abbassare i batch size oppure il numero di cicli.
 - Current multi-site gap to remember:
   - web revalidate in n8n is still global-first via `WEB_APP_URL` + `WEB_REVALIDATE_SECRET`.
   - `publish_scheduler_worker` respects `PUBLISH_REVALIDATE_ENABLED=false`, but `qa_scoring_and_publish_worker` still has a hardcoded local revalidate URL and needs cleanup before relying on revalidate in production.
@@ -127,6 +128,11 @@ This file stores durable project context shared across tasks.
 - Hostname ops production correnti:
   - engine / portal / factory: `https://aiblogs.earningsites.net`
   - n8n editor / webhook: `https://n8n.earningsites.net`
+- Sanity content queries by site:
+  - `article`, `topicCandidate`, `category` e `authorProfile` usano il campo stringa `siteSlug` come filtro principale; non assumere una reference `site.slug.current` nei check o nei cleanup.
+  - per un reset E2E davvero pulito usare `scripts/sanity-cleanup.mjs --site-slug <slug> --include-topics`, altrimenti i `topicCandidate` residui restano nel dataset.
+- n8n child workflow input safety:
+  - nei subworkflow chiamati via `Execute Workflow`, i code node a valle di HTTP request / transform non devono assumere che `$json.siteSlug` sopravviva intatto; quando disponibile usare il valore già risolto da `Resolve Site Context`.
 - Deploy caveat su VPS production:
   - il clone in `/srv/auto-blog-project` contiene anche stato runtime (`sites/registry.json`, siti creati in `sites/<slug>/`, report `docs/ops/n8n-flow-checks/*`)
   - finché questi artefatti restano tracciati o residenti nel repo di produzione, evitare `git pull --ff-only` cieco

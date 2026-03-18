@@ -4,6 +4,27 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Corretto un bug di propagazione contesto nel worker `article_generation_worker` emerso nel clean test `ai-blog-1`:
+  - il nodo `Load Budget Mode` leggeva `siteSlug` solo da `$json`, ma a runtime riceveva la risposta `authorProfile` del nodo precedente
+  - fix: fallback esplicito a `$('When Executed by Another Workflow').item.json` e `$('Resolve Site Context').item.json`
+  - deploy production completato con reimport/smoke workflow OK (`Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`)
+- Corretto un secondo bug nel worker articolo emerso subito dopo il primo fix:
+  - la query GROQ usata da `Normalize Article Payload` per leggere le categorie era over-escaped (`\"category\"`) e Sanity rispondeva `queryParseError`
+  - fix deployato su production; reimport/smoke workflow OK
+- Eseguito un reset davvero pulito di `ai-blog-1` su Sanity:
+  - prima cleanup `article` + `qaLog`
+  - poi cleanup con `--include-topics` per rimuovere anche `topicCandidate` residui (`30` docs)
+  - verifica zero-state finale: `articles=0`, `qaLogs=0`, `topicCandidates=0`, `briefReady=0`
+- Rieseguito clean test E2E su `ai-blog-1` dopo i fix workflow:
+  - rigenerati `12` topic `brief_ready` via `/api/factory/site/discover-topics`
+  - rilanciato `/api/factory/site/prepopulate` con `targetPublishedCount=3`, `batchSize=1`
+  - risultato reale su Sanity: `9` articoli `published`, `3` topic ancora `brief_ready`, `9` topic `generated`
+  - worker osservati in production: `article_generation_worker` success, `image_generation_worker` success, publish completato con `qaScore` e `publishedAt` valorizzati
+- Verifica qualitativa sui primi articoli del clean test:
+  - autori assegnati correttamente (`Jordan Blake`, `Maya Chen`, `Avery Patel`)
+  - categorie corrette (`AI News & Updates`, `AI Tools & Platforms`, `AI In Real Life`)
+  - heading meno rigide del pattern legacy; esempi osservati: `Beyond Automation: AI’s Expanding Role in Content Creation`, `Tracing Key AI Trends Reshaping Content Creation`, `Industry Use Cases Illustrate AI’s Impact`
+  - `coverImageAlt` ora resta generico/editoriale e non contiene piu' fallback verticali tipo `modern workspace scene`
 - Valutato il fit del flusso attuale per un sito automatico a tema `AI news`:
   - pipeline presente end-to-end (`topic` -> `brief` -> `article`), ma oggi specializzata su `Home & DIY` evergreen
   - discovery topic supporta `suggest` via Google Suggest e fallback `synthetic`, quindi non dipende da feed news live
@@ -348,6 +369,9 @@
     - verifica import workflow production: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`
 
 ## Decisions
+- Per un reset E2E realmente pulito non basta cancellare `article`/`qaLog`: bisogna includere anche `topicCandidate`, altrimenti il dataset mantiene backlog invisibile ai controlli rapidi.
+- Nei subworkflow n8n chiamati via `Execute Workflow`, i code node a valle di HTTP request/transform devono leggere il contesto sito dal nodo `Resolve Site Context` e non assumere che `$json.siteSlug` sopravviva intatto.
+- I check rapidi su Sanity per `article` e `topicCandidate` vanno fatti su `siteSlug`, non su `site.slug.current`.
 - Pilot operativo fissato su `lux-living-01`.
 - Il rilascio viene codificato in runbook + script CLI ripetibili (non in passaggi manuali ad-hoc).
 - La promozione stato sito (`domainStatus`, `automationStatus`) resta azione esplicita post go-live, non automatica.
@@ -386,6 +410,9 @@
   - rimosse solo le righe `site_access` dell'admin, senza cancellare `site_settings` o `entitlements`, per evitare perdita non necessaria di storico/config
 
 ## Next
+- Ispezionare piu' a fondo il body dei 9 articoli pubblicati del clean test per rifinire FAQ, excerpt e variabilita' strutturale residua.
+- Verificare i prompt immagine/output visivi reali, non solo `coverImageAlt`, per confermare che il bias `modern workspace scene` sia davvero sparito.
+- Decidere se il prepopulate deve rispettare un hard cap reale: oggi `targetPublishedCount=3` puo' produrre `9` publish quando `ARTICLE_BATCH_SIZE=3` e ci sono piu' cicli.
 - Popolare `.env.staging`, `.env.production`, `infra/n8n/.env.staging`, `infra/n8n/.env.production` con segreti reali e domini.
 - Eseguire gate completi:
   - `npm run release:pilot:check:staging`
@@ -460,6 +487,8 @@
   - definizione della policy editoriale: recap/news analysis/roundup invece di news factual in tempo reale
 
 ## Risks
+- `targetPublishedCount` non e' un tetto stretto: con batch worker >1 il prepopulate puo' overshootare in modo consistente, come visto con `3 -> 9` articoli pubblicati.
+- Il clean test ha validato testo/categorie/autori e il completamento publish, ma non ancora il contenuto visivo effettivo delle immagini generate.
 - I gate `release:pilot:check:*` assumono file env dedicati (`.env.staging/.env.production` e varianti n8n): senza questi file il check fallisce immediatamente.
 - Il comando `factory-launch-smoke --execute` può innescare operazioni reali di creazione/seed/discovery/prepopulate: usare prima la modalità preflight.
 - Rimangono modifiche locali non correlate preesistenti su database engine (`apps/engine/data/portal.db-*`).
