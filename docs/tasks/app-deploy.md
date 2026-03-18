@@ -320,6 +320,20 @@
     - byline + bio autore nella pagina articolo
     - JSON-LD autore come `Person` quando disponibile
   - `scripts/site-use.mjs` già corretto in precedenza per riallineare anche `apps/studio/.env`; il typecheck completo post-change è di nuovo `OK`
+- Pass qualità editoriale pushato e deployato in production:
+  - commit `f8c32ca` (`Improve article quality and author metadata`) pushato su `origin/main`
+  - VPS aggiornato per i file runtime rilevanti:
+    - `scripts/autoblog.mjs`
+    - `infra/n8n/workflows/article_generation_worker.json`
+    - `infra/n8n/workflows/brief_generation_worker.json`
+  - reimport/smoke workflow production eseguito con successo:
+    - `Checked workflows: 11`
+    - `pass=9 warn=2 fail=0`
+    - `Smoke: pass=11 fail=0 skipped=0`
+  - backfill autori su `ai-blog-1` completato:
+    - seed/autori applicati su Sanity (`17` mutation nel seed CMS)
+    - patchati `30` articoli esistenti per valorizzare `article.author`
+    - verifica finale dataset: `total=30`, `missingAuthor=0`
 
 ## Decisions
 - Pilot operativo fissato su `lux-living-01`.
@@ -675,6 +689,7 @@
 - Per migliorare la qualità editoriale conviene spostare struttura/varietà nel prompt base del worker articolo e alleggerire o rimuovere le outline rigide generate a monte in `autoblog.mjs`.
 - Per questo pass non aggiungiamo una sezione finale `sources[]`: i riferimenti esterni, quando utili, restano inline nel body con massimo `0-2` link e `rel=nofollow`.
 - Gli autori devono essere parte del bootstrap CMS per-sito; aggiungerli solo nel renderer non basta, perché i workflow devono poter assegnare una reference reale già in fase di generazione.
+- Per il rollout immediato non serve un deploy Vercel aggiuntivo: il cambiamento che impatta i prossimi contenuti vive soprattutto in `autoblog.mjs` + workflow n8n + dataset Sanity; il rendering web aggiornato resta pronto nel repo per il prossimo deploy frontend.
 
 ## Next
 - Verificare qualità reale di `ai-blog-1` sui primi contenuti generati (topic -> brief -> article -> image prompt) per scovare eventuali hardcode verticali residui.
@@ -690,14 +705,13 @@
 - Estrarre o desincronizzare dallo stato Git del VPS gli artefatti runtime (`sites/registry.json`, nuovi slug, report flow-guard`) per tornare a un deploy pulito con pull fast-forward.
 - Aggiornare lo smoke production del Factory dopo la rimozione del campo blueprint (`/api/factory/options` non deve più esporre `blueprints`).
 - Commit/push del pass qualità editoriale e deploy mirato su production:
-  - aggiornare codice `scripts/autoblog.mjs` sul VPS
-  - reimportare i workflow n8n modificati
-  - fare backfill autori sul sito esistente `ai-blog-1` prima del prossimo prepopulate
+  - completato
 - Validare un nuovo ciclo reale su `ai-blog-1` controllando:
   - varietà outline nel brief
   - byline valorizzata
   - link inline cliccabili quando il modello ne inserisce
   - eventuali residui editoriali fuori nicchia
+- Valutare se fare ora anche un deploy frontend/Vercel per mostrare pubblicamente byline/bio/link nel rendering produzione del sito pubblico, non solo in Studio/local.
 
 ## Risks
 - Il bootstrap manuale riduce l'accoppiamento coi preset, ma richiede disciplina operativa: categorie e seed topics scritti male produrranno contenuti incoerenti anche con prompt puliti.
@@ -708,3 +722,4 @@
 - Il concetto `site.blueprint.json` resta ancora ampiamente accoppiato a CLI/runtime (`init-content`, `discover-topics`, `provision-env`, registry, doctor, theme engine`); eliminarlo del tutto oggi sarebbe un refactor più ampio del beneficio immediato.
 - Il fallback category mapping legacy di `article_generation_worker` resta ancora Home & DIY-oriented se manca `categorySlug`; il pass qualità attuale non lo tocca e può riemergere in edge case.
 - Gli autori sui siti già creati non appaiono automaticamente finché non viene rieseguito il seed CMS/autori sul dataset relativo.
+- Il pass attuale migliora molto il prompt e la struttura, ma non garantisce da solo qualità alta costante: restano da osservare i primi articoli post-deploy per capire se servono ulteriori strette su style guide, excerpt e prompt immagini.
