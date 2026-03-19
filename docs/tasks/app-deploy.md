@@ -4,6 +4,17 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Local Sanity CLI config removed from Git tracking:
+  - `.dev/config/sanity/config.json` contains local auth/update metadata and must stay untracked
+  - `.gitignore` now excludes `.dev/config/sanity/`
+- Cleanup `ai-blog-1` iniziato:
+  - TODO automazione teardown aggiunto al task
+  - runtime VPS rimosso da:
+    - `/var/lib/autoblog/sites/ai-blog-1`
+    - `/var/lib/autoblog/sites/registry.json`
+    - portal DB cleanup tentato via `sqlite3` per `site_access`, `site_settings`, `entitlements`, `published_article_events`
+  - backup pre-delete eseguito sul VPS, ma il comando ha letto i default locali del repo invece del runtime root perché `AUTOBLOG_RUNTIME_ROOT` non era esportato in quella shell `npm run`
+  - il source locale `sites/ai-blog-1/` è stato rimosso dal workspace, ma non ancora committato/pushato
 - Commit/push/refactor rollout completati:
   - commit `e12671e` (`Separate runtime state from repo`) pushato su `origin/main`
   - VPS `IONOS` migrato a `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog`
@@ -821,6 +832,7 @@
     - le fonti/link esterni non possono essere ottenuti solo via prompt: `article.body` non supporta annotazioni link e il renderer frontend tratta i mark `link` come `span`, non `<a>`
 
 ## Decisions
+- CLI/auth config under `.dev/config/sanity/` is local machine state, not project source; it must never be committed.
 - Il refactor runtime/source e' concluso anche su production:
   - il VPS usa runtime root esterno
   - il clone Git torna a essere source-only
@@ -860,9 +872,18 @@
 - Il prompt immagini deve restare article-driven: titolo ed excerpt decidono il concept, mentre il workflow aggiunge solo guardrail generici e limiti di sicurezza/branding.
 
 ## Next
+- Chiudere il teardown di `ai-blog-1`:
+  - commit/push della rimozione di `sites/ai-blog-1/`
+  - `git pull --ff-only origin main` sul VPS
+  - verifica finale che `/v1/sites/ai-blog-1/health` fallisca con blueprint mancante
 - Verificare qualità reale di `ai-blog-1` sui primi contenuti generati (topic -> brief -> article -> image prompt) per scovare eventuali hardcode verticali residui.
 - Valutare se rigenerare `ai-blog-1` per sfruttare anche il fix categorie `6` -> `6` completo, dato che il launch iniziale ha scritto solo `4` categorie nel blueprint.
 - Disegnare un flusso esplicito di sync/export dei siti creati in production (`sites/<slug>`) fuori dal working tree runtime, evitando auto-push da VPS.
+- Automatizzare il teardown di un sito creato via Factory:
+  - cleanup Sanity per `siteSlug`
+  - rimozione runtime VPS (`/var/lib/autoblog/sites/<slug>`, registry, eventuale portal access)
+  - rimozione source-safe locale (`sites/<slug>/site.blueprint.json`, `README.md`)
+  - idealmente con un comando unico sicuro + backup pre-delete
 - Valutare se ignorare Git-localmente `sites/<slug>/.env.generated` e le copie sincronizzate da production per ridurre il rischio di commit accidentali.
 - Aprire un pass dedicato alla qualità editoriale:
   - ridurre la rigidità di `buildBriefOutline()`
@@ -885,6 +906,7 @@
   - rieseguire un batch ridotto immagini su `ai-blog-1` per validare che sparisca il bias `modern workspace scene`
 
 ## Risks
+- È comparsa una modifica inattesa a `.dev/config/sanity/config.json`; prima di chiudere il teardown Git del sito va deciso se lasciarla fuori commit o se conservarla esplicitamente.
 - `site:use` remains intentionally local/dev-oriented: if a site exists only in production runtime, local Studio inspection still requires an explicit sync/copy of the site env.
 
 - Il bootstrap manuale riduce l'accoppiamento coi preset, ma richiede disciplina operativa: categorie e seed topics scritti male produrranno contenuti incoerenti anche con prompt puliti.
