@@ -155,9 +155,12 @@ This file stores durable project context shared across tasks.
 - n8n child workflow input safety:
   - nei subworkflow chiamati via `Execute Workflow`, i code node a valle di HTTP request / transform non devono assumere che `$json.siteSlug` sopravviva intatto; quando disponibile usare il valore già risolto da `Resolve Site Context`.
 - Deploy caveat su VPS production:
-  - il refactor runtime/source è disponibile, ma va attivato sul VPS impostando `AUTOBLOG_RUNTIME_ROOT` negli env operativi e migrando registry/env/report fuori dal repo
-  - finché questo rollout non è completato, evitare `git pull --ff-only` cieco se il working tree di produzione contiene ancora runtime state
-  - strategia sicura corrente: `git fetch origin` seguito da `git checkout origin/main -- <lista-file-sorgente>` e restart/import mirati
+  - su `IONOS VPS` il rollout è attivo:
+    - `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog`
+    - registry live: `/var/lib/autoblog/sites/registry.json`
+    - env per-sito live: `/var/lib/autoblog/sites/<slug>/.env.generated`
+    - flow-check reports: `/var/lib/autoblog/reports/n8n-flow-checks`
+  - con questo assetto il clone production in `/srv/auto-blog-project` torna a essere source-only e puo' usare `git pull --ff-only origin main`
   - i siti creati via Factory in production non esistono automaticamente nel workspace locale; per ispezionarli in dev usare uno sync esplicito (`scp` del sito dal VPS) oppure uno Studio deployato dedicato
   - workflow consigliato per i nuovi siti: create via Factory in production -> copia locale del sito -> `npm run site:sync:source -- <dir-sito>` -> commit del solo `site.blueprint.json`/`README.md` -> deploy `apps/web`
   - non usare auto-commit/auto-push dal VPS production verso `main`: `sites/<slug>/.env.generated`, `registry` e handoff sono stato runtime, non source of truth Git
