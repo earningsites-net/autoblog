@@ -1,6 +1,17 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { PortalSiteEntitlement, PortalSiteSettings } from './portal-store';
+import {
+  normalizeSiteSlug,
+  resolveRuntimePaths,
+  resolveSiteBlueprintPath,
+  resolveSiteHandoffPath,
+  resolveSiteReadmePath,
+  resolveSiteRuntimeDir,
+  resolveSiteRuntimeEnvPath,
+  resolveSiteSeedContentPath,
+  type RuntimePaths
+} from './runtime-paths';
 
 type RegistrySiteEntry = {
   siteSlug: string;
@@ -43,14 +54,6 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function normalizeSiteSlug(siteSlug: string) {
-  return String(siteSlug || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
 function parseEnv(content: string) {
   const out: Record<string, string> = {};
   const lines = content.split(/\r?\n/);
@@ -81,17 +84,42 @@ function sanitizeSlugForDocId(siteSlug: string) {
 }
 
 export class SiteRuntimeService {
-  private readonly sitesRoot: string;
-  private readonly registryPath: string;
+  private readonly runtimePaths: RuntimePaths;
 
   constructor(private readonly workspaceRoot: string) {
-    this.sitesRoot = path.join(workspaceRoot, 'sites');
-    this.registryPath = path.join(this.sitesRoot, 'registry.json');
+    this.runtimePaths = resolveRuntimePaths(workspaceRoot);
+  }
+
+  getRuntimePaths() {
+    return this.runtimePaths;
+  }
+
+  getRegistryPath() {
+    return this.runtimePaths.registryPath;
+  }
+
+  getSiteBlueprintPath(siteSlug: string) {
+    return resolveSiteBlueprintPath(this.workspaceRoot, siteSlug);
+  }
+
+  getSiteReadmePath(siteSlug: string) {
+    return resolveSiteReadmePath(this.workspaceRoot, siteSlug);
+  }
+
+  getSiteRuntimeDir(siteSlug: string) {
+    return resolveSiteRuntimeDir(this.runtimePaths, siteSlug);
   }
 
   getSiteEnvPath(siteSlug: string) {
-    const normalizedSlug = normalizeSiteSlug(siteSlug);
-    return path.join(this.sitesRoot, normalizedSlug, '.env.generated');
+    return resolveSiteRuntimeEnvPath(this.runtimePaths, siteSlug);
+  }
+
+  getSiteSeedContentPath(siteSlug: string, fileName: string) {
+    return resolveSiteSeedContentPath(this.runtimePaths, siteSlug, fileName);
+  }
+
+  getSiteHandoffPath(siteSlug: string, fileName: string) {
+    return resolveSiteHandoffPath(this.runtimePaths, siteSlug, fileName);
   }
 
   async readSiteEnv(siteSlug: string) {
@@ -120,7 +148,7 @@ export class SiteRuntimeService {
 
   async loadRegistry(): Promise<RegistryDocument> {
     try {
-      const raw = await fs.readFile(this.registryPath, 'utf8');
+      const raw = await fs.readFile(this.getRegistryPath(), 'utf8');
       const parsed = JSON.parse(raw) as RegistryDocument;
       if (!Array.isArray(parsed.sites)) throw new Error('Invalid registry shape');
       return parsed;
@@ -134,8 +162,9 @@ export class SiteRuntimeService {
   }
 
   async saveRegistry(registry: RegistryDocument) {
-    await fs.mkdir(path.dirname(this.registryPath), { recursive: true });
-    await fs.writeFile(this.registryPath, `${JSON.stringify(registry, null, 2)}\n`, 'utf8');
+    const registryPath = this.getRegistryPath();
+    await fs.mkdir(path.dirname(registryPath), { recursive: true });
+    await fs.writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`, 'utf8');
   }
 
   async upsertRegistrySite(siteSlug: string, patch: Partial<RegistrySiteEntry>) {
@@ -215,7 +244,7 @@ export class SiteRuntimeService {
       return {
         ok: false,
         skipped: true,
-        reason: 'Missing site SANITY_PROJECT_ID or SANITY_WRITE_TOKEN in .env.generated'
+        reason: 'Missing site SANITY_PROJECT_ID or SANITY_WRITE_TOKEN in the site runtime env (.env.generated)'
       };
     }
 

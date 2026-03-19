@@ -488,7 +488,7 @@ export class FactoryOpsService {
       return { ok: true, applied: false };
     }
 
-    const blueprintPath = path.join(this.workspaceRoot, 'sites', siteSlug, 'site.blueprint.json');
+    const blueprintPath = this.siteRuntime.getSiteBlueprintPath(siteSlug);
     const raw = await fs.readFile(blueprintPath, 'utf8');
     const blueprint = JSON.parse(raw) as Record<string, any>;
 
@@ -635,7 +635,7 @@ export class FactoryOpsService {
       return { ok: false, applied: false, error: `Unknown nichePreset: ${nichePreset}` };
     }
 
-    const blueprintPath = path.join(this.workspaceRoot, 'sites', siteSlug, 'site.blueprint.json');
+    const blueprintPath = this.siteRuntime.getSiteBlueprintPath(siteSlug);
     const raw = await fs.readFile(blueprintPath, 'utf8');
     const blueprint = JSON.parse(raw) as Record<string, any>;
 
@@ -713,7 +713,7 @@ export class FactoryOpsService {
     const seedCms = await this.runAutoblog(['seed-cms', input.siteSlug]);
     if (!seedCms.ok) return { ok: false, step: 'seed-cms', create, niche, customNiche, theme, provision, initContent, seedCms };
 
-    const cmsMutationsFile = `sites/${input.siteSlug}/seed-content/sanity.mutations.json`;
+    const cmsMutationsFile = this.siteRuntime.getSiteSeedContentPath(input.siteSlug, 'sanity.mutations.json');
     let cmsApplied: CommandResult | null = null;
     if (input.applyCmsMutations) {
       const sanityEnv = await this.resolveSiteSanityEnv(input);
@@ -759,7 +759,7 @@ export class FactoryOpsService {
     const seed = await this.runAutoblog(['seed-cms', input.siteSlug]);
     if (!seed.ok) return { ok: false, step: 'seed-cms', seed };
 
-    const mutationFile = `sites/${input.siteSlug}/seed-content/sanity.mutations.json`;
+    const mutationFile = this.siteRuntime.getSiteSeedContentPath(input.siteSlug, 'sanity.mutations.json');
     let applied: CommandResult | null = null;
     if (input.apply) {
       const sanityEnv = await this.resolveSiteSanityEnv({ siteSlug: input.siteSlug });
@@ -794,7 +794,7 @@ export class FactoryOpsService {
     const discover = await this.runAutoblog(args);
     if (!discover.ok) return { ok: false, step: 'discover-topics', discover };
 
-    const mutationFile = `sites/${input.siteSlug}/seed-content/topic-candidates.mutations.json`;
+    const mutationFile = this.siteRuntime.getSiteSeedContentPath(input.siteSlug, 'topic-candidates.mutations.json');
     let applied: CommandResult | null = null;
     if (input.apply) {
       const sanityEnv = await this.resolveSiteSanityEnv({ siteSlug: input.siteSlug });
@@ -934,13 +934,12 @@ export class FactoryOpsService {
   }
 
   async siteStatus(siteSlug: string) {
-    const siteDir = path.join(this.workspaceRoot, 'sites', siteSlug);
-    const blueprintPath = path.join(siteDir, 'site.blueprint.json');
-    const envPath = path.join(siteDir, '.env.generated');
-    const cmsMutationsPath = path.join(siteDir, 'seed-content', 'sanity.mutations.json');
-    const topicMutationsPath = path.join(siteDir, 'seed-content', 'topic-candidates.mutations.json');
-    const handoffManifestPath = path.join(siteDir, 'handoff', 'manifest.json');
-    const registryPath = path.join(this.workspaceRoot, 'sites', 'registry.json');
+    const blueprintPath = this.siteRuntime.getSiteBlueprintPath(siteSlug);
+    const envPath = this.siteRuntime.getSiteEnvPath(siteSlug);
+    const cmsMutationsPath = this.siteRuntime.getSiteSeedContentPath(siteSlug, 'sanity.mutations.json');
+    const topicMutationsPath = this.siteRuntime.getSiteSeedContentPath(siteSlug, 'topic-candidates.mutations.json');
+    const handoffManifestPath = this.siteRuntime.getSiteHandoffPath(siteSlug, 'manifest.json');
+    const registryPath = this.siteRuntime.getRegistryPath();
 
     const [blueprintExists, envExists, cmsExists, topicExists, handoffExists, registryExists] = await Promise.all([
       this.pathExists(blueprintPath),

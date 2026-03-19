@@ -2,11 +2,25 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  displayPath,
+  resolveRuntimePaths,
+  resolveSiteBlueprintPath as resolveSourceSiteBlueprintPath,
+  resolveSiteHandoffDir as resolveRuntimeSiteHandoffDir,
+  resolveSiteHandoffFile as resolveRuntimeSiteHandoffFile,
+  resolveSiteReadmePath as resolveSourceSiteReadmePath,
+  resolveSiteRuntimeDir as resolveRuntimeSiteDir,
+  resolveSiteRuntimeEnvPath as resolveRuntimeSiteEnvPath,
+  resolveSiteSeedContentDir as resolveRuntimeSiteSeedContentDir,
+  resolveSiteSeedContentFile as resolveRuntimeSiteSeedContentFile,
+  resolveSiteSourceDir
+} from './lib/runtime-paths.mjs';
 
 const WORKSPACE_ROOT = process.cwd();
-const SITES_ROOT = path.join(WORKSPACE_ROOT, 'sites');
-const TEMPLATES_ROOT = path.join(SITES_ROOT, 'templates');
-const SITE_REGISTRY_PATH = path.join(SITES_ROOT, 'registry.json');
+const SITES_SOURCE_ROOT = path.join(WORKSPACE_ROOT, 'sites');
+const TEMPLATES_ROOT = path.join(SITES_SOURCE_ROOT, 'templates');
+const RUNTIME_PATHS = resolveRuntimePaths({ workspaceRoot: WORKSPACE_ROOT, env: process.env });
+const SITE_REGISTRY_PATH = RUNTIME_PATHS.registryPath;
 
 function usage() {
   console.log(`
@@ -1378,11 +1392,39 @@ function resolveTemplatePath(templateId) {
 }
 
 function resolveSiteDir(siteSlug) {
-  return path.join(SITES_ROOT, siteSlug);
+  return resolveSiteSourceDir(WORKSPACE_ROOT, siteSlug);
+}
+
+function resolveSiteRuntimeDir(siteSlug) {
+  return resolveRuntimeSiteDir(RUNTIME_PATHS, siteSlug);
 }
 
 function resolveSiteBlueprintPath(siteSlug) {
-  return path.join(resolveSiteDir(siteSlug), 'site.blueprint.json');
+  return resolveSourceSiteBlueprintPath(WORKSPACE_ROOT, siteSlug);
+}
+
+function resolveSiteReadmePath(siteSlug) {
+  return resolveSourceSiteReadmePath(WORKSPACE_ROOT, siteSlug);
+}
+
+function resolveSiteEnvPath(siteSlug) {
+  return resolveRuntimeSiteEnvPath(RUNTIME_PATHS, siteSlug);
+}
+
+function resolveSiteSeedContentDir(siteSlug) {
+  return resolveRuntimeSiteSeedContentDir(RUNTIME_PATHS, siteSlug);
+}
+
+function resolveSiteSeedContentFile(siteSlug, fileName) {
+  return resolveRuntimeSiteSeedContentFile(RUNTIME_PATHS, siteSlug, fileName);
+}
+
+function resolveSiteHandoffDir(siteSlug) {
+  return resolveRuntimeSiteHandoffDir(RUNTIME_PATHS, siteSlug);
+}
+
+function resolveSiteHandoffFile(siteSlug, fileName) {
+  return resolveRuntimeSiteHandoffFile(RUNTIME_PATHS, siteSlug, fileName);
 }
 
 function loadSiteBlueprint(siteSlug) {
@@ -1441,7 +1483,7 @@ function loadWorkspaceEnv() {
 }
 
 function resolveSiteSanityReadConfig(siteSlug) {
-  const siteEnv = parseEnvFile(path.join(resolveSiteDir(siteSlug), '.env.generated'));
+  const siteEnv = parseEnvFile(resolveSiteEnvPath(siteSlug));
   const workspaceEnv = loadWorkspaceEnv();
   return {
     projectId: siteEnv.SANITY_PROJECT_ID || workspaceEnv.SANITY_PROJECT_ID || '',
@@ -1471,7 +1513,7 @@ async function runSanityQuery(config, query) {
 }
 
 function loadLocalTopicQueryPreview(siteSlug) {
-  const previewPath = path.join(resolveSiteDir(siteSlug), 'seed-content', 'topic-candidates.generated.json');
+  const previewPath = resolveSiteSeedContentFile(siteSlug, 'topic-candidates.generated.json');
   if (!exists(previewPath)) return [];
   try {
     const payload = JSON.parse(fs.readFileSync(previewPath, 'utf8'));
@@ -1642,17 +1684,17 @@ function commandNew(siteSlug, flags) {
   ensureDir(targetDir);
   writeJson(targetBlueprintPath, blueprint);
 
-  const notesPath = path.join(targetDir, 'README.md');
+  const notesPath = resolveSiteReadmePath(siteSlug);
   if (!exists(notesPath) || flags.force) {
     fs.writeFileSync(
       notesPath,
-      `# ${blueprint.brandName}\n\nGenerated from blueprint: ${templateId}\n\nFiles:\n- site.blueprint.json\n- seed-content/ (generated)\n- handoff/ (generated)\n`,
+      `# ${blueprint.brandName}\n\nGenerated from blueprint: ${templateId}\n\nFiles:\n- site.blueprint.json\n- runtime: .env.generated, seed-content/, handoff/\n`,
       'utf8'
     );
   }
 
   console.log(`Created site '${siteSlug}' from blueprint '${templateId}'`);
-  console.log(`Blueprint: ${targetBlueprintPath}`);
+  console.log(`Blueprint: ${displayPath(WORKSPACE_ROOT, targetBlueprintPath)}`);
 }
 
 function commandThemeGenerate(siteSlug, flags = {}) {
@@ -1696,7 +1738,7 @@ function commandThemeGenerate(siteSlug, flags = {}) {
 function commandInitContent(siteSlug) {
   const blueprint = loadSiteBlueprint(siteSlug);
   const safeSiteSlug = sanitizeSiteSlug(siteSlug);
-  const seedDir = path.join(resolveSiteDir(siteSlug), 'seed-content');
+  const seedDir = resolveSiteSeedContentDir(siteSlug);
   ensureDir(seedDir);
 
   const categories = (blueprint.categories || []).map((category) => ({
@@ -1739,7 +1781,7 @@ function commandInitContent(siteSlug) {
     seedTopics: blueprint.seedTopics || []
   });
 
-  console.log(`Initialized seed content for '${siteSlug}' in ${seedDir}`);
+  console.log(`Initialized seed content for '${siteSlug}' in ${displayPath(WORKSPACE_ROOT, seedDir)}`);
 }
 
 function normalizePromptStage(stageKey) {
@@ -1810,8 +1852,7 @@ function buildPublishingSettingsFromBlueprint(blueprint) {
 
 function commandProvisionEnv(siteSlug, flags) {
   const blueprint = loadSiteBlueprint(siteSlug);
-  const siteDir = resolveSiteDir(siteSlug);
-  const envPath = path.join(siteDir, '.env.generated');
+  const envPath = resolveSiteEnvPath(siteSlug);
   const existing = parseEnvFile(envPath);
   const defaults = {
     SITE_SLUG: siteSlug,
@@ -1855,14 +1896,13 @@ function commandProvisionEnv(siteSlug, flags) {
   }
 
   fs.writeFileSync(envPath, serializeEnv(nextEnv), 'utf8');
-  console.log(`Generated/updated env file: ${envPath}`);
+  console.log(`Generated/updated env file: ${displayPath(WORKSPACE_ROOT, envPath)}`);
 }
 
 function commandSeedCms(siteSlug) {
   const blueprint = loadSiteBlueprint(siteSlug);
   const safeSiteSlug = sanitizeSiteSlug(siteSlug);
-  const siteDir = resolveSiteDir(siteSlug);
-  const outputDir = path.join(siteDir, 'seed-content');
+  const outputDir = resolveSiteSeedContentDir(siteSlug);
   ensureDir(outputDir);
 
   if (blueprint.publishingTarget?.kind !== 'sanity') {
@@ -1975,13 +2015,12 @@ function commandSeedCms(siteSlug) {
   const payload = { mutations };
   const filePath = path.join(outputDir, 'sanity.mutations.json');
   writeJson(filePath, payload);
-  console.log(`Generated Sanity seed payload: ${filePath}`);
+  console.log(`Generated Sanity seed payload: ${displayPath(WORKSPACE_ROOT, filePath)}`);
 }
 
 async function commandSeedTopics(siteSlug, flags) {
   const blueprint = loadSiteBlueprint(siteSlug);
-  const siteDir = resolveSiteDir(siteSlug);
-  const outputDir = path.join(siteDir, 'seed-content');
+  const outputDir = resolveSiteSeedContentDir(siteSlug);
   ensureDir(outputDir);
 
   const count = Math.max(1, Number(flags.count || 30));
@@ -2052,8 +2091,8 @@ async function commandSeedTopics(siteSlug, flags) {
     }))
   };
 
-  const previewPath = path.join(outputDir, 'topic-candidates.generated.json');
-  const mutationsPath = path.join(outputDir, 'topic-candidates.mutations.json');
+  const previewPath = resolveSiteSeedContentFile(siteSlug, 'topic-candidates.generated.json');
+  const mutationsPath = resolveSiteSeedContentFile(siteSlug, 'topic-candidates.mutations.json');
   writeJson(previewPath, {
     siteSlug,
     count: docs.length,
@@ -2086,8 +2125,8 @@ async function commandSeedTopics(siteSlug, flags) {
   console.log(`Locale: ${locale}`);
   console.log(`Category distribution: ${JSON.stringify(categoryDistribution)}`);
   console.log(`Mutation strategy: ${mutationOp}`);
-  console.log(`Preview: ${previewPath}`);
-  console.log(`Sanity mutations: ${mutationsPath}`);
+  console.log(`Preview: ${displayPath(WORKSPACE_ROOT, previewPath)}`);
+  console.log(`Sanity mutations: ${displayPath(WORKSPACE_ROOT, mutationsPath)}`);
 }
 
 async function commandLaunchSite(siteSlug, flags) {
@@ -2121,17 +2160,16 @@ async function commandLaunchSite(siteSlug, flags) {
   });
   commandHandoffPack(siteSlug);
 
-  const siteDir = resolveSiteDir(siteSlug);
-  const cmsMutations = path.join(siteDir, 'seed-content', 'sanity.mutations.json');
-  const topicMutations = path.join(siteDir, 'seed-content', 'topic-candidates.mutations.json');
+  const cmsMutations = resolveSiteSeedContentFile(siteSlug, 'sanity.mutations.json');
+  const topicMutations = resolveSiteSeedContentFile(siteSlug, 'topic-candidates.mutations.json');
   const applied = [];
   if (applySanity) {
-    applied.push(await applySanityMutationsFile(path.relative(WORKSPACE_ROOT, cmsMutations)));
-    applied.push(await applySanityMutationsFile(path.relative(WORKSPACE_ROOT, topicMutations)));
+    applied.push(await applySanityMutationsFile(cmsMutations));
+    applied.push(await applySanityMutationsFile(topicMutations));
   }
 
   const normalizedBlueprint = ensureBusinessDefaults(loadSiteBlueprint(siteSlug));
-  const envGenerated = parseEnvFile(path.join(siteDir, '.env.generated'));
+  const envGenerated = parseEnvFile(resolveSiteEnvPath(siteSlug));
   const registryEntry = upsertSiteRegistryEntry(siteSlug, normalizedBlueprint, {
     sanityProjectId: envGenerated.SANITY_PROJECT_ID || '',
     sanityDataset: envGenerated.SANITY_DATASET || normalizedBlueprint.publishingTarget?.dataset || 'production',
@@ -2152,12 +2190,12 @@ async function commandLaunchSite(siteSlug, flags) {
     },
     applySanity,
     outputs: {
-      blueprintPath: resolveSiteBlueprintPath(siteSlug),
-      envPath: path.join(siteDir, '.env.generated'),
-      cmsMutations: path.relative(WORKSPACE_ROOT, cmsMutations),
-      topicMutations: path.relative(WORKSPACE_ROOT, topicMutations),
-      handoffManifest: path.join(siteDir, 'handoff', 'manifest.json'),
-      registry: path.relative(WORKSPACE_ROOT, SITE_REGISTRY_PATH)
+      blueprintPath: displayPath(WORKSPACE_ROOT, resolveSiteBlueprintPath(siteSlug)),
+      envPath: displayPath(WORKSPACE_ROOT, resolveSiteEnvPath(siteSlug)),
+      cmsMutations: displayPath(WORKSPACE_ROOT, cmsMutations),
+      topicMutations: displayPath(WORKSPACE_ROOT, topicMutations),
+      handoffManifest: displayPath(WORKSPACE_ROOT, resolveSiteHandoffFile(siteSlug, 'manifest.json')),
+      registry: displayPath(WORKSPACE_ROOT, SITE_REGISTRY_PATH)
     },
     applied,
     registryEntry,
@@ -2236,8 +2274,7 @@ async function commandReleaseSite(siteSlug, flags = {}) {
   if (!siteSlug) throw new Error('Missing <site-slug>');
   const blueprint = ensureBusinessDefaults(loadSiteBlueprint(siteSlug));
   const safeSiteSlug = sanitizeSiteSlug(siteSlug);
-  const siteDir = resolveSiteDir(siteSlug);
-  const releaseDir = path.join(siteDir, 'handoff', 'release');
+  const releaseDir = path.join(resolveSiteHandoffDir(siteSlug), 'release');
   ensureDir(releaseDir);
 
   commandHandoffPack(siteSlug);
@@ -2247,7 +2284,7 @@ async function commandReleaseSite(siteSlug, flags = {}) {
     generatedAt: new Date().toISOString(),
     fromSanity: Boolean(flags['from-sanity']),
     files: {
-      handoffManifest: path.join(siteDir, 'handoff', 'manifest.json')
+      handoffManifest: displayPath(WORKSPACE_ROOT, resolveSiteHandoffFile(siteSlug, 'manifest.json'))
     },
     counts: {},
     warnings: []
@@ -2302,8 +2339,8 @@ async function commandReleaseSite(siteSlug, flags = {}) {
 
 function commandDeploy(siteSlug) {
   const blueprint = loadSiteBlueprint(siteSlug);
-  const siteDir = resolveSiteDir(siteSlug);
-  const planPath = path.join(siteDir, 'deploy-plan.md');
+  const planPath = resolveSiteHandoffFile(siteSlug, 'deploy-plan.md');
+  ensureDir(path.dirname(planPath));
 
   const lines = [
     `# Deploy Plan for ${blueprint.brandName}`,
@@ -2315,7 +2352,7 @@ function commandDeploy(siteSlug) {
     '',
     '## 2. Configure environment',
     `- Generate env: \`node scripts/autoblog.mjs provision-env ${siteSlug}\``,
-    `- Review file: \`sites/${siteSlug}/.env.generated\``,
+    `- Review runtime env: \`${displayPath(WORKSPACE_ROOT, resolveSiteEnvPath(siteSlug))}\``,
     '',
     '## 3. Seed CMS',
     `- Generate CMS seed payload: \`node scripts/autoblog.mjs seed-cms ${siteSlug}\``,
@@ -2336,15 +2373,17 @@ function commandDeploy(siteSlug) {
   ];
 
   fs.writeFileSync(planPath, `${lines.join('\n')}\n`, 'utf8');
-  console.log(`Wrote deploy plan: ${planPath}`);
+  console.log(`Wrote deploy plan: ${displayPath(WORKSPACE_ROOT, planPath)}`);
 }
 
 function commandDoctor(siteSlug) {
-  const siteDir = resolveSiteDir(siteSlug);
+  const sourceDir = resolveSiteDir(siteSlug);
+  const runtimeDir = resolveSiteRuntimeDir(siteSlug);
   const blueprintPath = resolveSiteBlueprintPath(siteSlug);
   const checks = [];
 
-  checks.push({ name: 'site_dir', ok: exists(siteDir), path: siteDir });
+  checks.push({ name: 'site_source_dir', ok: exists(sourceDir), path: sourceDir });
+  checks.push({ name: 'site_runtime_dir', ok: exists(runtimeDir), path: runtimeDir });
   checks.push({ name: 'blueprint', ok: exists(blueprintPath), path: blueprintPath });
 
   let blueprint = null;
@@ -2370,10 +2409,10 @@ function commandDoctor(siteSlug) {
     }
   }
 
-  const envPath = path.join(siteDir, '.env.generated');
+  const envPath = resolveSiteEnvPath(siteSlug);
   checks.push({ name: 'env_generated_exists', ok: exists(envPath), path: envPath });
 
-  const seedPayload = path.join(siteDir, 'seed-content', 'sanity.mutations.json');
+  const seedPayload = resolveSiteSeedContentFile(siteSlug, 'sanity.mutations.json');
   checks.push({ name: 'seed_payload_exists', ok: exists(seedPayload), path: seedPayload });
   checks.push({ name: 'site_registry_exists', ok: exists(SITE_REGISTRY_PATH), path: SITE_REGISTRY_PATH });
 
@@ -2390,8 +2429,7 @@ function commandDoctor(siteSlug) {
 
 function commandHandoffPack(siteSlug) {
   const blueprint = ensureBusinessDefaults(loadSiteBlueprint(siteSlug));
-  const siteDir = resolveSiteDir(siteSlug);
-  const handoffDir = path.join(siteDir, 'handoff');
+  const handoffDir = resolveSiteHandoffDir(siteSlug);
   ensureDir(handoffDir);
 
   const manifest = {
@@ -2404,10 +2442,10 @@ function commandHandoffPack(siteSlug) {
     publishingTarget: blueprint.publishingTarget?.kind,
     files: [
       `sites/${siteSlug}/site.blueprint.json`,
-      `sites/${siteSlug}/.env.generated`,
-      `sites/${siteSlug}/seed-content/sanity.mutations.json`,
-      `sites/${siteSlug}/seed-content/topic-candidates.mutations.json`,
-      `sites/registry.json`,
+      displayPath(WORKSPACE_ROOT, resolveSiteEnvPath(siteSlug)),
+      displayPath(WORKSPACE_ROOT, resolveSiteSeedContentFile(siteSlug, 'sanity.mutations.json')),
+      displayPath(WORKSPACE_ROOT, resolveSiteSeedContentFile(siteSlug, 'topic-candidates.mutations.json')),
+      displayPath(WORKSPACE_ROOT, SITE_REGISTRY_PATH),
       'docs/handoff-buyer-checklist.md',
       'docs/credentials-transfer-template.md',
       'docs/runbook.md',
@@ -2423,14 +2461,14 @@ function commandHandoffPack(siteSlug) {
     ]
   };
 
-  writeJson(path.join(handoffDir, 'manifest.json'), manifest);
+  writeJson(resolveSiteHandoffFile(siteSlug, 'manifest.json'), manifest);
   fs.writeFileSync(
-    path.join(handoffDir, 'README.md'),
+    resolveSiteHandoffFile(siteSlug, 'README.md'),
     `# Handoff Pack (${blueprint.brandName})\n\nSee manifest.json for the list of files and transfer notes.\n`,
     'utf8'
   );
 
-  console.log(`Generated handoff pack in ${handoffDir}`);
+  console.log(`Generated handoff pack in ${displayPath(WORKSPACE_ROOT, handoffDir)}`);
 }
 
 function commandListBlueprints() {

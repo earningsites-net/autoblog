@@ -2699,7 +2699,7 @@ app.get('/api/internal/sites/:siteSlug/sanity-connection', async (req, reply) =>
       ok: false,
       siteSlug,
       error:
-        'Missing per-site Sanity credentials. Expected SANITY_PROJECT_ID, SANITY_READ_TOKEN, SANITY_WRITE_TOKEN in sites/<siteSlug>/.env.generated'
+        'Missing per-site Sanity credentials. Expected SANITY_PROJECT_ID, SANITY_READ_TOKEN, SANITY_WRITE_TOKEN in the site runtime env (.env.generated)'
     });
   }
 

@@ -117,6 +117,25 @@ This file stores durable project context shared across tasks.
   - `ops/factory` supporta `Primary niche`, `Niche prompt`, `Categories` e `Seed topics` manuali
   - `nichePrompt` viene persistito nel blueprint come `niche.editorialPrompt`
   - i preset restano solo come retrocompatibilità/override strutturale, non come unica fonte della strategia editoriale
+- Runtime/source separation:
+  - il source of truth Git del sito resta `sites/<slug>/site.blueprint.json` (+ opzionale `README.md`)
+  - il runtime può essere esternalizzato con `AUTOBLOG_RUNTIME_ROOT`, che sposta fuori dal repo:
+    - `registry.json`
+    - `sites/<slug>/.env.generated`
+    - `seed-content/`
+    - `handoff/`
+    - report `n8n-flow-checks`
+    - SQLite locale del portal (`portal.db*`)
+  - senza `AUTOBLOG_RUNTIME_ROOT`, il comportamento locale resta compatibile con i path storici nel repo
+  - anche nei default locali questi artefatti runtime non devono restare tracciati in Git:
+    - `apps/engine/data/portal.db*`
+    - `sites/registry.json`
+    - `docs/ops/n8n-flow-checks/`
+  - override mirati supportati:
+    - `AUTOBLOG_SITE_REGISTRY_PATH`
+    - `AUTOBLOG_RUNTIME_SITES_ROOT`
+    - `AUTOBLOG_N8N_FLOW_CHECKS_DIR`
+    - `AUTOBLOG_PORTAL_DB_PATH` (fallback anche a `PORTAL_DB_PATH`)
 - Pulizia hardcode editoriali:
   - `scripts/autoblog.mjs` e i workflow n8n principali (`brief_generation_worker`, `article_generation_worker`, `image_generation_worker`, `topic_discovery_daily`) non devono più assumere `Home & DIY` come nicchia di default
 - Qualità editoriale runtime:
@@ -136,8 +155,8 @@ This file stores durable project context shared across tasks.
 - n8n child workflow input safety:
   - nei subworkflow chiamati via `Execute Workflow`, i code node a valle di HTTP request / transform non devono assumere che `$json.siteSlug` sopravviva intatto; quando disponibile usare il valore già risolto da `Resolve Site Context`.
 - Deploy caveat su VPS production:
-  - il clone in `/srv/auto-blog-project` contiene anche stato runtime (`sites/registry.json`, siti creati in `sites/<slug>/`, report `docs/ops/n8n-flow-checks/*`)
-  - finché questi artefatti restano tracciati o residenti nel repo di produzione, evitare `git pull --ff-only` cieco
+  - il refactor runtime/source è disponibile, ma va attivato sul VPS impostando `AUTOBLOG_RUNTIME_ROOT` negli env operativi e migrando registry/env/report fuori dal repo
+  - finché questo rollout non è completato, evitare `git pull --ff-only` cieco se il working tree di produzione contiene ancora runtime state
   - strategia sicura corrente: `git fetch origin` seguito da `git checkout origin/main -- <lista-file-sorgente>` e restart/import mirati
   - i siti creati via Factory in production non esistono automaticamente nel workspace locale; per ispezionarli in dev usare uno sync esplicito (`scp` del sito dal VPS) oppure uno Studio deployato dedicato
   - workflow consigliato per i nuovi siti: create via Factory in production -> copia locale del sito -> `npm run site:sync:source -- <dir-sito>` -> commit del solo `site.blueprint.json`/`README.md` -> deploy `apps/web`

@@ -4,6 +4,68 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Runtime artifacts removed from Git source-of-truth:
+  - untracked from index and ignored:
+    - `apps/engine/data/portal.db*`
+    - `sites/registry.json`
+    - `docs/ops/n8n-flow-checks/**`
+  - local files remain on disk for compatibility/dev, but no longer participate in commits
+- Refactor source/runtime separation implemented locally:
+  - added shared runtime path helpers:
+    - `scripts/lib/runtime-paths.mjs`
+    - `apps/engine/src/services/runtime-paths.ts`
+  - `scripts/autoblog.mjs` now keeps source-safe files in repo (`site.blueprint.json`, optional `README.md`) and resolves runtime artifacts via `AUTOBLOG_RUNTIME_ROOT`:
+    - `registry.json`
+    - `.env.generated`
+    - `seed-content/`
+    - `handoff/`
+  - `SiteRuntimeService` and `FactoryOpsService` now resolve registry/env/mutation/handoff paths through the runtime helper instead of hardcoded `sites/...`
+  - release/ops scripts updated to the same runtime model:
+    - `scripts/ops-backup-runtime.mjs`
+    - `scripts/release/pilot-readiness.mjs`
+    - `scripts/release/update-site-status.mjs`
+    - `skills/n8n-flow-guard/scripts/check_n8n_flows.mjs`
+- Backup/runtime behavior tightened:
+  - `ops:backup:runtime` now snapshots true runtime state only:
+    - registry
+    - portal DB (`PORTAL_DB_PATH` or runtime override)
+    - per-site `.env.generated`
+  - no longer backs up source-safe blueprint/README as “runtime”
+- Local/runtime-safe verification completed:
+  - `node --check` passed for `scripts/autoblog.mjs`, `scripts/ops-backup-runtime.mjs`, release scripts, and `check_n8n_flows.mjs`
+  - `npm --workspace @autoblog/engine run typecheck` passed
+  - `npm run typecheck` passed
+  - runtime-root smoke confirmed:
+    - `AUTOBLOG_RUNTIME_ROOT=/tmp/autoblog-runtime-smoke`
+    - registry/env paths resolve under `/tmp/...`
+    - blueprint path still resolves under repo `sites/<slug>/site.blueprint.json`
+  - `check_n8n_flows.mjs` with external runtime root now writes reports to `/tmp/autoblog-runtime-smoke/reports/n8n-flow-checks/latest-report.json`
+- Durable docs updated for the new model:
+  - `.env.example`
+  - `docs/context.md`
+  - `docs/deploy/ionos-vps-ops.md`
+  - `docs/factory.md`
+  - `skills/n8n-flow-guard/SKILL.md`
+  - `skills/n8n-flow-guard/references/agent-handoff-contract.md`
+- Error copy updated to be runtime-aware:
+  - engine Sanity connection error now references the site runtime env rather than `sites/<slug>/.env.generated`
+
+- Allineato il clone production sul VPS `IONOS` ai file appena pushati su `main` con strategia safe:
+  - `git fetch origin` come utente `autoblog`
+  - `git checkout origin/main -- <lista-file-sorgente>` senza toccare `sites/registry.json`, `sites/ai-blog-1/` o i report runtime
+  - verificato `origin/main=eb48970`
+  - verificato `node --check scripts/autoblog.mjs` sul server
+- File aggiornati sul VPS in questo pass:
+  - `.env.example`
+  - `.gitignore`
+  - `docs/context.md`
+  - `docs/deploy/ionos-vps-ops.md`
+  - `docs/factory.md`
+  - `docs/tasks/app-deploy.md`
+  - `package.json`
+  - `scripts/autoblog.mjs`
+  - `scripts/ops-backup-runtime.mjs`
+  - `scripts/site-sync-source.mjs`
 - Implementato `npm run site:sync:source` con `scripts/site-sync-source.mjs`:
   - importa un sito da una directory sorgente
   - copia solo `site.blueprint.json` e `README.md`
@@ -392,6 +454,7 @@
     - verifica import workflow production: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`
 
 ## Decisions
+- Sul VPS production continuiamo con `fetch + checkout mirato` invece di `pull`, perché il working tree contiene ancora stato runtime e un `HEAD` locale che non va riscritto ciecamente.
 - Il gap Git tra VPS production e repo locale va chiuso con sync esplicito source-safe, non con auto-commit/auto-push dal server.
 - Il source of truth Git per i siti creati via Factory resta `sites/<slug>/site.blueprint.json` (+ opzionale `README.md`); `.env.generated`, `registry` e artefatti runtime restano fuori da Git.
 - La maggiore varietà dei topic va perseguita con un modello ibrido: pool grezzo non-LLM + selezione finale LLM opzionale, non con una crescita continua delle regex locali.
@@ -436,6 +499,7 @@
   - rimosse solo le righe `site_access` dell'admin, senza cancellare `site_settings` o `entitlements`, per evitare perdita non necessaria di storico/config
 
 ## Next
+- Se vogliamo un VPS davvero “clean”, il prossimo step strutturale è spostare fuori dal repo almeno `sites/registry.json`, `sites/<slug>/.env.generated` e i report flow-check, così si potrà tornare a `git pull --ff-only`.
 - Verificare il nuovo workflow su un sito creato ex novo con `6` categorie manuali, così chiudiamo il regression check storico `4 vs 6`.
 - Fare uno smoke su VPS/production di `discover-topics` con Sanity raggiungibile, per validare anche il ramo di dedupe contro topic/article remoti.
 - Fare uno smoke con `OPENAI_API_KEY` disponibile per verificare la selezione `auto/hybrid` su un run reale, non solo il fallback locale.
@@ -517,6 +581,7 @@
   - definizione della policy editoriale: recap/news analysis/roundup invece di news factual in tempo reale
 
 ## Risks
+- Dopo il checkout mirato, `git status` sul VPS mostra i file sorgente allineati come `M/A` rispetto all'`HEAD` locale del server: è atteso, ma rende il clone production ancora poco leggibile finché non separiamo source e runtime.
 - Se Sanity non è raggiungibile, `discover-topics` usa il preview locale come fallback: ottimo per il loop dev, ma la dedupe contro gli articoli pubblicati remoti va comunque verificata su un run con accesso rete reale.
 - Il path `auto/hybrid` non è ancora verificato con una chiamata OpenAI reale in questo workspace: oggi è coperto solo il fallback senza chiave e la compatibilità sintattica.
 - Alcune categorie molto larghe possono ancora degradare verso un fallback sintetico generico quando i seed distinti non bastano a saturare il quota target.
@@ -742,6 +807,15 @@
     - le fonti/link esterni non possono essere ottenuti solo via prompt: `article.body` non supporta annotazioni link e il renderer frontend tratta i mark `link` come `span`, non `<a>`
 
 ## Decisions
+- The runtime/source split also applies to local defaults:
+  - local compatibility paths may still live under the repo tree
+  - but they must stay untracked (`portal.db*`, `sites/registry.json`, `docs/ops/n8n-flow-checks`)
+- The correct separation line is:
+  - repo/source: `sites/<slug>/site.blueprint.json` + optional `README.md`
+  - runtime: registry, `.env.generated`, `seed-content/`, `handoff/`, flow-check reports
+- `AUTOBLOG_RUNTIME_ROOT` is the primary rollout switch for VPS/runtime separation; targeted overrides remain optional only for exceptional layouts.
+- Runtime helpers must also honor existing `PORTAL_DB_PATH`, because production already uses that path independently from the new runtime-root rollout.
+
 - Per nicchie fuori catalogo il flusso corretto è:
   - usare `generic-editorial-magazine`
   - lasciare vuoto il preset
@@ -768,6 +842,12 @@
 - Il prompt immagini deve restare article-driven: titolo ed excerpt decidono il concept, mentre il workflow aggiunge solo guardrail generici e limiti di sicurezza/branding.
 
 ## Next
+- Roll out the runtime-root refactor on the VPS:
+  - set `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog` in engine/n8n operational env
+  - migrate `registry.json`, per-site `.env.generated`, and flow-check reports out of the repo working tree
+  - verify engine + factory + n8n import/check still work against the migrated paths
+- After VPS rollout, simplify deploy procedure back toward a normal `git pull --ff-only` flow for source files.
+
 - Verificare qualità reale di `ai-blog-1` sui primi contenuti generati (topic -> brief -> article -> image prompt) per scovare eventuali hardcode verticali residui.
 - Valutare se rigenerare `ai-blog-1` per sfruttare anche il fix categorie `6` -> `6` completo, dato che il launch iniziale ha scritto solo `4` categorie nel blueprint.
 - Disegnare un flusso esplicito di sync/export dei siti creati in production (`sites/<slug>`) fuori dal working tree runtime, evitando auto-push da VPS.
@@ -794,6 +874,9 @@
   - rieseguire un batch ridotto immagini su `ai-blog-1` per validare che sparisca il bias `modern workspace scene`
 
 ## Risks
+- Until `AUTOBLOG_RUNTIME_ROOT` is actually rolled out on production, the VPS can still re-accumulate runtime state inside the repo and reintroduce dirty-tree deploy risk.
+- `site:use` remains intentionally local/dev-oriented: if a site exists only in production runtime, local Studio inspection still requires an explicit sync/copy of the site env.
+
 - Il bootstrap manuale riduce l'accoppiamento coi preset, ma richiede disciplina operativa: categorie e seed topics scritti male produrranno contenuti incoerenti anche con prompt puliti.
 - `article_generation_worker` contiene ancora fallback category mapping legacy se `categorySlug` manca; il path principale è coperto, ma il fallback va ancora generalizzato.
 - I siti già creati prima del fix categorie conservano il blueprint già scritto; per vedere `6` categorie va rifatto il launch o rigenerato il blueprint del sito.

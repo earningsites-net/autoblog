@@ -2,6 +2,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  resolveRuntimePaths,
+  resolveSiteRuntimeEnvPath
+} from './lib/runtime-paths.mjs';
 
 const WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUT_DIR = path.join(WORKSPACE_ROOT, '.runtime-backups');
@@ -32,33 +36,25 @@ function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
 }
 
-function collectSiteRuntimeFiles() {
-  const sitesRoot = path.join(WORKSPACE_ROOT, 'sites');
-  if (!fs.existsSync(sitesRoot)) return [];
-
-  return fs
-    .readdirSync(sitesRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .filter((entry) => entry.name !== 'templates')
-    .flatMap((entry) => {
-      const siteDir = path.join(sitesRoot, entry.name);
-      return ['site.blueprint.json', 'README.md', '.env.generated']
-        .map((name) => path.join(siteDir, name))
-        .filter((filePath) => fs.existsSync(filePath));
-    });
-}
-
-function copyIntoSnapshot(filePath, snapshotRoot, manifest) {
+function copyIntoSnapshot(filePath, targetRelativePath, snapshotRoot, manifest) {
   if (!fs.existsSync(filePath)) {
-    manifest.missing.push(path.relative(WORKSPACE_ROOT, filePath));
+    manifest.missing.push(targetRelativePath);
     return;
   }
 
-  const relative = path.relative(WORKSPACE_ROOT, filePath);
-  const target = path.join(snapshotRoot, relative);
+  const target = path.join(snapshotRoot, targetRelativePath);
   ensureDir(path.dirname(target));
   fs.copyFileSync(filePath, target);
-  manifest.copied.push(relative);
+  manifest.copied.push(targetRelativePath);
+}
+
+function listRuntimeSiteSlugs(runtimePaths) {
+  if (!fs.existsSync(runtimePaths.siteRuntimeRoot)) return [];
+  return fs
+    .readdirSync(runtimePaths.siteRuntimeRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
 }
 
 function main() {
@@ -66,6 +62,7 @@ function main() {
   const outDir = path.resolve(WORKSPACE_ROOT, String(flags['out-dir'] || DEFAULT_OUT_DIR));
   const label = String(flags.label || 'runtime-state');
   const snapshotRoot = path.join(outDir, `${label}-${timestamp()}`);
+  const runtimePaths = resolveRuntimePaths({ workspaceRoot: WORKSPACE_ROOT, env: process.env });
 
   ensureDir(snapshotRoot);
 
@@ -73,28 +70,38 @@ function main() {
     ok: true,
     createdAt: new Date().toISOString(),
     workspaceRoot: WORKSPACE_ROOT,
+    runtimeRoot: runtimePaths.runtimeRoot,
     snapshotRoot,
     copied: [],
     missing: []
   };
 
-  const explicitFiles = [
-    path.join(WORKSPACE_ROOT, 'sites', 'registry.json'),
-    path.join(WORKSPACE_ROOT, 'apps', 'engine', 'data', 'portal.db'),
-    path.join(WORKSPACE_ROOT, 'apps', 'engine', 'data', 'portal.db-shm'),
-    path.join(WORKSPACE_ROOT, 'apps', 'engine', 'data', 'portal.db-wal')
-  ];
+  copyIntoSnapshot(runtimePaths.registryPath, 'runtime/sites/registry.json', snapshotRoot, manifest);
+  copyIntoSnapshot(runtimePaths.portalDbPath, 'runtime/engine/portal.db', snapshotRoot, manifest);
+  copyIntoSnapshot(`${runtimePaths.portalDbPath}-shm`, 'runtime/engine/portal.db-shm', snapshotRoot, manifest);
+  copyIntoSnapshot(`${runtimePaths.portalDbPath}-wal`, 'runtime/engine/portal.db-wal', snapshotRoot, manifest);
 
-  for (const filePath of [...explicitFiles, ...collectSiteRuntimeFiles()]) {
-    copyIntoSnapshot(filePath, snapshotRoot, manifest);
+  for (const siteSlug of listRuntimeSiteSlugs(runtimePaths)) {
+    copyIntoSnapshot(
+      resolveSiteRuntimeEnvPath(runtimePaths, siteSlug),
+      path.join('runtime', 'sites', siteSlug, '.env.generated'),
+      snapshotRoot,
+      manifest
+    );
   }
 
   const manifestPath = path.join(snapshotRoot, 'manifest.json');
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
-  console.log(JSON.stringify({
-    ...manifest,
-    manifestPath
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ...manifest,
+        manifestPath
+      },
+      null,
+      2
+    )
+  );
 }
 
 try {

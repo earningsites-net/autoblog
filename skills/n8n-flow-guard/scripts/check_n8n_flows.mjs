@@ -4,16 +4,17 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { resolveRuntimePaths } from '../../../scripts/lib/runtime-paths.mjs';
 
 const DEFAULT_WORKFLOWS_DIR = 'infra/n8n/workflows';
-const DEFAULT_REPORT_DIR = 'docs/ops/n8n-flow-checks';
+const DEFAULT_REPORT_DIR = 'runtime-aware default';
 const DEFAULT_AGENT_NAME = 'Crea sito blog autopopolato';
 
 function parseArgs(argv) {
   const options = {
     mode: 'changed-only',
     workflowsDir: DEFAULT_WORKFLOWS_DIR,
-    reportDir: DEFAULT_REPORT_DIR,
+    reportDir: '',
     importEnabled: true,
     smokeEnabled: false,
     writeReport: true,
@@ -109,7 +110,7 @@ function printHelp() {
 Options:
   --mode <all|changed-only>         Select workflows scope (default: changed-only)
   --workflows-dir <path>            Workflows directory (default: infra/n8n/workflows)
-  --report-dir <path>               Report directory (default: docs/ops/n8n-flow-checks)
+  --report-dir <path>               Report directory (default: runtime-aware default)
   --import | --no-import            Enable/disable n8n import (default: enabled)
   --smoke | --no-smoke              Enable/disable API smoke verification after import (default: disabled)
   --write-report | --no-write-report Enable/disable report writes (default: enabled)
@@ -120,6 +121,10 @@ Options:
   --n8n-basic-password <pass>       n8n basic auth password (fallback auth)
   --help                            Show this help
 `);
+}
+
+function resolveDefaultReportDir(rootDir) {
+  return resolveRuntimePaths({ workspaceRoot: rootDir, env: process.env }).n8nFlowChecksDir;
 }
 
 function parseEnvContent(content) {
@@ -782,6 +787,9 @@ async function ensureDir(dirPath) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const rootDir = process.cwd();
+  if (!options.reportDir) {
+    options.reportDir = resolveDefaultReportDir(rootDir);
+  }
   const runtimeEnv = await loadLocalRuntimeEnv(rootDir);
   hydrateN8nOptions(options, runtimeEnv);
   const reportDirAbs = path.resolve(rootDir, options.reportDir);

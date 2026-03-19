@@ -92,6 +92,8 @@ The sync command intentionally ignores runtime artifacts:
 - `seed-content/`
 - `handoff/`
 
+If `AUTOBLOG_RUNTIME_ROOT` is configured on the VPS, those runtime artifacts live outside the repo by default.
+
 Example:
 
 ```bash

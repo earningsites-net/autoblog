@@ -21,8 +21,8 @@ Generate handoff only when:
 
 ## Required Inputs
 
-- `docs/ops/n8n-flow-checks/latest-report.json`
-- `docs/ops/n8n-flow-checks/latest-handoff.md`
+- `latest-report.json` in the configured flow-check report dir
+- `latest-handoff.md` in the configured flow-check report dir
 
 ## Minimal Prompt Pattern
 

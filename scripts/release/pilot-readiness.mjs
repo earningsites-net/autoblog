@@ -3,6 +3,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  resolveRuntimePaths,
+  resolveSiteBlueprintPath,
+  resolveSiteRuntimeEnvPath
+} from '../lib/runtime-paths.mjs';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -86,12 +91,13 @@ function main() {
 
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const workspaceRoot = path.resolve(currentDir, '..', '..');
+  const runtimePaths = resolveRuntimePaths({ workspaceRoot, env: process.env });
   const siteSlug = normalizeSlug(String(args.site || 'lux-living-01'));
   const rootEnvPath = path.resolve(workspaceRoot, String(args['root-env'] || '.env'));
   const n8nEnvPath = path.resolve(workspaceRoot, String(args['n8n-env'] || 'infra/n8n/.env'));
-  const registryPath = path.resolve(workspaceRoot, String(args.registry || 'sites/registry.json'));
-  const blueprintPath = path.resolve(workspaceRoot, `sites/${siteSlug}/site.blueprint.json`);
-  const siteEnvPath = path.resolve(workspaceRoot, `sites/${siteSlug}/.env.generated`);
+  const registryPath = path.resolve(workspaceRoot, String(args.registry || runtimePaths.registryPath));
+  const blueprintPath = resolveSiteBlueprintPath(workspaceRoot, siteSlug);
+  const siteEnvPath = resolveSiteRuntimeEnvPath(runtimePaths, siteSlug);
 
   const checks = [];
   const pushCheck = (id, ok, detail, severity = 'error') => {

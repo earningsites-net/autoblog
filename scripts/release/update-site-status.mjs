@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveRuntimePaths } from '../lib/runtime-paths.mjs';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -56,7 +57,8 @@ function main() {
 
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const workspaceRoot = path.resolve(currentDir, '..', '..');
-  const registryPath = path.resolve(workspaceRoot, String(args.registry || 'sites/registry.json'));
+  const runtimePaths = resolveRuntimePaths({ workspaceRoot, env: process.env });
+  const registryPath = path.resolve(workspaceRoot, String(args.registry || runtimePaths.registryPath));
 
   if (!fs.existsSync(registryPath)) {
     console.error(`Registry not found: ${registryPath}`);

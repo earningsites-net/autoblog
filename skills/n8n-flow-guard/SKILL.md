@@ -22,13 +22,15 @@ Default behavior:
 - Validate structure and n8n node connections.
 - Auto-import into n8n when API credentials are configured.
 - Auto-load n8n credentials from `infra/n8n/.env` and root `.env` (if present).
-- Write report files in `docs/ops/n8n-flow-checks`.
+- Write report files in the runtime-aware default report dir:
+  - local default: `docs/ops/n8n-flow-checks`
+  - with `AUTOBLOG_RUNTIME_ROOT`: `<runtime-root>/reports/n8n-flow-checks`
 - Write `latest-handoff.md` only on fail/regression.
 
 ## Workflow
 
 1. Execute `scripts/check_n8n_flows.mjs`.
-2. Read `docs/ops/n8n-flow-checks/latest-report.json`.
+2. Read `latest-report.json` from the configured report dir.
 3. If `overallStatus` is `fail` or `regression.count > 0`, open `latest-handoff.md`.
 4. Use `latest-handoff.md` to brief the agent "Crea sito blog autopopolato".
 5. Fix and rerun until `overallStatus` becomes `pass` or acceptable `warn`.

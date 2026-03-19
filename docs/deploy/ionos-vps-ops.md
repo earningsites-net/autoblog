@@ -249,6 +249,7 @@ Valori da allineare in `/etc/autoblog/engine.env`:
 Note:
 
 - `ENGINE_PORT=8787` è opzionale; l'engine usa gia quel default.
+- `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog` per spostare registry, `.env.generated`, `seed-content/`, `handoff/` e report flow-check fuori dal repo.
 - non impostare `SITE_SLUG` o `NEXT_PUBLIC_SITE_SLUG` nel root env dell'engine production: il runtime ops è multi-site.
 - non usare `PORTAL_BOOTSTRAP_SITE_SLUGS` per replicare il vecchio auto-grant globale: compilalo solo se vuoi preassegnare esplicitamente alcuni siti già esistenti al portal admin.
 - `NEXT_PUBLIC_PORTAL_BASE_URL` va configurata sul web/Vercel, non è richiesta dal backend engine.
@@ -270,26 +271,24 @@ Valori da allineare in `/etc/autoblog/n8n.env`:
 Nota su Sanity:
 
 - i workflow n8n risolvono la connessione Sanity via engine per `siteSlug`
-- quindi il server deve avere `sites/lux-living-01/.env.generated` con token e project id production coerenti
+- quindi il server deve avere il runtime env del sito (`/var/lib/autoblog/sites/lux-living-01/.env.generated` se usi `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog`) con token e project id production coerenti
 
 ## 10b. Backup runtime fuori da Git
 
-Il clone production contiene anche stato operativo (`portal.db`, `sites/registry.json`, `sites/<slug>/.env.generated`).
-Questo stato non va pushato su Git. Va invece salvato con backup espliciti.
+Il runtime operativo (`portal.db`, `registry`, `.env.generated` per-sito) non va pushato su Git. Va salvato con backup espliciti.
 
 Dal VPS, dentro `/srv/auto-blog-project`:
 
 ```bash
+sudo mkdir -p /var/lib/autoblog/sites /var/lib/autoblog/reports
 sudo -u autoblog npm run ops:backup:runtime -- --out-dir /var/lib/autoblog/backups --label vps-runtime
 ```
 
 Il backup include:
 
-- `apps/engine/data/portal.db*`
-- `sites/registry.json`
+- `PORTAL_DB_PATH`/`AUTOBLOG_PORTAL_DB_PATH` (`portal.db*`)
+- `AUTOBLOG_SITE_REGISTRY_PATH` oppure `<AUTOBLOG_RUNTIME_ROOT>/sites/registry.json`
 - per ogni sito:
-  - `site.blueprint.json`
-  - `README.md`
   - `.env.generated`
 
 Il comando scrive anche un `manifest.json` nello snapshot.
@@ -297,8 +296,9 @@ Il comando scrive anche un `manifest.json` nello snapshot.
 Procedura consigliata:
 
 1. esegui un backup prima di cleanup importanti o deploy delicati sul VPS
-2. mantieni Git come source of truth solo per i file source-safe del sito
-3. usa `npm run site:sync:source -- <dir-sito-copiato-dal-vps>` sul tuo computer per riallineare il blueprint locale dopo una creazione fatta via Factory
+2. mantieni Git come source of truth solo per i file source-safe del sito (`site.blueprint.json` + opzionale `README.md`)
+3. usa `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog` in engine e n8n env per evitare che registry/env/report finiscano nel working tree
+4. usa `npm run site:sync:source -- <dir-sito-copiato-dal-vps>` sul tuo computer per riallineare il blueprint locale dopo una creazione fatta via Factory
 
 ## 11. Service systemd engine
 
