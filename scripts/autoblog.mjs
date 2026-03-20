@@ -1853,6 +1853,7 @@ function buildPublishingSettingsFromBlueprint(blueprint) {
 function commandProvisionEnv(siteSlug, flags) {
   const blueprint = loadSiteBlueprint(siteSlug);
   const envPath = resolveSiteEnvPath(siteSlug);
+  ensureDir(path.dirname(envPath));
   const existing = parseEnvFile(envPath);
   const defaults = {
     SITE_SLUG: siteSlug,

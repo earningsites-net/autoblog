@@ -4,6 +4,24 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Corretto `autoblog provision-env` per il runtime root esterno:
+  - `scripts/autoblog.mjs` ora crea sempre `path.dirname(resolveSiteEnvPath(siteSlug))` prima di scrivere `.env.generated`
+  - fix necessario per i nuovi siti creati via Factory con `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog`
+  - errore risolto: `ENOENT ... /var/lib/autoblog/sites/<slug>/.env.generated`
+- Cleanup finale `portal.db` production completato per `ai-blog-1`:
+  - trovate righe residue in:
+    - `site_access=2`
+    - `site_settings=1`
+    - `entitlements=1`
+    - `published_article_events=34`
+  - backup JSON salvato su VPS in:
+    - `/var/lib/autoblog/backups/portal-db-site-cleanup-ai-blog-1-20260319-100311.json`
+  - delete eseguito in singola transazione
+  - verifica schema-wide finale su tutte le tabelle con colonna `site_slug`:
+    - `site_access=0`
+    - `site_settings=0`
+    - `entitlements=0`
+    - `published_article_events=0`
 - Local Sanity CLI config removed from Git tracking:
   - `.dev/config/sanity/config.json` contains local auth/update metadata and must stay untracked
   - `.gitignore` now excludes `.dev/config/sanity/`
