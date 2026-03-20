@@ -8,6 +8,11 @@
   - `scripts/autoblog.mjs` ora crea sempre `path.dirname(resolveSiteEnvPath(siteSlug))` prima di scrivere `.env.generated`
   - fix necessario per i nuovi siti creati via Factory con `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog`
   - errore risolto: `ENOENT ... /var/lib/autoblog/sites/<slug>/.env.generated`
+  - commit/push: `6acfbe4` (`Fix runtime env directory creation`)
+  - rollout VPS completato:
+    - `git pull --ff-only origin main` riuscito
+    - validazione reale su `ai-blog-news`: `.env.generated` creato correttamente in `/var/lib/autoblog/sites/ai-blog-news/.env.generated`
+    - rimosso il file repo-local creato durante una validazione intermedia (`/srv/auto-blog-project/sites/ai-blog-news/.env.generated`)
 - Cleanup finale `portal.db` production completato per `ai-blog-1`:
   - trovate righe residue in:
     - `site_access=2`
