@@ -80,6 +80,12 @@ After creating a site in production, the safe workflow is:
 npm run site:sync:source -- /path/to/exported-or-copied/site-dir
 ```
 
+Or use the pull helper to fetch both the source-safe site folder and the runtime env needed for local Studio inspection:
+
+```bash
+npm run site:pull -- <site-slug>
+```
+
 3. Review and commit only:
    - `sites/<slug>/site.blueprint.json`
    - optional `sites/<slug>/README.md`
@@ -101,6 +107,20 @@ npm run site:sync:source -- sites/ai-blog-1
 ```
 
 If the source directory comes directly from the VPS, copy it locally first with `scp` and then run the sync command on the copied directory.
+
+`site:pull` is a convenience wrapper around that flow:
+
+- copies `sites/<slug>/` from the VPS into a local temp dir
+- runs `site:sync:source`
+- copies `sites/<slug>/.env.generated` from the VPS runtime root
+- optionally runs `site:use` to point local `.env` and `apps/studio/.env` at the pulled site
+
+It does **not** commit or push anything. The intended flow remains:
+
+1. pull the site locally
+2. review the blueprint
+3. commit only `site.blueprint.json` / `README.md`
+4. keep `.env.generated` local-only
 
 ## Topic Discovery Diversity
 `discover-topics` now supports a hybrid selector model:

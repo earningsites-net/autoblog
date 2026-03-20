@@ -4,6 +4,41 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Implementato `site:pull`:
+  - nuovo script: `scripts/site-pull.mjs`
+  - nuovo npm script: `npm run site:pull -- <site-slug>`
+  - comportamento:
+    - copia `sites/<slug>/` dal VPS in una temp dir locale
+    - esegue `site:sync:source`
+    - copia `sites/<slug>/.env.generated` dal runtime VPS
+    - esegue `site:use` per riallineare `.env` e `apps/studio/.env`
+  - configurazione overrideabile via env:
+    - `AUTOBLOG_SITE_PULL_HOST`
+    - `AUTOBLOG_SITE_PULL_IDENTITY`
+    - `AUTOBLOG_SITE_PULL_SOURCE_ROOT`
+    - `AUTOBLOG_SITE_PULL_RUNTIME_ROOT`
+    - `AUTOBLOG_SITE_PULL_TEMP_ROOT`
+  - docs aggiornate:
+    - `.env.example`
+    - `docs/context.md`
+    - `docs/factory.md`
+- Smoke reale `site:pull` eseguito con successo su `ai-blog-news`:
+  - source-safe copiato:
+    - `sites/ai-blog-news/site.blueprint.json`
+    - `sites/ai-blog-news/README.md`
+  - runtime env copiato:
+    - `sites/ai-blog-news/.env.generated`
+  - `site:use` eseguito automaticamente
+  - workspace locale pronto per `npm run dev:studio`
+- Sync locale completato per `ai-blog-news`:
+  - source-safe copiato dal VPS e importato con `npm run site:sync:source -- /tmp/autoblog-site-sync/ai-blog-news`
+  - file locali ottenuti:
+    - `sites/ai-blog-news/site.blueprint.json`
+    - `sites/ai-blog-news/README.md`
+  - runtime env copiato separatamente dal VPS:
+    - `sites/ai-blog-news/.env.generated`
+  - `npm run site:use -- ai-blog-news --root-env .env` eseguito con successo
+  - `.env` e `apps/studio/.env` ora puntano al progetto Sanity `8j9e9sx0 / production`
 - Corretto `autoblog provision-env` per il runtime root esterno:
   - `scripts/autoblog.mjs` ora crea sempre `path.dirname(resolveSiteEnvPath(siteSlug))` prima di scrivere `.env.generated`
   - fix necessario per i nuovi siti creati via Factory con `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog`

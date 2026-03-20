@@ -23,6 +23,7 @@ This file stores durable project context shared across tasks.
 - Import changed n8n workflows: `npm run n8n:import:changed`
 - Check + import + smoke changed n8n workflows: `npm run n8n:test:flows`
 - Sync source-safe site files into the repo: `npm run site:sync:source -- <site-dir>`
+- Pull a site from the VPS into the local workspace (source-safe + runtime env for Studio): `npm run site:pull -- <site-slug>`
 - Backup runtime state outside Git: `npm run ops:backup:runtime -- --out-dir <snapshot-dir> --label <name>`
 - Pilot release checks (`lux-living-01`):
   - init env files: `npm run release:pilot:init-env`

@@ -14,6 +14,7 @@
     "dev:engine": "npm --workspace @autoblog/engine run dev",
     "site:use": "node scripts/site-use.mjs",
     "site:sync:source": "node scripts/site-sync-source.mjs",
+    "site:pull": "node scripts/site-pull.mjs",
     "ops:backup:runtime": "node scripts/ops-backup-runtime.mjs",
     "build:web": "npm --workspace @autoblog/web run build",
     "build:studio": "npm --workspace @autoblog/studio run build",
