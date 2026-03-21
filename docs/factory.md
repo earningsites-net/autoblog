@@ -122,6 +122,23 @@ It does **not** commit or push anything. The intended flow remains:
 3. commit only `site.blueprint.json` / `README.md`
 4. keep `.env.generated` local-only
 
+## Buyer Handoff
+Use the handoff helper when a sold site needs a dedicated portal owner and delivery checklist:
+
+```bash
+npm run site:handoff -- ai-blog-news --owner-email buyer@example.com
+```
+
+Safe defaults:
+
+- creates or updates a portal user for the buyer
+- grants that user access to the site
+- updates runtime registry metadata (`ownerEmail`, `ownerType`, `mode`)
+- generates handoff files under the site's runtime `handoff/` directory
+- keeps existing owners unless you explicitly pass `--revoke-other-owners`
+
+This command does **not** automate Sanity or Vercel account transfer. It prepares the portal/runtime side and writes an explicit follow-up checklist.
+
 ## Topic Discovery Diversity
 `discover-topics` now supports a hybrid selector model:
 

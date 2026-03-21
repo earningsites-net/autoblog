@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import {
   displayPath,
   resolveRuntimePaths,
@@ -36,6 +38,7 @@ Usage:
   autoblog release-site <site-slug> [--from-sanity]
   autoblog deploy <site-slug>
   autoblog doctor <site-slug>
+  autoblog handoff-site <site-slug> --owner-email <email> [--role owner|editor|viewer] [--temp-password <password>] [--revoke-other-owners]
   autoblog handoff-pack <site-slug>
   autoblog list-blueprints
 `);
@@ -1474,6 +1477,249 @@ function parseEnvFile(filePath) {
   return env;
 }
 
+function loadRegistry() {
+  if (!exists(SITE_REGISTRY_PATH)) {
+    return {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      sites: []
+    };
+  }
+
+  const parsed = readJson(SITE_REGISTRY_PATH);
+  if (!Array.isArray(parsed?.sites)) {
+    throw new Error(`Invalid site registry shape: ${SITE_REGISTRY_PATH}`);
+  }
+  return parsed;
+}
+
+function saveRegistry(registry) {
+  const next = {
+    version: Number(registry?.version || 1),
+    updatedAt: new Date().toISOString(),
+    sites: Array.isArray(registry?.sites) ? registry.sites : []
+  };
+  writeJson(SITE_REGISTRY_PATH, next);
+  return next;
+}
+
+function parseListFlag(value) {
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function generateTempPassword(length = 22) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%&*-_=+';
+  const bytes = crypto.randomBytes(length);
+  let out = '';
+  for (let index = 0; index < length; index += 1) {
+    out += alphabet[bytes[index] % alphabet.length];
+  }
+  return out;
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(password || ''), salt, 64).toString('hex');
+  return `scrypt$${salt}$${hash}`;
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function openPortalDb() {
+  ensureDir(path.dirname(RUNTIME_PATHS.portalDbPath));
+  const db = new DatabaseSync(RUNTIME_PATHS.portalDbPath);
+  db.exec('PRAGMA foreign_keys = ON;');
+  db.exec('PRAGMA journal_mode = WAL;');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS site_access (
+      user_id INTEGER NOT NULL,
+      site_slug TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'owner',
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, site_slug),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS site_settings (
+      site_slug TEXT PRIMARY KEY,
+      publishing_enabled INTEGER NOT NULL DEFAULT 1,
+      max_publishes_per_run INTEGER NOT NULL DEFAULT 1,
+      ad_slots_enabled INTEGER NOT NULL DEFAULT 0,
+      ads_mode TEXT NOT NULL DEFAULT 'auto',
+      ads_preview_enabled INTEGER NOT NULL DEFAULT 1,
+      adsense_publisher_id TEXT NOT NULL DEFAULT '',
+      adsense_slot_header TEXT NOT NULL DEFAULT '',
+      adsense_slot_in_content TEXT NOT NULL DEFAULT '',
+      adsense_slot_footer TEXT NOT NULL DEFAULT '',
+      fallback_to_platform INTEGER NOT NULL DEFAULT 1,
+      studio_url TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS entitlements (
+      site_slug TEXT PRIMARY KEY,
+      plan TEXT NOT NULL DEFAULT 'base',
+      monthly_quota INTEGER NOT NULL DEFAULT 3,
+      published_this_month INTEGER NOT NULL DEFAULT 0,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      pending_plan TEXT NOT NULL DEFAULT '',
+      pending_monthly_quota INTEGER NOT NULL DEFAULT 0,
+      pending_effective_at TEXT NOT NULL DEFAULT '',
+      pending_stripe_price_id TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active',
+      stripe_customer_id TEXT NOT NULL DEFAULT '',
+      stripe_subscription_id TEXT NOT NULL DEFAULT '',
+      stripe_price_id TEXT NOT NULL DEFAULT '',
+      billing_status TEXT NOT NULL DEFAULT 'trial',
+      updated_at TEXT NOT NULL
+    );
+  `);
+  return db;
+}
+
+function ensurePortalSiteRecords(db, siteSlug) {
+  const now = nowIso();
+  const periodStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
+  const periodEnd = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1)).toISOString();
+
+  db.prepare(
+    `INSERT INTO site_settings (
+      site_slug, publishing_enabled, max_publishes_per_run, ad_slots_enabled,
+      ads_mode, ads_preview_enabled, adsense_publisher_id, adsense_slot_header,
+      adsense_slot_in_content, adsense_slot_footer, fallback_to_platform, studio_url, updated_at
+    ) VALUES (?, 1, 1, 0, 'auto', 1, '', '', '', '', 1, '', ?)
+    ON CONFLICT(site_slug) DO NOTHING`
+  ).run(siteSlug, now);
+
+  db.prepare(
+    `INSERT INTO entitlements (
+      site_slug, plan, monthly_quota, published_this_month, period_start, period_end,
+      status, stripe_customer_id, stripe_subscription_id, stripe_price_id, billing_status, updated_at
+    ) VALUES (?, 'base', 3, 0, ?, ?, 'active', '', '', '', 'trial', ?)
+    ON CONFLICT(site_slug) DO NOTHING`
+  ).run(siteSlug, periodStart, periodEnd, now);
+}
+
+function createOrUpdatePortalUser(db, email, password) {
+  const normalizedEmail = normalizeEmail(email);
+  const now = nowIso();
+  const passwordHash = hashPassword(password);
+  const existing = db
+    .prepare('SELECT id, email FROM users WHERE email = ?')
+    .get(normalizedEmail);
+
+  if (existing) {
+    db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(passwordHash, now, existing.id);
+    return { id: Number(existing.id), email: normalizedEmail, created: false, passwordUpdated: true };
+  }
+
+  const inserted = db
+    .prepare('INSERT INTO users (email, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?)')
+    .run(normalizedEmail, passwordHash, now, now);
+
+  return { id: Number(inserted.lastInsertRowid), email: normalizedEmail, created: true, passwordUpdated: true };
+}
+
+function assignPortalSiteAccess(db, userId, siteSlug, role) {
+  db.prepare(
+    `INSERT INTO site_access (user_id, site_slug, role, created_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id, site_slug) DO UPDATE SET role = excluded.role`
+  ).run(userId, siteSlug, role, nowIso());
+}
+
+function listPortalSiteAccess(db, siteSlug) {
+  return db
+    .prepare(
+      `SELECT sa.user_id AS userId, sa.site_slug AS siteSlug, sa.role AS role, u.email AS email
+       FROM site_access sa
+       INNER JOIN users u ON u.id = sa.user_id
+       WHERE sa.site_slug = ?
+       ORDER BY sa.role DESC, u.email ASC`
+    )
+    .all(siteSlug);
+}
+
+function revokeOtherOwners(db, siteSlug, keepEmails = []) {
+  const keep = new Set(keepEmails.map((item) => normalizeEmail(item)).filter(Boolean));
+  const owners = db
+    .prepare(
+      `SELECT sa.user_id AS userId, u.email AS email
+       FROM site_access sa
+       INNER JOIN users u ON u.id = sa.user_id
+       WHERE sa.site_slug = ? AND sa.role = 'owner'`
+    )
+    .all(siteSlug);
+
+  const revoked = [];
+  for (const owner of owners) {
+    const email = normalizeEmail(owner.email);
+    if (keep.has(email)) continue;
+    db.prepare('DELETE FROM site_access WHERE user_id = ? AND site_slug = ?').run(owner.userId, siteSlug);
+    revoked.push(email);
+  }
+  return revoked;
+}
+
+function buildHandoffChecklist({
+  siteSlug,
+  ownerEmail,
+  portalRole,
+  sanityProjectId,
+  sanityDataset,
+  webBaseUrl,
+  studioUrl,
+  tempPasswordGenerated
+}) {
+  const lines = [
+    `# Site Handoff (${siteSlug})`,
+    '',
+    '## Portal',
+    `- Owner email: ${ownerEmail}`,
+    `- Granted role: ${portalRole}`,
+    tempPasswordGenerated
+      ? '- Temporary password was generated during handoff. Communicate it securely or force a reset immediately.'
+      : '- Temporary password was provided explicitly during handoff. Communicate it securely or rotate it immediately.',
+    '- Ask the buyer to log in at the portal and set a new password.',
+    '',
+    '## Sanity',
+    `- Project ID: ${sanityProjectId || '(missing)'}`,
+    `- Dataset: ${sanityDataset || 'production'}`,
+    '- Invite the buyer to this project only, using their real email.',
+    '- Do not share your own Sanity account.',
+    '- Ensure the buyer does not have Organization Member access on your org.',
+    '',
+    '## Web / Hosting',
+    `- Public site URL: ${webBaseUrl || '(missing)'}`,
+    `- Studio URL: ${studioUrl || '(missing)'}`,
+    '- Transfer or recreate the Vercel project/domain access as part of delivery.',
+    '',
+    '## Ops',
+    '- Decide whether to revoke your own portal/site access after acceptance.',
+    '- Keep runtime backups before removing any admin access.',
+    ''
+  ];
+  return `${lines.join('\n')}\n`;
+}
+
 function loadWorkspaceEnv() {
   return {
     ...parseEnvFile(path.join(WORKSPACE_ROOT, 'infra', 'n8n', '.env')),
@@ -2472,6 +2718,165 @@ function commandHandoffPack(siteSlug) {
   console.log(`Generated handoff pack in ${displayPath(WORKSPACE_ROOT, handoffDir)}`);
 }
 
+function commandHandoffSite(siteSlug, flags) {
+  const normalizedSlug = sanitizeSiteSlug(siteSlug);
+  if (!normalizedSlug) throw new Error('Missing <site-slug>');
+
+  const ownerEmail = normalizeEmail(flags['owner-email']);
+  if (!ownerEmail) {
+    throw new Error('Missing required flag --owner-email');
+  }
+
+  const role = ['owner', 'editor', 'viewer'].includes(String(flags.role || 'owner'))
+    ? String(flags.role || 'owner')
+    : 'owner';
+  const blueprint = ensureBusinessDefaults(loadSiteBlueprint(normalizedSlug));
+  const siteEnv = parseEnvFile(resolveSiteEnvPath(normalizedSlug));
+  const tempPassword = String(flags['temp-password'] || generateTempPassword());
+  const tempPasswordGenerated = typeof flags['temp-password'] !== 'string' || flags['temp-password'].trim() === '';
+  const revokeOthers = flags['revoke-other-owners'] === true;
+  const keepEmails = uniqueStrings([
+    ownerEmail,
+    ...parseListFlag(flags['keep-email']),
+    ...(flags['keep-admin'] === true ? [String(process.env.PORTAL_ADMIN_EMAIL || '')] : [])
+  ]).map((item) => normalizeEmail(item));
+  const webBaseUrl = String(flags['web-base-url'] || '').trim();
+  const studioUrl = String(flags['studio-url'] || siteEnv.SANITY_STUDIO_URL || '').trim();
+  const mode = String(
+    flags.mode || (String(blueprint.businessMode || 'transfer_first') === 'managed' ? 'managed' : 'transfer')
+  ).trim();
+  const ownerType = String(flags['owner-type'] || (mode === 'managed' ? 'internal' : 'client')).trim();
+
+  const db = openPortalDb();
+  let user = null;
+  let beforeAccess = [];
+  let afterAccess = [];
+  let revokedOwners = [];
+
+  try {
+    db.exec('BEGIN');
+    ensurePortalSiteRecords(db, normalizedSlug);
+    beforeAccess = listPortalSiteAccess(db, normalizedSlug);
+    user = createOrUpdatePortalUser(db, ownerEmail, tempPassword);
+    assignPortalSiteAccess(db, user.id, normalizedSlug, role);
+    if (revokeOthers && role === 'owner') {
+      revokedOwners = revokeOtherOwners(db, normalizedSlug, keepEmails);
+    }
+    afterAccess = listPortalSiteAccess(db, normalizedSlug);
+    db.exec('COMMIT');
+  } catch (error) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // ignore rollback errors
+    }
+    db.close();
+    throw error;
+  }
+  db.close();
+
+  const registry = loadRegistry();
+  const currentSite = Array.isArray(registry.sites)
+    ? registry.sites.find((site) => sanitizeSiteSlug(site.siteSlug) === normalizedSlug)
+    : null;
+
+  const nextSite = {
+    ...(currentSite || {}),
+    siteSlug: normalizedSlug,
+    ownerEmail,
+    ownerType: ownerType === 'internal' ? 'internal' : 'client',
+    mode: mode === 'managed' ? 'managed' : 'transfer',
+    sanityProjectId: String(siteEnv.SANITY_PROJECT_ID || currentSite?.sanityProjectId || '').trim(),
+    sanityDataset: String(siteEnv.SANITY_DATASET || currentSite?.sanityDataset || 'production').trim(),
+    sanityApiVersion: String(siteEnv.SANITY_API_VERSION || currentSite?.sanityApiVersion || '2025-01-01').trim(),
+    webBaseUrl: webBaseUrl || currentSite?.webBaseUrl || '',
+    studioUrl: studioUrl || currentSite?.studioUrl || '',
+    updatedAt: new Date().toISOString()
+  };
+
+  const nextSites = Array.isArray(registry.sites) ? [...registry.sites] : [];
+  const siteIndex = nextSites.findIndex((site) => sanitizeSiteSlug(site.siteSlug) === normalizedSlug);
+  if (siteIndex >= 0) nextSites[siteIndex] = nextSite;
+  else nextSites.push(nextSite);
+  saveRegistry({ ...registry, sites: nextSites });
+
+  ensureDir(resolveSiteHandoffDir(normalizedSlug));
+  commandHandoffPack(normalizedSlug);
+
+  const handoffSummary = {
+    siteSlug: normalizedSlug,
+    ownerEmail,
+    role,
+    portalDbPath: RUNTIME_PATHS.portalDbPath,
+    runtimeEnvPath: resolveSiteEnvPath(normalizedSlug),
+    registryPath: SITE_REGISTRY_PATH,
+    webBaseUrl: nextSite.webBaseUrl,
+    studioUrl: nextSite.studioUrl,
+    sanityProjectId: nextSite.sanityProjectId,
+    sanityDataset: nextSite.sanityDataset,
+    createdPortalUser: Boolean(user?.created),
+    tempPasswordGenerated,
+    revokedOwners,
+    beforeAccess,
+    afterAccess
+  };
+
+  writeJson(resolveSiteHandoffFile(normalizedSlug, 'transfer-summary.json'), handoffSummary);
+  fs.writeFileSync(
+    resolveSiteHandoffFile(normalizedSlug, 'transfer-checklist.md'),
+    buildHandoffChecklist({
+      siteSlug: normalizedSlug,
+      ownerEmail,
+      portalRole: role,
+      sanityProjectId: nextSite.sanityProjectId,
+      sanityDataset: nextSite.sanityDataset,
+      webBaseUrl: nextSite.webBaseUrl,
+      studioUrl: nextSite.studioUrl,
+      tempPasswordGenerated
+    }),
+    'utf8'
+  );
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        siteSlug: normalizedSlug,
+        portal: {
+          email: ownerEmail,
+          role,
+          createdUser: Boolean(user?.created),
+          tempPassword,
+          tempPasswordGenerated,
+          revokedOwners,
+          beforeAccess,
+          afterAccess
+        },
+        registry: {
+          path: displayPath(WORKSPACE_ROOT, SITE_REGISTRY_PATH),
+          ownerEmail: nextSite.ownerEmail,
+          ownerType: nextSite.ownerType,
+          mode: nextSite.mode,
+          webBaseUrl: nextSite.webBaseUrl,
+          studioUrl: nextSite.studioUrl
+        },
+        handoff: {
+          summaryPath: displayPath(WORKSPACE_ROOT, resolveSiteHandoffFile(normalizedSlug, 'transfer-summary.json')),
+          checklistPath: displayPath(WORKSPACE_ROOT, resolveSiteHandoffFile(normalizedSlug, 'transfer-checklist.md')),
+          packPath: displayPath(WORKSPACE_ROOT, resolveSiteHandoffDir(normalizedSlug))
+        },
+        nextSteps: [
+          'Invite the buyer to the Sanity project using their real email.',
+          'Transfer or recreate Vercel/domain access for the buyer.',
+          'Decide whether to revoke old owner access with --revoke-other-owners on a follow-up run.'
+        ]
+      },
+      null,
+      2
+    )
+  );
+}
+
 function commandListBlueprints() {
   const items = listBlueprintTemplates();
   console.log(JSON.stringify({ count: items.length, items }, null, 2));
@@ -2519,6 +2924,9 @@ async function main() {
         break;
       case 'doctor':
         commandDoctor(positional[0]);
+        break;
+      case 'handoff-site':
+        commandHandoffSite(positional[0], flags);
         break;
       case 'handoff-pack':
         commandHandoffPack(positional[0]);

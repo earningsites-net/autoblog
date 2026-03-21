@@ -4,6 +4,28 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Implementato `site:handoff`:
+  - nuovo npm script: `npm run site:handoff -- <site-slug> --owner-email buyer@example.com`
+  - comando CLI sottostante: `node scripts/autoblog.mjs handoff-site ...`
+  - comportamento safe-by-default:
+    - crea/aggiorna il buyer come utente portal
+    - assegna `site_access` sul sito con ruolo configurabile
+    - inizializza `site_settings` / `entitlements` se il DB e' vuoto
+    - aggiorna il runtime registry con `ownerEmail`, `ownerType`, `mode`, `webBaseUrl`, `studioUrl`
+    - genera `transfer-summary.json` e `transfer-checklist.md` nel runtime `handoff/`
+    - genera anche il normale `handoff-pack`
+  - revoca degli owner precedenti disponibile solo via flag esplicito `--revoke-other-owners`
+  - docs aggiornate:
+    - `docs/context.md`
+    - `docs/factory.md`
+- Verifiche locali `site:handoff` completate:
+  - `node --check scripts/autoblog.mjs` OK
+  - `npm run typecheck` OK
+  - smoke su runtime temporaneo:
+    - creazione buyer owner + grant site access OK
+    - registry/handoff files generati OK
+  - smoke su branch distruttivo:
+    - secondo owner + `--revoke-other-owners` lascia solo il buyer nuovo come `owner`
 - Implementato `site:pull`:
   - nuovo script: `scripts/site-pull.mjs`
   - nuovo npm script: `npm run site:pull -- <site-slug>`
