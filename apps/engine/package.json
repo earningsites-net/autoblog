@@ -13,6 +13,7 @@
     "@autoblog/factory-sdk": "0.1.0",
     "@autoblog/publishers": "0.1.0",
     "fastify": "^5.1.0",
+    "postgres": "^3.4.8",
     "zod": "^3.24.1"
   },
   "devDependencies": {

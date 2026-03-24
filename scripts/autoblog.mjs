@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
+import './load-local-env.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import {
   displayPath,
   resolveRuntimePaths,
@@ -17,6 +17,7 @@ import {
   resolveSiteSeedContentFile as resolveRuntimeSiteSeedContentFile,
   resolveSiteSourceDir
 } from './lib/runtime-paths.mjs';
+import { createPortalStore } from './lib/portal-store.mjs';
 
 const WORKSPACE_ROOT = process.cwd();
 const SITES_SOURCE_ROOT = path.join(WORKSPACE_ROOT, 'sites');
@@ -38,7 +39,7 @@ Usage:
   autoblog release-site <site-slug> [--from-sanity]
   autoblog deploy <site-slug>
   autoblog doctor <site-slug>
-  autoblog handoff-site <site-slug> --owner-email <email> [--role owner|editor|viewer] [--temp-password <password>] [--revoke-other-owners]
+  autoblog handoff-site <site-slug> --owner-email <email> [--role owner|editor|viewer] [--temp-password <password>] [--revoke-other-owners] [--store-provider sqlite|postgres] [--portal-database-url <url>]
   autoblog handoff-pack <site-slug>
   autoblog list-blueprints
 `);
@@ -1524,161 +1525,6 @@ function generateTempPassword(length = 22) {
   return out;
 }
 
-function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(String(password || ''), salt, 64).toString('hex');
-  return `scrypt$${salt}$${hash}`;
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function openPortalDb() {
-  ensureDir(path.dirname(RUNTIME_PATHS.portalDbPath));
-  const db = new DatabaseSync(RUNTIME_PATHS.portalDbPath);
-  db.exec('PRAGMA foreign_keys = ON;');
-  db.exec('PRAGMA journal_mode = WAL;');
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS site_access (
-      user_id INTEGER NOT NULL,
-      site_slug TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'owner',
-      created_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, site_slug),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS site_settings (
-      site_slug TEXT PRIMARY KEY,
-      publishing_enabled INTEGER NOT NULL DEFAULT 1,
-      max_publishes_per_run INTEGER NOT NULL DEFAULT 1,
-      ad_slots_enabled INTEGER NOT NULL DEFAULT 0,
-      ads_mode TEXT NOT NULL DEFAULT 'auto',
-      ads_preview_enabled INTEGER NOT NULL DEFAULT 1,
-      adsense_publisher_id TEXT NOT NULL DEFAULT '',
-      adsense_slot_header TEXT NOT NULL DEFAULT '',
-      adsense_slot_in_content TEXT NOT NULL DEFAULT '',
-      adsense_slot_footer TEXT NOT NULL DEFAULT '',
-      fallback_to_platform INTEGER NOT NULL DEFAULT 1,
-      studio_url TEXT NOT NULL DEFAULT '',
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS entitlements (
-      site_slug TEXT PRIMARY KEY,
-      plan TEXT NOT NULL DEFAULT 'base',
-      monthly_quota INTEGER NOT NULL DEFAULT 3,
-      published_this_month INTEGER NOT NULL DEFAULT 0,
-      period_start TEXT NOT NULL,
-      period_end TEXT NOT NULL,
-      pending_plan TEXT NOT NULL DEFAULT '',
-      pending_monthly_quota INTEGER NOT NULL DEFAULT 0,
-      pending_effective_at TEXT NOT NULL DEFAULT '',
-      pending_stripe_price_id TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'active',
-      stripe_customer_id TEXT NOT NULL DEFAULT '',
-      stripe_subscription_id TEXT NOT NULL DEFAULT '',
-      stripe_price_id TEXT NOT NULL DEFAULT '',
-      billing_status TEXT NOT NULL DEFAULT 'trial',
-      updated_at TEXT NOT NULL
-    );
-  `);
-  return db;
-}
-
-function ensurePortalSiteRecords(db, siteSlug) {
-  const now = nowIso();
-  const periodStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
-  const periodEnd = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1)).toISOString();
-
-  db.prepare(
-    `INSERT INTO site_settings (
-      site_slug, publishing_enabled, max_publishes_per_run, ad_slots_enabled,
-      ads_mode, ads_preview_enabled, adsense_publisher_id, adsense_slot_header,
-      adsense_slot_in_content, adsense_slot_footer, fallback_to_platform, studio_url, updated_at
-    ) VALUES (?, 1, 1, 0, 'auto', 1, '', '', '', '', 1, '', ?)
-    ON CONFLICT(site_slug) DO NOTHING`
-  ).run(siteSlug, now);
-
-  db.prepare(
-    `INSERT INTO entitlements (
-      site_slug, plan, monthly_quota, published_this_month, period_start, period_end,
-      status, stripe_customer_id, stripe_subscription_id, stripe_price_id, billing_status, updated_at
-    ) VALUES (?, 'base', 3, 0, ?, ?, 'active', '', '', '', 'trial', ?)
-    ON CONFLICT(site_slug) DO NOTHING`
-  ).run(siteSlug, periodStart, periodEnd, now);
-}
-
-function createOrUpdatePortalUser(db, email, password) {
-  const normalizedEmail = normalizeEmail(email);
-  const now = nowIso();
-  const passwordHash = hashPassword(password);
-  const existing = db
-    .prepare('SELECT id, email FROM users WHERE email = ?')
-    .get(normalizedEmail);
-
-  if (existing) {
-    db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(passwordHash, now, existing.id);
-    return { id: Number(existing.id), email: normalizedEmail, created: false, passwordUpdated: true };
-  }
-
-  const inserted = db
-    .prepare('INSERT INTO users (email, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?)')
-    .run(normalizedEmail, passwordHash, now, now);
-
-  return { id: Number(inserted.lastInsertRowid), email: normalizedEmail, created: true, passwordUpdated: true };
-}
-
-function assignPortalSiteAccess(db, userId, siteSlug, role) {
-  db.prepare(
-    `INSERT INTO site_access (user_id, site_slug, role, created_at)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(user_id, site_slug) DO UPDATE SET role = excluded.role`
-  ).run(userId, siteSlug, role, nowIso());
-}
-
-function listPortalSiteAccess(db, siteSlug) {
-  return db
-    .prepare(
-      `SELECT sa.user_id AS userId, sa.site_slug AS siteSlug, sa.role AS role, u.email AS email
-       FROM site_access sa
-       INNER JOIN users u ON u.id = sa.user_id
-       WHERE sa.site_slug = ?
-       ORDER BY sa.role DESC, u.email ASC`
-    )
-    .all(siteSlug);
-}
-
-function revokeOtherOwners(db, siteSlug, keepEmails = []) {
-  const keep = new Set(keepEmails.map((item) => normalizeEmail(item)).filter(Boolean));
-  const owners = db
-    .prepare(
-      `SELECT sa.user_id AS userId, u.email AS email
-       FROM site_access sa
-       INNER JOIN users u ON u.id = sa.user_id
-       WHERE sa.site_slug = ? AND sa.role = 'owner'`
-    )
-    .all(siteSlug);
-
-  const revoked = [];
-  for (const owner of owners) {
-    const email = normalizeEmail(owner.email);
-    if (keep.has(email)) continue;
-    db.prepare('DELETE FROM site_access WHERE user_id = ? AND site_slug = ?').run(owner.userId, siteSlug);
-    revoked.push(email);
-  }
-  return revoked;
-}
-
 function buildHandoffChecklist({
   siteSlug,
   ownerEmail,
@@ -2718,7 +2564,7 @@ function commandHandoffPack(siteSlug) {
   console.log(`Generated handoff pack in ${displayPath(WORKSPACE_ROOT, handoffDir)}`);
 }
 
-function commandHandoffSite(siteSlug, flags) {
+async function commandHandoffSite(siteSlug, flags) {
   const normalizedSlug = sanitizeSiteSlug(siteSlug);
   if (!normalizedSlug) throw new Error('Missing <site-slug>');
 
@@ -2746,34 +2592,30 @@ function commandHandoffSite(siteSlug, flags) {
     flags.mode || (String(blueprint.businessMode || 'transfer_first') === 'managed' ? 'managed' : 'transfer')
   ).trim();
   const ownerType = String(flags['owner-type'] || (mode === 'managed' ? 'internal' : 'client')).trim();
-
-  const db = openPortalDb();
+  const portalStore = await createPortalStore({
+    provider: flags['store-provider'] || process.env.PORTAL_STORE_PROVIDER || 'sqlite',
+    sqlitePath: RUNTIME_PATHS.portalDbPath,
+    postgresUrl: flags['portal-database-url'] || process.env.PORTAL_DATABASE_URL || process.env.DATABASE_URL || ''
+  });
   let user = null;
   let beforeAccess = [];
   let afterAccess = [];
   let revokedOwners = [];
 
   try {
-    db.exec('BEGIN');
-    ensurePortalSiteRecords(db, normalizedSlug);
-    beforeAccess = listPortalSiteAccess(db, normalizedSlug);
-    user = createOrUpdatePortalUser(db, ownerEmail, tempPassword);
-    assignPortalSiteAccess(db, user.id, normalizedSlug, role);
+    await portalStore.ensureSiteRecords(normalizedSlug);
+    beforeAccess = await portalStore.listSiteAccess(normalizedSlug);
+    user = await portalStore.createOrUpdateUser(ownerEmail, tempPassword);
+    await portalStore.assignSiteAccess(user.id, normalizedSlug, role);
     if (revokeOthers && role === 'owner') {
-      revokedOwners = revokeOtherOwners(db, normalizedSlug, keepEmails);
+      revokedOwners = await portalStore.revokeOtherOwners(normalizedSlug, keepEmails);
     }
-    afterAccess = listPortalSiteAccess(db, normalizedSlug);
-    db.exec('COMMIT');
+    afterAccess = await portalStore.listSiteAccess(normalizedSlug);
   } catch (error) {
-    try {
-      db.exec('ROLLBACK');
-    } catch {
-      // ignore rollback errors
-    }
-    db.close();
+    await portalStore.close();
     throw error;
   }
-  db.close();
+  await portalStore.close();
 
   const registry = loadRegistry();
   const currentSite = Array.isArray(registry.sites)
@@ -2843,6 +2685,7 @@ function commandHandoffSite(siteSlug, flags) {
         ok: true,
         siteSlug: normalizedSlug,
         portal: {
+          provider: portalStore.provider,
           email: ownerEmail,
           role,
           createdUser: Boolean(user?.created),
@@ -2926,7 +2769,7 @@ async function main() {
         commandDoctor(positional[0]);
         break;
       case 'handoff-site':
-        commandHandoffSite(positional[0], flags);
+        await commandHandoffSite(positional[0], flags);
         break;
       case 'handoff-pack':
         commandHandoffPack(positional[0]);

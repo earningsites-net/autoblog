@@ -4,6 +4,41 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Reso operativo il setup Postgres per `local|staging|prod` del portal:
+  - `infra/n8n/docker-compose.yml` ora espone Postgres solo su `127.0.0.1:${POSTGRES_PORT}:5432`, così engine host e GUI locali possono collegarsi senza esporre il DB in pubblico
+  - aggiunto `POSTGRES_PORT` a `infra/n8n/.env.example`
+  - aggiunto `scripts/portal-postgres-bootstrap.mjs` + npm script `portal:postgres:bootstrap` per creare database+utente dedicati portal nello stesso server Postgres di n8n
+  - `.env.example` ora include anche i helper env `PORTAL_PG_*`
+  - `docs/start-local.md` e `docs/deploy/ionos-vps-ops.md` documentano bootstrap + migrazione per local e production
+  - `scripts/dev-up.sh` ora mostra anche la connessione Postgres loopback usata dal compose locale
+  - verifiche eseguite:
+    - `node --check scripts/portal-postgres-bootstrap.mjs`
+    - `node scripts/portal-postgres-bootstrap.mjs --help`
+    - `node scripts/portal-store-migrate.mjs --help`
+    - `bash -n scripts/dev-up.sh`
+    - parse YAML `infra/n8n/docker-compose.yml`
+- Completato il passaggio incrementale `sqlite|postgres` anche lato CLI/ops per il portal/admin layer:
+  - `scripts/autoblog.mjs handoff-site` ora usa `scripts/lib/portal-store.mjs` e rispetta `PORTAL_STORE_PROVIDER` / `PORTAL_DATABASE_URL`
+  - aggiunto `scripts/lib/portal-store.mjs` con adapter JS per i comandi runtime (`sqlite` e `postgres`)
+  - aggiunto `scripts/portal-store-migrate.mjs` e npm script `portal:store:migrate:postgres` per migrare i dati portal da SQLite a Postgres
+  - `scripts/site-handoff-prod.mjs` supporta ora anche `--store-provider` e `--portal-database-url`, così l'handoff production può usare Postgres senza hack manuali
+  - verifiche eseguite:
+    - `node --check scripts/autoblog.mjs`
+    - `node --check scripts/site-handoff-prod.mjs`
+    - `node --check scripts/portal-store-migrate.mjs`
+    - `npm --workspace @autoblog/engine run typecheck`
+    - smoke locale `npm run site:handoff -- ai-blog-news ...` riuscito sul provider SQLite
+- Avviata la migrazione incrementale del portal/admin layer a Postgres:
+  - aggiunto adapter async `PortalStoreAdapter` con factory `createPortalStore` in `apps/engine/src/services/portal-store-adapter.ts`
+  - aggiunto backend Postgres in `apps/engine/src/services/portal-store-postgres.ts` con bootstrap schema per `users`, `sessions`, `password_reset_tokens`, `site_access`, `site_settings`, `entitlements`, `processed_webhook_events`, `published_article_events`
+  - `AuthService`, `BillingService` e gli handler portal principali in `apps/engine/src/index.ts` ora lavorano contro lo store async per supportare driver non sincroni
+  - aggiunte env `PORTAL_STORE_PROVIDER` e `PORTAL_DATABASE_URL`; SQLite resta il default
+  - `npm --workspace @autoblog/engine run typecheck` passato
+- Chiariti i comandi standard repo per sincronizzare i workflow n8n via codice:
+  - normale reimport changed-only: `npm run n8n:import:changed`
+  - reimport + smoke changed-only: `npm run n8n:test:flows`
+  - bootstrap/refresh completo: `npm run n8n:import:all` o `npm run n8n:test:flows:all`
+  - script reale usato sotto: `skills/n8n-flow-guard/scripts/check_n8n_flows.mjs`, che seleziona i file changed da git e fa upsert via API n8n
 - Implementato `site:handoff`:
   - nuovo npm script: `npm run site:handoff -- <site-slug> --owner-email buyer@example.com`
   - comando CLI sottostante: `node scripts/autoblog.mjs handoff-site ...`
@@ -44,6 +79,28 @@
     - `.env.example`
     - `docs/context.md`
     - `docs/factory.md`
+- Chiarito il comportamento di `site:handoff` rispetto al runtime:
+  - il comando lanciato dal workspace locale aggiorna il runtime locale, non il VPS production
+  - verifica locale riuscita su `ai-blog-news`:
+    - `apps/engine/data/portal.db` contiene l'utente `danilocmp@hotmail.it` e il relativo `site_access` owner
+    - `sites/registry.json` locale contiene `ownerEmail`, `webBaseUrl` e `studioUrl` aggiornati per `ai-blog-news`
+  - per rendere effettivo l'handoff su `https://aiblogs.earningsites.net/portal` il comando va eseguito sul VPS con env production esplicite
+- Implementato wrapper pulito per production: `npm run site:handoff:prod -- <site-slug> --owner-email buyer@example.com`
+  - script: `scripts/site-handoff-prod.mjs`
+  - esegue il comando sul VPS IONOS come utente `autoblog` con `PORTAL_DB_PATH` e `AUTOBLOG_RUNTIME_ROOT` esplicite
+  - evita di dipendere da `source /etc/autoblog/engine.env`
+  - supporta `--temp-password`, `--role`, `--web-base-url`, `--studio-url`, `--revoke-other-owners`
+- Eseguito `site:handoff` correttamente su production per `ai-blog-news` con env esplicite (`PORTAL_DB_PATH=/var/lib/autoblog/portal.db`, `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog`):
+  - creato utente portal `danilocmp@hotmail.it` nel DB live
+  - aggiunto `site_access` owner sul sito `ai-blog-news`
+  - aggiornato il registry live con `ownerEmail`, `webBaseUrl`, `studioUrl`
+  - generati file handoff live in `/var/lib/autoblog/sites/ai-blog-news/handoff/`
+  - causa del fallimento precedente identificata: `/etc/autoblog/engine.env` non e' source-safe come shell script e non va `source`-ato direttamente; per i comandi production servono env esplicite o un wrapper dedicato
+  - il comando lanciato dal workspace locale aggiorna il runtime locale, non il VPS production
+  - verifica locale riuscita su `ai-blog-news`:
+    - `apps/engine/data/portal.db` contiene l'utente `danilocmp@hotmail.it` e il relativo `site_access` owner
+    - `sites/registry.json` locale contiene `ownerEmail`, `webBaseUrl` e `studioUrl` aggiornati per `ai-blog-news`
+  - per rendere effettivo l'handoff su `https://aiblogs.earningsites.net/portal` il comando va eseguito sul VPS con l'env production caricato
 - Smoke reale `site:pull` eseguito con successo su `ai-blog-news`:
   - source-safe copiato:
     - `sites/ai-blog-news/site.blueprint.json`
@@ -686,6 +743,7 @@
   - definizione della policy editoriale: recap/news analysis/roundup invece di news factual in tempo reale
 
 ## Risks
+- `infra/n8n/instructions.md` resta fuori dal pass corrente per scelta esplicita: contiene note manuali locali e non deve bloccare il refactor Postgres.
 - Dopo il checkout mirato, `git status` sul VPS mostra i file sorgente allineati come `M/A` rispetto all'`HEAD` locale del server: è atteso, ma rende il clone production ancora poco leggibile finché non separiamo source e runtime.
 - Se Sanity non è raggiungibile, `discover-topics` usa il preview locale come fallback: ottimo per il loop dev, ma la dedupe contro gli articoli pubblicati remoti va comunque verificata su un run con accesso rete reale.
 - Il path `auto/hybrid` non è ancora verificato con una chiamata OpenAI reale in questo workspace: oggi è coperto solo il fallback senza chiave e la compatibilità sintattica.
@@ -719,6 +777,12 @@
 - Gli ID `N8N_WORKFLOW_ID_*` possono diventare stantii dopo import bootstrap su istanze n8n nuove; senza riallineamento gli orchestratori falliscono con `Workflow does not exist`.
 
 ## Done
+- Avviata la migrazione incrementale del portal/admin layer a Postgres:
+  - aggiunto adapter async `PortalStoreAdapter` con factory `createPortalStore` in `apps/engine/src/services/portal-store-adapter.ts`
+  - aggiunto backend Postgres in `apps/engine/src/services/portal-store-postgres.ts` con bootstrap schema per `users`, `sessions`, `password_reset_tokens`, `site_access`, `site_settings`, `entitlements`, `processed_webhook_events`, `published_article_events`
+  - `AuthService`, `BillingService` e gli handler portal principali in `apps/engine/src/index.ts` ora lavorano contro lo store async per supportare driver non sincroni
+  - aggiunte env `PORTAL_STORE_PROVIDER` e `PORTAL_DATABASE_URL`; SQLite resta il default
+  - `npm --workspace @autoblog/engine run typecheck` passato
 - E2E Factory reale `couple-wellness` completato lato factory:
   - `Launch Site (One Click)` ha chiuso con `ok:true`
   - `ownerProvisioned=true` per `d.ciamprone@gmail.com`
@@ -768,6 +832,7 @@
 - Verificare da browser che `Publishing Controls (Sanity)` nel portal apra correttamente `https://couple-wellness.sanity.studio/`.
 
 ## Risks
+- C'e una modifica inattesa nel worktree su `infra/n8n/instructions.md` che non ho toccato io; mi fermo prima di commit/push finche' non mi dici come vuoi gestirla.
 - Il `plan_generation_scheduler_worker` continua a produrre execution `error` ogni minuto finché non viene verificato dopo il fix dei worker; potrebbe avere un blocco ulteriore indipendente dal prepopulate.
 - Il planner è stato corretto e verificato `success` manualmente, ma resta da confermare il comportamento del webhook `prepopulate_bulk_runner`, che nelle ultime execution storiche registrate risulta ancora con soli run `error`.
 - Senza login CLI o `SANITY_AUTH_TOKEN`, il deploy dello Studio non è automatizzabile e resta dipendente da autenticazione manuale dell'operatore.
@@ -797,10 +862,17 @@
 - Disegnare il payload/shape del nuovo `NICHE_PROMPT` in Factory senza togliere subito il ruolo strutturale dei preset.
 
 ## Risks
+- C'e una modifica inattesa nel worktree su `infra/n8n/instructions.md` che non ho toccato io; mi fermo prima di commit/push finche' non mi dici come vuoi gestirla.
 - Se si sostituisce subito `nichePreset` con una textarea senza un layer che generi categorie/seed topics, il sito viene creato ma con struttura editoriale incompleta o incoerente.
 - Anche dopo la pulizia dei prompt n8n, `scripts/autoblog.mjs` continuerà a contaminare discovery/brief finché non viene reso neutro o guidato dal nuovo `NICHE_PROMPT`.
 
 ## Done
+- Avviata la migrazione incrementale del portal/admin layer a Postgres:
+  - aggiunto adapter async `PortalStoreAdapter` con factory `createPortalStore` in `apps/engine/src/services/portal-store-adapter.ts`
+  - aggiunto backend Postgres in `apps/engine/src/services/portal-store-postgres.ts` con bootstrap schema per `users`, `sessions`, `password_reset_tokens`, `site_access`, `site_settings`, `entitlements`, `processed_webhook_events`, `published_article_events`
+  - `AuthService`, `BillingService` e gli handler portal principali in `apps/engine/src/index.ts` ora lavorano contro lo store async per supportare driver non sincroni
+  - aggiunte env `PORTAL_STORE_PROVIDER` e `PORTAL_DATABASE_URL`; SQLite resta il default
+  - `npm --workspace @autoblog/engine run typecheck` passato
 - Implementato bootstrap multi-nicchia senza dipendenza operativa dai preset:
   - nuovo blueprint template `sites/templates/generic-editorial-magazine/site.blueprint.template.json`
   - mirror in `packages/blueprints/src/index.ts`
@@ -952,6 +1024,15 @@
 - Il prompt immagini deve restare article-driven: titolo ed excerpt decidono il concept, mentre il workflow aggiunge solo guardrail generici e limiti di sicurezza/branding.
 
 ## Next
+- Eseguire il bootstrap reale del database portal locale e aggiornare `.env` locale con `PORTAL_STORE_PROVIDER=postgres` e `PORTAL_DATABASE_URL=...`.
+- Migrare il `portal.db` locale verso il nuovo Postgres e verificare login/handoff/billing in local.
+- Replicare lo stesso pattern su staging e poi su production VPS, aggiornando `/etc/autoblog/engine.env` solo dopo la migrazione dati.
+- Decidere il target del primo cutover reale:
+  - local dev su Postgres
+  - staging su Postgres
+  - production dopo verifica handoff/login/reset password e billing sul nuovo backend
+- Eseguire una migrazione controllata del DB portal corrente con `npm run portal:store:migrate:postgres -- --source-sqlite <path> --target-url <url>` su un database di test.
+- Verificare se il backup runtime deve avere un equivalente Postgres (`pg_dump`) prima del cutover production.
 - Chiudere il teardown di `ai-blog-1`:
   - commit/push della rimozione di `sites/ai-blog-1/`
   - `git pull --ff-only origin main` sul VPS
@@ -986,6 +1067,8 @@
   - rieseguire un batch ridotto immagini su `ai-blog-1` per validare che sparisca il bias `modern workspace scene`
 
 ## Risks
+- Il supporto Postgres e' completo per engine HTTP + handoff CLI, ma non c'e' ancora un backup Postgres equivalente in `ops:backup:runtime`; prima del cutover production conviene aggiungere una procedura `pg_dump`.
+- C'e una modifica inattesa nel worktree su `infra/n8n/instructions.md` che non ho toccato io; mi fermo prima di commit/push finche' non mi dici come vuoi gestirla.
 - È comparsa una modifica inattesa a `.dev/config/sanity/config.json`; prima di chiudere il teardown Git del sito va deciso se lasciarla fuori commit o se conservarla esplicitamente.
 - `site:use` remains intentionally local/dev-oriented: if a site exists only in production runtime, local Studio inspection still requires an explicit sync/copy of the site env.
 

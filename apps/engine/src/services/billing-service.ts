@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import type { PortalStore } from './portal-store';
+import type { PortalStoreAdapter } from './portal-store-adapter';
 import {
   comparePlanRank,
   getCurrentMonthWindow,
@@ -79,7 +79,7 @@ function epochToIso(epochSeconds: unknown): string {
 }
 
 export class BillingService {
-  constructor(private readonly store: PortalStore) {}
+  constructor(private readonly store: PortalStoreAdapter) {}
 
   private getSecretKey() {
     return String(process.env.STRIPE_SECRET_KEY || '').trim();
@@ -313,7 +313,7 @@ export class BillingService {
       return { ok: true, ignored: true, reason: 'Missing event id/type' };
     }
 
-    if (this.store.isWebhookEventProcessed(eventId)) {
+    if (await this.store.isWebhookEventProcessed(eventId)) {
       return { ok: true, duplicate: true, eventId, type };
     }
 
@@ -328,11 +328,11 @@ export class BillingService {
 
       const details = this.resolveSubscriptionCore(source);
       if (!details.siteSlug) {
-        this.store.markWebhookEventProcessed(eventId);
+        await this.store.markWebhookEventProcessed(eventId);
         return { ok: true, ignored: true, eventId, type, reason: 'No siteSlug metadata' };
       }
 
-      const current = this.store.getEntitlementEffective(details.siteSlug);
+      const current = await this.store.getEntitlementEffective(details.siteSlug);
       const window = getCurrentMonthWindow();
       const quota = getQuotaForPlan(details.plan);
       const status = type === 'customer.subscription.deleted' ? 'stopped' : 'active';
@@ -346,7 +346,7 @@ export class BillingService {
       let planApplied = true;
 
       if (isScheduledDowngradeEvent) {
-        entitlementResult = this.store.patchEntitlement(details.siteSlug, {
+        entitlementResult = await this.store.patchEntitlement(details.siteSlug, {
           // Keep current access until cycle end
           plan: current.plan,
           monthlyQuota: current.monthlyQuota,
@@ -364,7 +364,7 @@ export class BillingService {
         });
         planApplied = false;
       } else {
-        entitlementResult = this.store.patchEntitlement(details.siteSlug, {
+        entitlementResult = await this.store.patchEntitlement(details.siteSlug, {
           plan: details.plan,
           monthlyQuota: quota,
           periodStart: window.periodStartIso,
@@ -381,7 +381,7 @@ export class BillingService {
         });
       }
 
-      this.store.markWebhookEventProcessed(eventId);
+      await this.store.markWebhookEventProcessed(eventId);
       return {
         ok: true,
         eventId,
@@ -399,11 +399,11 @@ export class BillingService {
     if (type === 'invoice.payment_failed') {
       const metadataSiteSlug = extractSiteSlugFromMetadata(object.metadata);
       if (metadataSiteSlug) {
-        this.store.patchEntitlement(metadataSiteSlug, {
+        await this.store.patchEntitlement(metadataSiteSlug, {
           billingStatus: 'overdue'
         });
       }
-      this.store.markWebhookEventProcessed(eventId);
+      await this.store.markWebhookEventProcessed(eventId);
       return {
         ok: true,
         eventId,
@@ -413,7 +413,7 @@ export class BillingService {
       };
     }
 
-    this.store.markWebhookEventProcessed(eventId);
+    await this.store.markWebhookEventProcessed(eventId);
     return { ok: true, eventId, type, ignored: true };
   }
 }

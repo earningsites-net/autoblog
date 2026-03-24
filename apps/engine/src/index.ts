@@ -11,7 +11,7 @@ import { DefaultEngineService } from './services/engine-service';
 import { FactoryOpsService } from './services/factory-ops';
 import { InMemoryJobStore } from './services/job-store';
 import { comparePlanRank, getCurrentMonthWindow, getQuotaForPlan } from './config/plans';
-import { PortalStore } from './services/portal-store';
+import { createPortalStore } from './services/portal-store-adapter';
 import { LocalSiteRegistry } from './services/site-registry';
 import { SiteRuntimeService } from './services/site-runtime-service';
 
@@ -29,16 +29,20 @@ const resolvedPortalDbPath = configuredPortalDbPath
     ? configuredPortalDbPath
     : path.join(workspaceRoot, configuredPortalDbPath)
   : path.join(workspaceRoot, 'apps/engine/data/portal.db');
-const portalStore = new PortalStore(resolvedPortalDbPath);
+const portalStore = await createPortalStore({
+  sqlitePath: resolvedPortalDbPath,
+  provider: process.env.PORTAL_STORE_PROVIDER,
+  postgresUrl: process.env.PORTAL_DATABASE_URL || process.env.DATABASE_URL
+});
 const authService = new AuthService(portalStore);
 const billingService = new BillingService(portalStore);
 
-authService.ensureBootstrapAdmin();
+await authService.ensureBootstrapAdmin();
 
 async function bootstrapAdminAccessForKnownSites() {
   const adminEmail = String(process.env.PORTAL_ADMIN_EMAIL || '').trim().toLowerCase();
   if (!adminEmail) return;
-  const admin = portalStore.getUserWithPasswordHashByEmail(adminEmail);
+  const admin = await portalStore.getUserWithPasswordHashByEmail(adminEmail);
   if (!admin) return;
 
   const singleSiteMode = String(process.env.PORTAL_SINGLE_SITE_MODE || 'false').toLowerCase() !== 'false';
@@ -47,7 +51,7 @@ async function bootstrapAdminAccessForKnownSites() {
   );
 
   if (singleSiteMode && configuredSiteSlug) {
-    portalStore.assignSiteAccess(admin.user.id, configuredSiteSlug, 'owner');
+    await portalStore.assignSiteAccess(admin.user.id, configuredSiteSlug, 'owner');
     return;
   }
 
@@ -67,11 +71,11 @@ async function bootstrapAdminAccessForKnownSites() {
       app.log.warn({ siteSlug }, 'Skipping unknown portal bootstrap site slug');
       continue;
     }
-    portalStore.assignSiteAccess(admin.user.id, siteSlug, 'owner');
+    await portalStore.assignSiteAccess(admin.user.id, siteSlug, 'owner');
   }
 }
 
-void bootstrapAdminAccessForKnownSites();
+await bootstrapAdminAccessForKnownSites();
 
 function parseGenerationRequest(body: unknown) {
   return generationJobRequestSchema.parse(body);
@@ -488,20 +492,20 @@ function getOwnerBootstrapPassword() {
   );
 }
 
-function maybeProvisionOwnerAccess(siteSlug: string, ownerEmail: string | undefined) {
+async function maybeProvisionOwnerAccess(siteSlug: string, ownerEmail: string | undefined) {
   const normalizedEmail = String(ownerEmail || '').trim().toLowerCase();
   if (!normalizedEmail) return null;
-  const user = authService.createOrUpdateUser(normalizedEmail, getOwnerBootstrapPassword());
-  portalStore.assignSiteAccess(user.id, siteSlug, 'owner');
+  const user = await authService.createOrUpdateUser(normalizedEmail, getOwnerBootstrapPassword());
+  await portalStore.assignSiteAccess(user.id, siteSlug, 'owner');
   return user;
 }
 
-function maybeProvisionAdminAccess(siteSlug: string) {
+async function maybeProvisionAdminAccess(siteSlug: string) {
   const adminEmail = String(process.env.PORTAL_ADMIN_EMAIL || '').trim().toLowerCase();
   const adminPassword = String(process.env.PORTAL_ADMIN_PASSWORD || '');
   if (!adminEmail || !adminPassword) return null;
-  const user = authService.createOrUpdateUser(adminEmail, adminPassword);
-  portalStore.assignSiteAccess(user.id, siteSlug, 'owner');
+  const user = await authService.createOrUpdateUser(adminEmail, adminPassword);
+  await portalStore.assignSiteAccess(user.id, siteSlug, 'owner');
   return user;
 }
 
@@ -510,8 +514,8 @@ function isPortalAdminEmail(email: string) {
   return Boolean(adminEmail) && String(email || '').trim().toLowerCase() === adminEmail;
 }
 
-function requirePortalAdmin(request: Parameters<AuthService['requireAuth']>[0], reply: Parameters<AuthService['requireAuth']>[1]) {
-  const auth = authService.requireAuth(request, reply);
+async function requirePortalAdmin(request: Parameters<AuthService['requireAuth']>[0], reply: Parameters<AuthService['requireAuth']>[1]) {
+  const auth = await authService.requireAuth(request, reply);
   if (!auth) return null;
   if (!isPortalAdminEmail(auth.user.email)) {
     reply.code(403).send({ ok: false, error: 'Forbidden' });
@@ -1944,7 +1948,7 @@ app.post('/api/portal/auth/login', async (req, reply) => {
     return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
   }
 
-  const auth = authService.login(parsed.data.email, parsed.data.password);
+  const auth = await authService.login(parsed.data.email, parsed.data.password);
   if (!auth) {
     return reply.code(401).send({ ok: false, error: 'Invalid credentials' });
   }
@@ -1964,7 +1968,7 @@ app.post('/api/portal/auth/forgot-password', async (req, reply) => {
   }
 
   const genericMessage = 'If an account exists for this email, reset instructions have been sent.';
-  const resetRequest = authService.requestPasswordReset(parsed.data.email);
+  const resetRequest = await authService.requestPasswordReset(parsed.data.email);
   if (!resetRequest) {
     return {
       ok: true,
@@ -1991,7 +1995,7 @@ app.post('/api/portal/auth/reset-password', async (req, reply) => {
     return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
   }
 
-  const auth = authService.resetPasswordWithToken(parsed.data.token, parsed.data.newPassword);
+  const auth = await authService.resetPasswordWithToken(parsed.data.token, parsed.data.newPassword);
   if (!auth) {
     return reply.code(400).send({ ok: false, error: 'Invalid or expired reset token' });
   }
@@ -2005,13 +2009,13 @@ app.post('/api/portal/auth/reset-password', async (req, reply) => {
 
 app.post('/api/portal/auth/logout', async (req, reply) => {
   const token = authService.getSessionTokenFromRequest(req);
-  authService.logoutByToken(token);
+  await authService.logoutByToken(token);
   authService.clearSessionCookie(reply);
   return { ok: true };
 });
 
 app.get('/api/portal/me', async (req, reply) => {
-  const auth = authService.requireAuth(req, reply);
+  const auth = await authService.requireAuth(req, reply);
   if (!auth) return;
   return {
     ok: true,
@@ -2020,7 +2024,7 @@ app.get('/api/portal/me', async (req, reply) => {
 });
 
 app.get('/api/ops/db/table', async (req, reply) => {
-  const auth = requirePortalAdmin(req, reply);
+  const auth = await requirePortalAdmin(req, reply);
   if (!auth) return;
 
   const query = (req.query || {}) as { table?: string; limit?: string | number };
@@ -2031,7 +2035,7 @@ app.get('/api/ops/db/table', async (req, reply) => {
   const table = tables.includes(tableRaw as (typeof tables)[number])
     ? (tableRaw as (typeof tables)[number])
     : 'users';
-  const snapshot = portalStore.getAdminDbTableSnapshot(table, limit);
+  const snapshot = await portalStore.getAdminDbTableSnapshot(table, limit);
   return {
     ok: true,
     table,
@@ -2042,7 +2046,7 @@ app.get('/api/ops/db/table', async (req, reply) => {
 });
 
 app.get('/ops/db', async (req, reply) => {
-  const auth = requirePortalAdmin(req, reply);
+  const auth = await requirePortalAdmin(req, reply);
   if (!auth) return;
 
   const html = `<!doctype html>
@@ -2229,12 +2233,12 @@ app.get('/ops/db', async (req, reply) => {
 });
 
 app.get('/api/portal/sites', async (req, reply) => {
-  const auth = authService.requireAuth(req, reply);
+  const auth = await authService.requireAuth(req, reply);
   if (!auth) return;
 
   const query = (req.query || {}) as { siteSlug?: string };
   const requestedSiteSlug = sanitizeSiteSlug(String(query.siteSlug || ''));
-  if (requestedSiteSlug && !portalStore.hasSiteAccess(auth.user.id, requestedSiteSlug)) {
+  if (requestedSiteSlug && !(await portalStore.hasSiteAccess(auth.user.id, requestedSiteSlug))) {
     return reply.code(403).send({ ok: false, error: 'Forbidden' });
   }
 
@@ -2243,7 +2247,7 @@ app.get('/api/portal/sites', async (req, reply) => {
     String(process.env.SITE_SLUG || process.env.NEXT_PUBLIC_SITE_SLUG || '')
   );
   const effectiveSiteSlug = requestedSiteSlug || (singleSiteMode ? configuredSiteSlug : '');
-  const sitesRaw = portalStore.listSitesForUser(auth.user.id);
+  const sitesRaw = await portalStore.listSitesForUser(auth.user.id);
   const scopedRaw = effectiveSiteSlug
     ? sitesRaw.filter((site) => site.siteSlug === effectiveSiteSlug)
     : sitesRaw;
@@ -2279,10 +2283,10 @@ app.get('/api/portal/sites', async (req, reply) => {
 app.get('/api/portal/sites/:siteSlug', async (req, reply) => {
   const params = req.params as { siteSlug: string };
   const siteSlug = sanitizeSiteSlug(params.siteSlug);
-  const auth = authService.requireSiteAccess(req, reply, siteSlug);
+  const auth = await authService.requireSiteAccess(req, reply, siteSlug);
   if (!auth) return;
 
-  const site = portalStore.getSiteSummaryForUser(auth.user.id, siteSlug);
+  const site = await portalStore.getSiteSummaryForUser(auth.user.id, siteSlug);
   if (!site) return reply.code(404).send({ ok: false, error: 'Site not found' });
   return { ok: true, site };
 });
@@ -2290,7 +2294,7 @@ app.get('/api/portal/sites/:siteSlug', async (req, reply) => {
 app.patch('/api/portal/sites/:siteSlug/publishing', async (req, reply) => {
   const params = req.params as { siteSlug: string };
   const siteSlug = sanitizeSiteSlug(params.siteSlug);
-  const auth = authService.requireSiteAccess(req, reply, siteSlug);
+  const auth = await authService.requireSiteAccess(req, reply, siteSlug);
   if (!auth) return;
 
   const parsed = patchPublishingSchema.safeParse(req.body || {});
@@ -2298,8 +2302,8 @@ app.patch('/api/portal/sites/:siteSlug/publishing', async (req, reply) => {
     return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
   }
 
-  const settings = portalStore.patchSiteSettings(siteSlug, parsed.data);
-  const entitlement = portalStore.getEntitlementEffective(siteSlug);
+  const settings = await portalStore.patchSiteSettings(siteSlug, parsed.data);
+  const entitlement = await portalStore.getEntitlementEffective(siteSlug);
   const sync = await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
   return {
     ok: true,
@@ -2313,7 +2317,7 @@ app.patch('/api/portal/sites/:siteSlug/publishing', async (req, reply) => {
 app.patch('/api/portal/sites/:siteSlug/ads', async (req, reply) => {
   const params = req.params as { siteSlug: string };
   const siteSlug = sanitizeSiteSlug(params.siteSlug);
-  const auth = authService.requireSiteAccess(req, reply, siteSlug);
+  const auth = await authService.requireSiteAccess(req, reply, siteSlug);
   if (!auth) return;
 
   const parsed = patchAdsSchema.safeParse(req.body || {});
@@ -2321,8 +2325,8 @@ app.patch('/api/portal/sites/:siteSlug/ads', async (req, reply) => {
     return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
   }
 
-  const settings = portalStore.patchSiteSettings(siteSlug, parsed.data);
-  const entitlement = portalStore.getEntitlementEffective(siteSlug);
+  const settings = await portalStore.patchSiteSettings(siteSlug, parsed.data);
+  const entitlement = await portalStore.getEntitlementEffective(siteSlug);
   await siteRuntime.upsertRegistrySite(siteSlug, {
     adConfig: {
       provider: 'adsense',
@@ -2350,17 +2354,17 @@ app.patch('/api/portal/sites/:siteSlug/ads', async (req, reply) => {
 app.post('/api/portal/sites/:siteSlug/billing/portal-session', async (req, reply) => {
   const params = req.params as { siteSlug: string };
   const siteSlug = sanitizeSiteSlug(params.siteSlug);
-  const auth = authService.requireSiteAccess(req, reply, siteSlug);
+  const auth = await authService.requireSiteAccess(req, reply, siteSlug);
   if (!auth) return;
 
-  let entitlement = portalStore.getEntitlementEffective(siteSlug);
+  let entitlement = await portalStore.getEntitlementEffective(siteSlug);
   if (!entitlement.stripeCustomerId) {
     try {
       const created = await billingService.createCustomer({
         email: auth.user.email,
         siteSlug
       });
-      entitlement = portalStore.patchEntitlement(siteSlug, {
+      entitlement = await portalStore.patchEntitlement(siteSlug, {
         stripeCustomerId: created.customerId
       });
     } catch (error) {
@@ -2391,7 +2395,7 @@ app.post('/api/portal/sites/:siteSlug/billing/portal-session', async (req, reply
 app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, reply) => {
   const params = req.params as { siteSlug: string };
   const siteSlug = sanitizeSiteSlug(params.siteSlug);
-  const auth = authService.requireSiteAccess(req, reply, siteSlug);
+  const auth = await authService.requireSiteAccess(req, reply, siteSlug);
   if (!auth) return;
 
   const parsed = createCheckoutSessionSchema.safeParse(req.body || {});
@@ -2399,14 +2403,14 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
     return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
   }
 
-  let entitlement = portalStore.getEntitlementEffective(siteSlug);
+  let entitlement = await portalStore.getEntitlementEffective(siteSlug);
   if (!entitlement.stripeCustomerId) {
     try {
       const created = await billingService.createCustomer({
         email: auth.user.email,
         siteSlug
       });
-      entitlement = portalStore.patchEntitlement(siteSlug, {
+      entitlement = await portalStore.patchEntitlement(siteSlug, {
         stripeCustomerId: created.customerId
       });
     } catch (error) {
@@ -2423,7 +2427,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
       const recovered = await billingService.findUpdatableSubscriptionForCustomer(entitlement.stripeCustomerId);
       if (recovered?.subscriptionId) {
         const window = getCurrentMonthWindow();
-        entitlement = portalStore.patchEntitlement(siteSlug, {
+        entitlement = await portalStore.patchEntitlement(siteSlug, {
           plan: recovered.plan,
           monthlyQuota: getQuotaForPlan(recovered.plan),
           periodStart: window.periodStartIso,
@@ -2500,9 +2504,9 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
         };
       }
 
-      const settings = portalStore.getSiteSettings(siteSlug);
+      const settings = await portalStore.getSiteSettings(siteSlug);
       if (changeMode === 'downgrade') {
-        entitlement = portalStore.patchEntitlement(siteSlug, {
+        entitlement = await portalStore.patchEntitlement(siteSlug, {
           // Keep current plan active until end of billing cycle.
           plan: entitlement.plan,
           monthlyQuota: entitlement.monthlyQuota,
@@ -2533,7 +2537,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
       }
 
       const window = getCurrentMonthWindow();
-      entitlement = portalStore.patchEntitlement(siteSlug, {
+      entitlement = await portalStore.patchEntitlement(siteSlug, {
         plan: updated.plan,
         monthlyQuota: getQuotaForPlan(updated.plan),
         periodStart: window.periodStartIso,
@@ -2569,7 +2573,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
         return reply.code(500).send({ ok: false, error: message });
       }
 
-      entitlement = portalStore.patchEntitlement(siteSlug, {
+      entitlement = await portalStore.patchEntitlement(siteSlug, {
         stripeSubscriptionId: '',
         stripePriceId: '',
         pendingPlan: '',
@@ -2616,8 +2620,8 @@ app.post('/api/billing/webhooks/stripe', async (req, reply) => {
 
     if (result && typeof result === 'object' && 'siteSlug' in result && typeof result.siteSlug === 'string' && result.siteSlug) {
       const siteSlug = result.siteSlug;
-      const settings = portalStore.getSiteSettings(siteSlug);
-      const entitlement = portalStore.getEntitlementEffective(siteSlug);
+      const settings = await portalStore.getSiteSettings(siteSlug);
+      const entitlement = await portalStore.getEntitlementEffective(siteSlug);
       await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
 
       const eventType = 'type' in result ? String(result.type || '') : '';
@@ -2722,8 +2726,8 @@ app.get('/api/internal/sites/:siteSlug/entitlement', async (req, reply) => {
 
   const params = req.params as { siteSlug: string };
   const siteSlug = sanitizeSiteSlug(params.siteSlug);
-  const entitlement = portalStore.getEntitlementEffective(siteSlug);
-  const settings = portalStore.getSiteSettings(siteSlug);
+  const entitlement = await portalStore.getEntitlementEffective(siteSlug);
+  const settings = await portalStore.getSiteSettings(siteSlug);
   const now = new Date().toISOString();
   const periodWindow = getCurrentMonthWindow();
 
@@ -2767,14 +2771,14 @@ app.post('/api/internal/sites/:siteSlug/publish-count', async (req, reply) => {
   const articleId = String(parsed.data.articleId || '').trim();
 
   const countResult = articleId
-    ? portalStore.incrementPublishedCountIdempotent(siteSlug, articleId, incrementBy)
+    ? await portalStore.incrementPublishedCountIdempotent(siteSlug, articleId, incrementBy)
     : {
         counted: true,
         reason: 'counted_without_article_id',
-        entitlement: portalStore.incrementPublishedCount(siteSlug, incrementBy)
+        entitlement: await portalStore.incrementPublishedCount(siteSlug, incrementBy)
       };
   const entitlement = countResult.entitlement;
-  const settings = portalStore.getSiteSettings(siteSlug);
+  const settings = await portalStore.getSiteSettings(siteSlug);
   const sync = await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
 
   return {
@@ -3008,14 +3012,14 @@ app.post('/api/factory/site/create', async (req, reply) => {
   if (!result.ok) return reply.code(400).send(result);
 
   const siteSlug = sanitizeSiteSlug(body.siteSlug);
-  const ownerUser = maybeProvisionOwnerAccess(siteSlug, body.ownerEmail);
-  maybeProvisionAdminAccess(siteSlug);
+  const ownerUser = await maybeProvisionOwnerAccess(siteSlug, body.ownerEmail);
+  await maybeProvisionAdminAccess(siteSlug);
   const studioUrlPatch = typeof body.studioUrl === 'string' ? String(body.studioUrl).trim() : undefined;
-  const settings = portalStore.patchSiteSettings(siteSlug, {
+  const settings = await portalStore.patchSiteSettings(siteSlug, {
     ...(studioUrlPatch !== undefined ? { studioUrl: studioUrlPatch } : {}),
     maxPublishesPerRun: 1
   });
-  const entitlement = portalStore.getEntitlementEffective(siteSlug);
+  const entitlement = await portalStore.getEntitlementEffective(siteSlug);
   await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
 
   return {
@@ -3101,14 +3105,14 @@ app.post('/api/factory/site/launch', async (req, reply) => {
   if (!result.ok) return reply.code(400).send(result);
 
   const siteSlug = sanitizeSiteSlug(body.siteSlug);
-  const ownerUser = maybeProvisionOwnerAccess(siteSlug, body.ownerEmail);
-  maybeProvisionAdminAccess(siteSlug);
+  const ownerUser = await maybeProvisionOwnerAccess(siteSlug, body.ownerEmail);
+  await maybeProvisionAdminAccess(siteSlug);
   const studioUrlPatch = typeof body.studioUrl === 'string' ? String(body.studioUrl).trim() : undefined;
-  const settings = portalStore.patchSiteSettings(siteSlug, {
+  const settings = await portalStore.patchSiteSettings(siteSlug, {
     ...(studioUrlPatch !== undefined ? { studioUrl: studioUrlPatch } : {}),
     maxPublishesPerRun: 1
   });
-  const entitlement = portalStore.getEntitlementEffective(siteSlug);
+  const entitlement = await portalStore.getEntitlementEffective(siteSlug);
   await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
 
   return {
@@ -3239,8 +3243,8 @@ app.post('/v1/factory/sites', async (req, reply) => {
   });
   if (!result.ok) return reply.code(400).send(result);
   const siteSlug = sanitizeSiteSlug(body.siteSlug);
-  const ownerUser = maybeProvisionOwnerAccess(siteSlug, body.ownerEmail);
-  maybeProvisionAdminAccess(siteSlug);
+  const ownerUser = await maybeProvisionOwnerAccess(siteSlug, body.ownerEmail);
+  await maybeProvisionAdminAccess(siteSlug);
   return {
     ...result,
     ownerProvisioned: Boolean(ownerUser),

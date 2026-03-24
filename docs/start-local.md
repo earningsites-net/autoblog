@@ -27,7 +27,7 @@ cp infra/n8n/.env.example infra/n8n/.env
 Compila almeno questi valori:
 
 - In `.env`: `SITE_SLUG`, `SANITY_STUDIO_SITE_SLUG`, `SANITY_PROJECT_ID`, `SANITY_DATASET`, `SANITY_API_VERSION`, `SANITY_READ_TOKEN`, `SANITY_WRITE_TOKEN`, `REVALIDATE_SECRET`, `OPENAI_API_KEY`, `REPLICATE_API_TOKEN`, `INTERNAL_API_TOKEN`, `FACTORY_API_SECRET`, `FACTORY_UI_USERNAME`, `FACTORY_UI_PASSWORD` (opzionale)
-- In `infra/n8n/.env`: `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`, `POSTGRES_PASSWORD`, `WEB_APP_URL`, `WEB_REVALIDATE_SECRET`, `CONTENT_ENGINE_URL`, provider keys AI, `INTERNAL_API_TOKEN` (`SITE_SLUG` opzionale solo fallback legacy)
+- In `infra/n8n/.env`: `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`, `POSTGRES_PORT`, `POSTGRES_PASSWORD`, `WEB_APP_URL`, `WEB_REVALIDATE_SECRET`, `CONTENT_ENGINE_URL`, provider keys AI, `INTERNAL_API_TOKEN` (`SITE_SLUG` opzionale solo fallback legacy)
 - In `infra/n8n/.env` per scheduler piano-based: `PLAN_SCHEDULER_TEST_MODE`, `PLAN_SCHEDULER_TICK_MINUTES`, `PLAN_TEST_INTERVAL_MINUTES_BASE`, `PLAN_TEST_INTERVAL_MINUTES_STANDARD`, `PLAN_TEST_INTERVAL_MINUTES_PRO`, `PLAN_TOPIC_REFILL_INTERVAL_MINUTES`, `PLAN_TOPIC_REFILL_COUNT`, `ARTICLE_BATCH_SIZE`, `IMAGE_BATCH_SIZE`, `QA_BATCH_SIZE`
 
 Note utili:
@@ -36,6 +36,7 @@ Note utili:
 - `WEB_REVALIDATE_SECRET` (n8n) deve combaciare con `REVALIDATE_SECRET` (web).
 - In strict multi-site, evita `SITE_SLUG` fisso in `infra/n8n/.env`: il planner risolve i siti target dall'engine.
 - `SITE_SLUG` / `SANITY_STUDIO_SITE_SLUG` nel root `.env` servono solo a scegliere quale sito vedere localmente su web/studio. Non definiscono la tenancy runtime di engine+n8n.
+- Se vuoi usare Postgres anche per il portal locale, il Postgres del compose `infra/n8n` viene esposto solo in loopback host su `127.0.0.1:${POSTGRES_PORT}`.
 - Per attivare un sito nella pipeline multi-site, usa `sites/registry.json` con `automationStatus=active`.
 - In strict per-site mode, n8n non usa più `SANITY_*` globali: le credenziali sono risolte via engine da `sites/<slug>/.env.generated`.
 - Lo scheduler piano-based usa `siteSlug` e quota dal backend engine; se `brief_ready` è vuoto attiva auto-refill topic via API factory.
@@ -65,6 +66,43 @@ Poi riavvia i servizi. In particolare `Sanity Studio` legge il progetto all'avvi
 ```bash
 npm run dev:down
 npm run dev:up
+```
+
+### Bootstrap portal Postgres locale
+
+Se vuoi spostare il portal locale da SQLite a Postgres:
+
+1. avvia il compose locale (`./scripts/dev-up.sh` oppure `docker compose up -d` in `infra/n8n`)
+2. crea database + utente dedicati per il portal:
+
+```bash
+cd "/Users/danilociamprone/Documents/Auto blog project"
+npm run portal:postgres:bootstrap -- \
+  --admin-url postgres://n8n:replace-me@127.0.0.1:5432/postgres \
+  --database autoblog_portal_local \
+  --user autoblog_portal_local \
+  --write-env .env
+```
+
+3. migra i dati attuali del portal:
+
+```bash
+npm run portal:store:migrate:postgres -- \
+  --source-sqlite apps/engine/data/portal.db \
+  --target-url "$(sed -n 's/^PORTAL_DATABASE_URL=//p' .env)"
+```
+
+4. riavvia `engine`:
+
+```bash
+npm run dev:engine
+```
+
+Dopo il bootstrap, in `.env` devono esserci:
+
+```env
+PORTAL_STORE_PROVIDER=postgres
+PORTAL_DATABASE_URL=postgres://...
 ```
 
 ## 2) Avvio stack (4 terminali)

@@ -25,6 +25,9 @@ This file stores durable project context shared across tasks.
 - Sync source-safe site files into the repo: `npm run site:sync:source -- <site-dir>`
 - Pull a site from the VPS into the local workspace (source-safe + runtime env for Studio): `npm run site:pull -- <site-slug>`
 - Prepare a buyer handoff for a site runtime: `npm run site:handoff -- <site-slug> --owner-email buyer@example.com`
+- Prepare a buyer handoff directly on the production VPS runtime: `npm run site:handoff:prod -- <site-slug> --owner-email buyer@example.com`
+- Bootstrap a dedicated portal Postgres database/user: `npm run portal:postgres:bootstrap -- --admin-url <postgres-admin-url> --database <db> --user <user> --write-env <env-file>`
+- Migrate portal/admin data from SQLite to Postgres: `npm run portal:store:migrate:postgres -- --source-sqlite <path> --target-url <postgres-url>`
 - Backup runtime state outside Git: `npm run ops:backup:runtime -- --out-dir <snapshot-dir> --label <name>`
 - Pilot release checks (`lux-living-01`):
   - init env files: `npm run release:pilot:init-env`
@@ -45,6 +48,10 @@ This file stores durable project context shared across tasks.
 - Frontend supports pluggable content repository via `CONTENT_REPOSITORY_DRIVER`.
 - n8n workflows are template-based and require configured credentials/endpoint ids.
 - Portal cliente (engine) attivo con auth locale + SQLite (`apps/engine/data/portal.db`) e billing Stripe.
+- Portal store ora supporta provider `sqlite|postgres`; env di selezione: `PORTAL_STORE_PROVIDER`, `PORTAL_DATABASE_URL` (fallback `DATABASE_URL`). SQLite resta il default finche' non viene fatto il cutover.
+- Per ambienti `local|staging|prod` il portal puo' usare lo stesso server Postgres di n8n, ma con database + utente dedicati e credenziali separate; il compose n8n espone Postgres solo su `127.0.0.1:${POSTGRES_PORT}`.
+- I comandi ops che toccano il portal runtime (`autoblog handoff-site`, `site:handoff:prod`) devono usare lo stesso provider del servizio (`PORTAL_STORE_PROVIDER`) oppure si rischia di scrivere nel backend sbagliato.
+- La migrazione iniziale SQLite -> Postgres del portal/admin layer e' coperta da `scripts/portal-store-migrate.mjs`; i file runtime (`registry`, `.env.generated`) restano file-based e non entrano nel DB.
 - Quota piani applicata lato backend:
   - `base=3/mese`
   - `standard=20/mese`
@@ -163,10 +170,12 @@ This file stores durable project context shared across tasks.
     - env per-sito live: `/var/lib/autoblog/sites/<slug>/.env.generated`
     - flow-check reports: `/var/lib/autoblog/reports/n8n-flow-checks`
   - con questo assetto il clone production in `/srv/auto-blog-project` torna a essere source-only e puo' usare `git pull --ff-only origin main`
+  - `/etc/autoblog/engine.env` non va trattato come shell-safe in automatico: alcuni valori possono rompere `source`; per i comandi ops che devono agire sul runtime production conviene passare esplicitamente almeno `PORTAL_DB_PATH` e `AUTOBLOG_RUNTIME_ROOT` al processo invocato
   - i siti creati via Factory in production non esistono automaticamente nel workspace locale; per ispezionarli in dev usare uno sync esplicito (`scp` del sito dal VPS) oppure uno Studio deployato dedicato
   - workflow consigliato per i nuovi siti: create via Factory in production -> copia locale del sito -> `npm run site:sync:source -- <dir-sito>` -> commit del solo `site.blueprint.json`/`README.md` -> deploy `apps/web`
   - non usare auto-commit/auto-push dal VPS production verso `main`: `sites/<slug>/.env.generated`, `registry` e handoff sono stato runtime, non source of truth Git
   - il comando locale `npm run site:use -- <site-slug>` deve riallineare sia il root `.env` sia `apps/studio/.env`; dopo lo switch va riavviato `sanity dev` per vedere il progetto Sanity corretto
+  - `npm run site:handoff -- <site-slug> ...` agisce sul runtime corrente: in locale aggiorna `apps/engine/data/portal.db` e `sites/registry.json` (o gli override runtime locali); per l'effetto sul portal production va eseguito sul VPS con l'env production (`/etc/autoblog/engine.env`) caricato.
 - Topic discovery:
   - `scripts/autoblog.mjs discover-topics` usa un modello ibrido: pool grezzo da `seedTopics` + Google Suggest, poi selezione finale `auto|heuristic|hybrid|llm`
   - `TOPIC_DISCOVERY_SELECTOR=auto` usa il pass LLM solo se `OPENAI_API_KEY` è disponibile; altrimenti resta sul fallback euristico

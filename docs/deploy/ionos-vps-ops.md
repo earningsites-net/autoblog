@@ -258,6 +258,55 @@ Valori da allineare in `/etc/autoblog/n8n.env`:
 
 - `N8N_HOST=n8n.earningsites.net`
 - `N8N_PROTOCOL=https`
+- `POSTGRES_PORT=5432` (porta esposta solo su `127.0.0.1`, non pubblica)
+
+## 10b. Portal Postgres dedicato nello stesso server
+
+Per evitare SQLite in production senza introdurre un secondo server DB, usa lo stesso Postgres del compose `n8n`, ma con:
+
+- database dedicato portal
+- utente dedicato portal
+- credenziali dedicate portal
+
+Il compose espone Postgres solo su loopback host:
+
+```yaml
+127.0.0.1:${POSTGRES_PORT}:5432
+```
+
+Quindi `engine` sul VPS puo' collegarsi a `127.0.0.1:5432` senza esporre il DB in pubblico.
+
+Bootstrap consigliato sul VPS:
+
+```bash
+sudo -u autoblog bash -lc '
+  cd /srv/auto-blog-project
+  npm run portal:postgres:bootstrap -- \
+    --admin-url postgres://n8n:<POSTGRES_PASSWORD>@127.0.0.1:5432/postgres \
+    --database autoblog_portal_prod \
+    --user autoblog_portal_prod
+'
+```
+
+Poi migra il portal SQLite attuale:
+
+```bash
+sudo -u autoblog bash -lc '
+  cd /srv/auto-blog-project
+  PORTAL_DATABASE_URL=postgres://autoblog_portal_prod:<PASSWORD>@127.0.0.1:5432/autoblog_portal_prod \
+  npm run portal:store:migrate:postgres -- \
+    --source-sqlite /var/lib/autoblog/portal.db
+'
+```
+
+Infine aggiorna `/etc/autoblog/engine.env`:
+
+```env
+PORTAL_STORE_PROVIDER=postgres
+PORTAL_DATABASE_URL=postgres://autoblog_portal_prod:<PASSWORD>@127.0.0.1:5432/autoblog_portal_prod
+```
+
+e riavvia `autoblog-engine`.
 - `WEBHOOK_URL=https://n8n.earningsites.net/`
 - `N8N_EDITOR_BASE_URL=https://n8n.earningsites.net/`
 - `N8N_API_BASE_URL=https://n8n.earningsites.net`

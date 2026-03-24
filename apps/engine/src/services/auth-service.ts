@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { PortalStore, PortalUser } from './portal-store';
+import type { PortalUser } from './portal-store';
+import type { PortalStoreAdapter } from './portal-store-adapter';
 
 const SESSION_COOKIE_NAME = 'portal_session';
 const PASSWORD_RESET_MIN_TTL_SECONDS = 60;
@@ -91,43 +92,43 @@ export type PasswordResetRequestResult = {
 };
 
 export class AuthService {
-  constructor(private readonly store: PortalStore) {}
+  constructor(private readonly store: PortalStoreAdapter) {}
 
-  ensureBootstrapAdmin() {
+  async ensureBootstrapAdmin() {
     const adminEmail = String(process.env.PORTAL_ADMIN_EMAIL || '').trim().toLowerCase();
     const adminPassword = String(process.env.PORTAL_ADMIN_PASSWORD || '');
 
     if (!adminEmail || !adminPassword) return null;
 
-    const admin = this.store.createOrUpdateUser(adminEmail, hashPassword(adminPassword));
+    const admin = await this.store.createOrUpdateUser(adminEmail, hashPassword(adminPassword));
     return admin;
   }
 
-  createOrUpdateUser(email: string, password: string): PortalUser {
+  async createOrUpdateUser(email: string, password: string): Promise<PortalUser> {
     return this.store.createOrUpdateUser(email, hashPassword(password));
   }
 
-  login(email: string, password: string) {
-    const found = this.store.getUserWithPasswordHashByEmail(email);
+  async login(email: string, password: string) {
+    const found = await this.store.getUserWithPasswordHashByEmail(email);
     if (!found) return null;
     if (!verifyPassword(password, found.passwordHash)) return null;
 
-    const session = this.store.createSession(found.user.id);
+    const session = await this.store.createSession(found.user.id);
     return {
       user: found.user,
       session
     };
   }
 
-  requestPasswordReset(email: string): PasswordResetRequestResult | null {
+  async requestPasswordReset(email: string): Promise<PasswordResetRequestResult | null> {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     if (!normalizedEmail) return null;
-    const found = this.store.getUserWithPasswordHashByEmail(normalizedEmail);
+    const found = await this.store.getUserWithPasswordHashByEmail(normalizedEmail);
     if (!found) return null;
 
     const token = crypto.randomBytes(32).toString('hex');
     const ttlSeconds = parsePasswordResetTtlSeconds();
-    const resetRecord = this.store.createPasswordResetToken(found.user.id, sha256(token), ttlSeconds);
+    const resetRecord = await this.store.createPasswordResetToken(found.user.id, sha256(token), ttlSeconds);
     return {
       user: found.user,
       token,
@@ -135,19 +136,19 @@ export class AuthService {
     };
   }
 
-  resetPasswordWithToken(token: string, nextPassword: string) {
+  async resetPasswordWithToken(token: string, nextPassword: string) {
     const normalizedToken = String(token || '').trim();
     const normalizedPassword = String(nextPassword || '');
     if (!normalizedToken || normalizedPassword.length < 8) return null;
 
-    const user = this.store.consumePasswordResetToken(sha256(normalizedToken), hashPassword(normalizedPassword));
+    const user = await this.store.consumePasswordResetToken(sha256(normalizedToken), hashPassword(normalizedPassword));
     if (!user) return null;
     return { user };
   }
 
-  logoutByToken(token: string | undefined) {
+  async logoutByToken(token: string | undefined) {
     if (!token) return;
-    this.store.revokeSession(token);
+    await this.store.revokeSession(token);
   }
 
   getSessionTokenFromRequest(request: FastifyRequest) {
@@ -163,14 +164,14 @@ export class AuthService {
     reply.header('Set-Cookie', serializeClearSessionCookie());
   }
 
-  requireAuth(request: FastifyRequest, reply: FastifyReply) {
+  async requireAuth(request: FastifyRequest, reply: FastifyReply) {
     const token = this.getSessionTokenFromRequest(request);
     if (!token) {
       reply.code(401).send({ ok: false, error: 'Unauthorized' });
       return null;
     }
 
-    const session = this.store.getSession(token);
+    const session = await this.store.getSession(token);
     if (!session) {
       this.clearSessionCookie(reply);
       reply.code(401).send({ ok: false, error: 'Unauthorized' });
@@ -184,11 +185,11 @@ export class AuthService {
     };
   }
 
-  requireSiteAccess(request: FastifyRequest, reply: FastifyReply, siteSlug: string) {
-    const auth = this.requireAuth(request, reply);
+  async requireSiteAccess(request: FastifyRequest, reply: FastifyReply, siteSlug: string) {
+    const auth = await this.requireAuth(request, reply);
     if (!auth) return null;
 
-    if (!this.store.hasSiteAccess(auth.user.id, siteSlug)) {
+    if (!(await this.store.hasSiteAccess(auth.user.id, siteSlug))) {
       reply.code(403).send({ ok: false, error: 'Forbidden' });
       return null;
     }

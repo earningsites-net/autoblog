@@ -10,6 +10,7 @@ N8N_ENV_FILE="${N8N_DIR}/.env"
 NO_DOCKER=0
 FRESH=0
 N8N_PORT_VALUE="5678"
+POSTGRES_PORT_VALUE="5432"
 
 usage() {
   cat <<'EOF'
@@ -87,6 +88,10 @@ if [[ -f "$N8N_ENV_FILE" ]]; then
   parsed_port="$(grep -E '^N8N_PORT=' "$N8N_ENV_FILE" | tail -n 1 | cut -d '=' -f 2- | tr -d '"' | tr -d "'" | tr -d '[:space:]' || true)"
   if [[ -n "${parsed_port}" ]]; then
     N8N_PORT_VALUE="$parsed_port"
+  fi
+  parsed_postgres_port="$(grep -E '^POSTGRES_PORT=' "$N8N_ENV_FILE" | tail -n 1 | cut -d '=' -f 2- | tr -d '"' | tr -d "'" | tr -d '[:space:]' || true)"
+  if [[ -n "${parsed_postgres_port}" ]]; then
+    POSTGRES_PORT_VALUE="$parsed_postgres_port"
   fi
 fi
 
@@ -219,6 +224,7 @@ URLs:
 - Engine API:   http://localhost:8787
 - Factory UI:   http://localhost:8787/ops/factory
 - n8n:          http://localhost:${N8N_PORT_VALUE}
+- Postgres:     postgres://127.0.0.1:${POSTGRES_PORT_VALUE}
 
 Logs:
 - ${LOG_DIR}/web.log
