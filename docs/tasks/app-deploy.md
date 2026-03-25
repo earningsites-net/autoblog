@@ -4,6 +4,13 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Commit/push e rollout production completati per il refactor Postgres-only:
+  - commit `15882d8` (`Remove SQLite portal fallback`) pushato su `origin/main`
+  - VPS production allineato con `git pull --ff-only origin main`
+  - `autoblog-engine` riavviato con successo
+  - smoke production post-rollout:
+    - `GET /healthz` -> `ok:true`
+    - `GET /v1/sites/ai-blog-news/health` -> `ok:true`
 - Cleanup finale post-migrazione portal completato:
   - rimosso `PORTAL_DB_PATH` e il flag legacy `PORTAL_STORE_PROVIDER` dal `.env` locale
   - aggiornati i riferimenti documentali residui a `portal.db` in `docs/context.md` e `docs/runbook.md`
@@ -724,7 +731,6 @@
   - rimosse solo le righe `site_access` dell'admin, senza cancellare `site_settings` o `entitlements`, per evitare perdita non necessaria di storico/config
 
 ## Next
-- Commit/push del refactor Postgres-only e rollout VPS dello stesso cleanup, così production perde anche gli ultimi riferimenti legacy a SQLite nei file sorgente.
 - Quando servirà uno staging reale, provisionare un database Postgres dedicato con lo stesso pattern `portal-local` / `portal-prod`.
 - Configurare in modo stabile le connessioni GUI `portal-local` e `portal-production` via DBeaver, poi documentare la procedura operativa di cleanup/handoff direttamente da Postgres.
 - Se vogliamo un VPS davvero “clean”, il prossimo step strutturale è spostare fuori dal repo almeno `sites/registry.json`, `sites/<slug>/.env.generated` e i report flow-check, così si potrà tornare a `git pull --ff-only`.
