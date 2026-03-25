@@ -4,6 +4,30 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Implementato il nuovo access model commerciale del portal senza introdurre `platform_admin`:
+  - ruolo cliente effettivo semplificato a `owner` (`viewer/editor` non piu' usati nel codice attivo)
+  - aggiunto `entitlement.billingMode` con valori:
+    - `customer_paid`
+    - `incubating`
+    - `complimentary`
+  - `PostgresPortalStore` e lo store JS dei CLI (`scripts/lib/portal-store.mjs`) ora migrano/leggono `billing_mode`
+  - `site:handoff` e `site:handoff:prod` supportano `--billing-mode ...`
+  - default operativo dell'handoff: `customer_paid`
+  - `handoff-site` marca i siti `customer_paid` come `status=stopped` finche' non esiste una subscription attiva
+  - il portal UI ora mostra una schermata `Site inactive` per i siti `customer_paid` non operativi, con sole CTA di billing/reactivation
+  - le route portal mutabili (`/publishing`, `/ads`) ora bloccano gli owner quando il sito e' inattivo, mentre billing resta accessibile
+  - l'endpoint interno entitlement restituisce `status=stopped` per i siti `customer_paid` non operativi, cosi' anche scheduler e automazioni non continuano a pubblicare
+  - `BillingService` forza `billingMode=customer_paid` quando Stripe conferma/aggiorna una subscription
+  - `siteRuntime.syncSiteSettingsToSanity` e `apps/web/src/lib/site-settings.ts` propagano/leggono anche `entitlement.billingMode`
+  - verifiche eseguite:
+    - `node --check scripts/autoblog.mjs`
+    - `node --check scripts/lib/portal-store.mjs`
+    - `node --check scripts/site-handoff-prod.mjs`
+    - `npm --workspace @autoblog/engine run typecheck`
+    - `npm run typecheck`
+    - smoke locale `npm run site:handoff -- ai-blog-news --owner-email inactive-smoke@example.com --billing-mode customer_paid ...`
+    - verifica Postgres locale: `ai-blog-news -> status=stopped, billing_mode=customer_paid, billing_status=n/a`
+    - cleanup smoke completato e runtime locale ripristinato (`owner=danilocmp@hotmail.it`, `billing_mode=incubating`)
 - Commit/push e rollout production completati per il refactor Postgres-only:
   - commit `15882d8` (`Remove SQLite portal fallback`) pushato su `origin/main`
   - VPS production allineato con `git pull --ff-only origin main`
@@ -1059,6 +1083,20 @@
     - le fonti/link esterni non possono essere ottenuti solo via prompt: `article.body` non supporta annotazioni link e il renderer frontend tratta i mark `link` come `span`, non `<a>`
 
 ## Decisions
+- Per ora non introduciamo `platform_admin`: non risolve un problema operativo reale migliore di Sanity/VPS/DBeaver e aggiungerebbe complessita' prematura.
+- La separazione corretta e':
+  - `owner` = identita' portal del cliente
+  - `billingMode` = trattamento commerciale del sito
+- I casi supportati sono:
+  - pre-vendita -> `incubating`
+  - beta/gratuito -> `complimentary`
+  - cliente pagante -> `customer_paid`
+- Il ramo `site inactive` deve dipendere dal fatto che il sito sia `customer_paid` ma non operativo, non dal ruolo dell'utente.
+- Per i siti non attivi:
+  - l'`owner` deve poter fare login al portal e riattivare il servizio
+  - il sito non entra nel normale flusso operativo contenuti
+  - il portal deve mostrare una pagina/stato `site inactive` in stile billing/reactivation, non una dashboard completa
+
 - CLI/auth config under `.dev/config/sanity/` is local machine state, not project source; it must never be committed.
 - Il refactor runtime/source e' concluso anche su production:
   - il VPS usa runtime root esterno
@@ -1099,6 +1137,12 @@
 - Il prompt immagini deve restare article-driven: titolo ed excerpt decidono il concept, mentre il workflow aggiunge solo guardrail generici e limiti di sicurezza/branding.
 
 ## Next
+- Aggiornare `site:handoff`/runbook di handoff per esplicitare i casi:
+  - `--billing-mode customer_paid` per consegna cliente
+  - `--billing-mode complimentary` per beta/free access
+  - nessun handoff necessario per i siti ancora `incubating`
+- Valutare se esporre nel portal un indicatore esplicito di `billingMode` anche nella card attiva, non solo nello stato inattivo.
+
 - Se serve uno staging reale, provisionare un host/VM o un ambiente dedicato e replicare lo stesso pattern:
   - Postgres loopback accessibile al solo host
   - DB dedicato `autoblog_portal_staging`
@@ -1146,6 +1190,8 @@
   - rieseguire un batch ridotto immagini su `ai-blog-1` per validare che sparisca il bias `modern workspace scene`
 
 ## Risks
+- Il codice attivo e' stato semplificato a `owner` + `billingMode`, ma nei dati legacy il campo `site_access.role` resta `TEXT`: eventuali righe storiche `editor/viewer` verranno trattate come `owner` finche' non facciamo una pulizia/migrazione esplicita del DB.
+- Il pass attuale non aggiunge ancora una UI dedicata per cambiare `billingMode` dal portal: per ora il cambio avviene via CLI/handoff o query DB.
 - Il pass staging resta solo "ready-by-code": senza un host o servizio staging dedicato non esiste ancora un ambiente staging realmente attivo.
 - Il supporto Postgres e' completo per engine HTTP + handoff CLI, ma non c'e' ancora un backup Postgres equivalente in `ops:backup:runtime`; prima del cutover production conviene aggiungere una procedura `pg_dump`.
 - C'e una modifica inattesa nel worktree su `infra/n8n/instructions.md` che non ho toccato io; mi fermo prima di commit/push finche' non mi dici come vuoi gestirla.

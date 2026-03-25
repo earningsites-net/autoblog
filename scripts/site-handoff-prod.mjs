@@ -81,7 +81,7 @@ function buildRemoteCommand({
   runtimeRoot,
   siteSlug,
   ownerEmail,
-  role,
+  billingMode,
   tempPassword,
   revokeOtherOwners,
   webBaseUrl,
@@ -109,8 +109,8 @@ function buildRemoteCommand({
     shellEscape(siteSlug),
     '--owner-email',
     shellEscape(ownerEmail),
-    '--role',
-    shellEscape(role)
+    '--billing-mode',
+    shellEscape(billingMode)
   );
 
   if (tempPassword) {
@@ -130,7 +130,7 @@ function buildRemoteCommand({
 }
 
 function printUsage() {
-  console.log('Usage: node scripts/site-handoff-prod.mjs <site-slug> --owner-email buyer@example.com [--temp-password <password>] [--role owner|editor|viewer] [--web-base-url <url>] [--studio-url <url>] [--revoke-other-owners] [--portal-database-url <url>]');
+  console.log('Usage: node scripts/site-handoff-prod.mjs <site-slug> --owner-email buyer@example.com [--billing-mode customer_paid|incubating|complimentary] [--temp-password <password>] [--web-base-url <url>] [--studio-url <url>] [--revoke-other-owners] [--portal-database-url <url>]');
 }
 
 function main() {
@@ -150,7 +150,7 @@ function main() {
   const identity = expandHome(flags.identity || process.env.AUTOBLOG_SITE_HANDOFF_PROD_IDENTITY || DEFAULT_IDENTITY);
   const repoRoot = String(flags['repo-root'] || process.env.AUTOBLOG_SITE_HANDOFF_PROD_REPO_ROOT || DEFAULT_REPO_ROOT).trim();
   const runtimeRoot = String(flags['runtime-root'] || process.env.AUTOBLOG_SITE_HANDOFF_PROD_RUNTIME_ROOT || DEFAULT_RUNTIME_ROOT).trim();
-  const role = String(flags.role || 'owner').trim().toLowerCase();
+  const billingMode = String(flags['billing-mode'] || 'customer_paid').trim().toLowerCase();
   const tempPassword = typeof flags['temp-password'] === 'string' ? String(flags['temp-password']) : '';
   const webBaseUrl = String(flags['web-base-url'] || '').trim();
   const studioUrl = String(flags['studio-url'] || '').trim();
@@ -168,7 +168,7 @@ function main() {
     runtimeRoot,
     siteSlug,
     ownerEmail,
-    role,
+    billingMode,
     tempPassword,
     revokeOtherOwners,
     webBaseUrl,

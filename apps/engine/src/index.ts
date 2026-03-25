@@ -14,6 +14,7 @@ import { comparePlanRank, getCurrentMonthWindow, getQuotaForPlan } from './confi
 import { createPortalStore } from './services/portal-store-adapter';
 import { LocalSiteRegistry } from './services/site-registry';
 import { SiteRuntimeService } from './services/site-runtime-service';
+import { isPortalSiteInactiveForOwner, isPortalSiteOperational, type PortalSiteEntitlement } from './services/portal-store-types';
 
 const app = Fastify({ logger: true });
 
@@ -140,6 +141,39 @@ function parseSiteSlugList(raw: string) {
 
 function getPortalBaseUrl() {
   return String(process.env.PORTAL_BASE_URL || 'http://localhost:8787').replace(/\/$/, '');
+}
+
+function getOperationalSiteStatus(entitlement: PortalSiteEntitlement): PortalSiteEntitlement['status'] {
+  return isPortalSiteOperational(entitlement) ? 'active' : 'stopped';
+}
+
+async function requireMutablePortalSite(
+  req: Parameters<typeof authService.requireSiteAccess>[0],
+  reply: Parameters<typeof authService.requireSiteAccess>[1],
+  siteSlug: string
+) {
+  const auth = await authService.requireSiteAccess(req, reply, siteSlug);
+  if (!auth) return null;
+
+  const site = await portalStore.getSiteSummaryForUser(auth.user.id, siteSlug);
+  if (!site) {
+    reply.code(404).send({ ok: false, error: 'Site not found' });
+    return null;
+  }
+
+  if (isPortalSiteInactiveForOwner(site.entitlement)) {
+    reply.code(409).send({
+      ok: false,
+      error: 'Site inactive',
+      code: 'SITE_INACTIVE',
+      siteSlug,
+      billingMode: site.entitlement.billingMode,
+      entitlement: site.entitlement
+    });
+    return null;
+  }
+
+  return { auth, site };
 }
 
 type PasswordResetDeliveryMode = 'auto' | 'resend' | 'webhook';
@@ -1514,7 +1548,7 @@ app.get('/portal', async (_req, reply) => {
         (window.location.hostname === 'localhost' ? 'http://localhost:3333' : '')
       ).trim();
       if (publishingStudioLink instanceof HTMLAnchorElement) {
-        if (resolvedStudioUrl) {
+        if (resolvedStudioUrl && !firstSite?.inactiveForOwner) {
           publishingStudioLink.href = resolvedStudioUrl;
           publishingStudioLink.classList.remove('disabled');
         } else {
@@ -1530,6 +1564,8 @@ app.get('/portal', async (_req, reply) => {
         const currentPlanLabel = currentPlan
           ? currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)
           : 'Base';
+        const inactiveForOwner = Boolean(site.inactiveForOwner);
+        const billingMode = String(site.entitlement?.billingMode || 'incubating');
         const pendingPlan = String(site.entitlement?.pendingPlan || '').trim();
         const pendingPlanLabel = pendingPlan
           ? pendingPlan.charAt(0).toUpperCase() + pendingPlan.slice(1)
@@ -1548,6 +1584,33 @@ app.get('/portal', async (_req, reply) => {
         const currentAdsMode = site.settings?.adsMode === 'manual' ? 'manual' : 'auto';
         const wrapper = document.createElement('div');
         wrapper.className = 'panel';
+        if (inactiveForOwner) {
+          const inactiveReason =
+            site.entitlement?.billingStatus === 'overdue'
+              ? 'Payment is overdue. Reactivate the subscription to resume publishing and site management.'
+              : 'This site is currently inactive. Choose a plan or open the billing portal to reactivate it.';
+          wrapper.innerHTML = \`
+            <div class="title">
+              <div>
+                <h3>\${escapeHtml(site.brandName || slug)}</h3>
+                <p class="subtitle">Site slug: <code>\${escapeHtml(slug)}</code></p>
+              </div>
+              <span class="chip">Site inactive</span>
+            </div>
+            <div class="billing-note warn">
+              <strong>Access limited.</strong> \${escapeHtml(inactiveReason)}
+            </div>
+            <div class="hint">Billing mode: <strong>\${escapeHtml(billingMode)}</strong> • Current plan: <strong>\${escapeHtml(currentPlanLabel)}</strong></div>
+            <div class="actions">
+              <button class="plan-btn" data-action="start-plan" data-plan="base" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}">Activate Base</button>
+              <button class="plan-btn" data-action="start-plan" data-plan="standard" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}">Activate Standard</button>
+              <button class="plan-btn" data-action="start-plan" data-plan="pro" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}">Activate Pro</button>
+              <button class="ghost" data-action="open-billing" data-slug="\${escapeHtml(slug)}">Open Billing Portal</button>
+            </div>
+          \`;
+          sitesEl.appendChild(wrapper);
+          continue;
+        }
         wrapper.innerHTML = \`
           <div class="title">
             <div>
@@ -2036,7 +2099,9 @@ app.get('/api/portal/sites', async (req, reply) => {
       return {
         ...site,
         brandName: blueprint?.brandName || site.siteSlug,
-        studioUrlResolved
+        studioUrlResolved,
+        inactiveForOwner: isPortalSiteInactiveForOwner(site.entitlement),
+        operationalStatus: getOperationalSiteStatus(site.entitlement)
       };
     })
   );
@@ -2056,14 +2121,20 @@ app.get('/api/portal/sites/:siteSlug', async (req, reply) => {
 
   const site = await portalStore.getSiteSummaryForUser(auth.user.id, siteSlug);
   if (!site) return reply.code(404).send({ ok: false, error: 'Site not found' });
-  return { ok: true, site };
+  return {
+    ok: true,
+    site: {
+      ...site,
+      inactiveForOwner: isPortalSiteInactiveForOwner(site.entitlement),
+      operationalStatus: getOperationalSiteStatus(site.entitlement)
+    }
+  };
 });
 
 app.patch('/api/portal/sites/:siteSlug/publishing', async (req, reply) => {
   const params = req.params as { siteSlug: string };
   const siteSlug = sanitizeSiteSlug(params.siteSlug);
-  const auth = await authService.requireSiteAccess(req, reply, siteSlug);
-  if (!auth) return;
+  if (!(await requireMutablePortalSite(req, reply, siteSlug))) return;
 
   const parsed = patchPublishingSchema.safeParse(req.body || {});
   if (!parsed.success) {
@@ -2085,8 +2156,7 @@ app.patch('/api/portal/sites/:siteSlug/publishing', async (req, reply) => {
 app.patch('/api/portal/sites/:siteSlug/ads', async (req, reply) => {
   const params = req.params as { siteSlug: string };
   const siteSlug = sanitizeSiteSlug(params.siteSlug);
-  const auth = await authService.requireSiteAccess(req, reply, siteSlug);
-  if (!auth) return;
+  if (!(await requireMutablePortalSite(req, reply, siteSlug))) return;
 
   const parsed = patchAdsSchema.safeParse(req.body || {});
   if (!parsed.success) {
@@ -2208,6 +2278,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
           stripeCustomerId: recovered.customerId || entitlement.stripeCustomerId,
           stripeSubscriptionId: recovered.subscriptionId,
           stripePriceId: recovered.priceId || '',
+          billingMode: 'customer_paid',
           billingStatus: recovered.billingStatus
         });
       }
@@ -2288,6 +2359,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
           stripeCustomerId: updated.customerId || entitlement.stripeCustomerId,
           stripeSubscriptionId: updated.subscriptionId || entitlement.stripeSubscriptionId,
           stripePriceId: entitlement.stripePriceId,
+          billingMode: 'customer_paid',
           billingStatus: updated.billingStatus
         });
 
@@ -2318,6 +2390,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
         stripeCustomerId: updated.customerId || entitlement.stripeCustomerId,
         stripeSubscriptionId: updated.subscriptionId || entitlement.stripeSubscriptionId,
         stripePriceId: updated.priceId || entitlement.stripePriceId,
+        billingMode: 'customer_paid',
         billingStatus: updated.billingStatus
       });
 
@@ -2348,8 +2421,9 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
         pendingMonthlyQuota: 0,
         pendingEffectiveAt: '',
         pendingStripePriceId: '',
-        status: 'active',
-        billingStatus: 'trial'
+        status: 'stopped',
+        billingMode: 'customer_paid',
+        billingStatus: 'n/a'
       });
     }
   }
@@ -2496,6 +2570,7 @@ app.get('/api/internal/sites/:siteSlug/entitlement', async (req, reply) => {
   const siteSlug = sanitizeSiteSlug(params.siteSlug);
   const entitlement = await portalStore.getEntitlementEffective(siteSlug);
   const settings = await portalStore.getSiteSettings(siteSlug);
+  const operationalStatus = getOperationalSiteStatus(entitlement);
   const now = new Date().toISOString();
   const periodWindow = getCurrentMonthWindow();
 
@@ -2511,9 +2586,10 @@ app.get('/api/internal/sites/:siteSlug/entitlement', async (req, reply) => {
       periodEnd: entitlement.periodEnd || periodWindow.periodEndIso
     },
     plan: entitlement.plan,
+    billingMode: entitlement.billingMode,
     pendingPlan: entitlement.pendingPlan,
     pendingEffectiveAt: entitlement.pendingEffectiveAt,
-    status: entitlement.status,
+    status: operationalStatus,
     publishingEnabled: settings.publishingEnabled
   };
 });

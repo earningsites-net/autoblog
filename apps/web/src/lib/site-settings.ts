@@ -29,6 +29,7 @@ export type PublicSiteSettings = {
     periodStart: string;
     periodEnd: string;
     status: 'active' | 'paused' | 'stopped';
+    billingMode: 'customer_paid' | 'incubating' | 'complimentary';
     billingStatus: 'n/a' | 'trial' | 'active' | 'overdue' | 'canceled';
   };
 };
@@ -71,7 +72,8 @@ function defaultSettings(): PublicSiteSettings {
       periodStart: month.periodStartIso,
       periodEnd: month.periodEndIso,
       status: 'active',
-      billingStatus: 'trial'
+      billingMode: 'incubating',
+      billingStatus: 'n/a'
     }
   };
 }
@@ -144,6 +146,12 @@ async function fetchSiteSettingsUncached(): Promise<PublicSiteSettings> {
           data.entitlement?.status === 'paused' || data.entitlement?.status === 'stopped' || data.entitlement?.status === 'active'
             ? data.entitlement.status
             : fallback.entitlement.status,
+        billingMode:
+          data.entitlement?.billingMode === 'customer_paid' ||
+          data.entitlement?.billingMode === 'incubating' ||
+          data.entitlement?.billingMode === 'complimentary'
+            ? data.entitlement.billingMode
+            : fallback.entitlement.billingMode,
         billingStatus:
           data.entitlement?.billingStatus === 'n/a' ||
           data.entitlement?.billingStatus === 'trial' ||

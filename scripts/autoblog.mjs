@@ -39,7 +39,7 @@ Usage:
   autoblog release-site <site-slug> [--from-sanity]
   autoblog deploy <site-slug>
   autoblog doctor <site-slug>
-  autoblog handoff-site <site-slug> --owner-email <email> [--role owner|editor|viewer] [--temp-password <password>] [--revoke-other-owners] [--portal-database-url <url>]
+  autoblog handoff-site <site-slug> --owner-email <email> [--billing-mode customer_paid|incubating|complimentary] [--temp-password <password>] [--revoke-other-owners] [--portal-database-url <url>]
   autoblog handoff-pack <site-slug>
   autoblog list-blueprints
 `);
@@ -1515,6 +1515,14 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function normalizeBillingMode(value, fallback = 'customer_paid') {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'customer_paid' || raw === 'incubating' || raw === 'complimentary') {
+    return raw;
+  }
+  return fallback;
+}
+
 function generateTempPassword(length = 22) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%&*-_=+';
   const bytes = crypto.randomBytes(length);
@@ -2573,9 +2581,7 @@ async function commandHandoffSite(siteSlug, flags) {
     throw new Error('Missing required flag --owner-email');
   }
 
-  const role = ['owner', 'editor', 'viewer'].includes(String(flags.role || 'owner'))
-    ? String(flags.role || 'owner')
-    : 'owner';
+  const role = 'owner';
   const blueprint = ensureBusinessDefaults(loadSiteBlueprint(normalizedSlug));
   const siteEnv = parseEnvFile(resolveSiteEnvPath(normalizedSlug));
   const tempPassword = String(flags['temp-password'] || generateTempPassword());
@@ -2592,6 +2598,10 @@ async function commandHandoffSite(siteSlug, flags) {
     flags.mode || (String(blueprint.businessMode || 'transfer_first') === 'managed' ? 'managed' : 'transfer')
   ).trim();
   const ownerType = String(flags['owner-type'] || (mode === 'managed' ? 'internal' : 'client')).trim();
+  const billingMode = normalizeBillingMode(
+    flags['billing-mode'],
+    'customer_paid'
+  );
   const portalStore = await createPortalStore({
     postgresUrl: flags['portal-database-url'] || process.env.PORTAL_DATABASE_URL || process.env.DATABASE_URL || ''
   });
@@ -2605,6 +2615,13 @@ async function commandHandoffSite(siteSlug, flags) {
     beforeAccess = await portalStore.listSiteAccess(normalizedSlug);
     user = await portalStore.createOrUpdateUser(ownerEmail, tempPassword);
     await portalStore.assignSiteAccess(user.id, normalizedSlug, role);
+    await portalStore.patchEntitlement(normalizedSlug, {
+      billingMode,
+      status: billingMode === 'customer_paid' ? 'stopped' : 'active',
+      billingStatus: billingMode === 'customer_paid' ? 'n/a' : 'n/a',
+      stripeSubscriptionId: billingMode === 'customer_paid' ? '' : undefined,
+      stripePriceId: billingMode === 'customer_paid' ? '' : undefined
+    });
     if (revokeOthers && role === 'owner') {
       revokedOwners = await portalStore.revokeOtherOwners(normalizedSlug, keepEmails);
     }
@@ -2647,6 +2664,7 @@ async function commandHandoffSite(siteSlug, flags) {
     siteSlug: normalizedSlug,
     ownerEmail,
     role,
+    billingMode,
     runtimeEnvPath: resolveSiteEnvPath(normalizedSlug),
     registryPath: SITE_REGISTRY_PATH,
     webBaseUrl: nextSite.webBaseUrl,
@@ -2685,6 +2703,7 @@ async function commandHandoffSite(siteSlug, flags) {
           provider: portalStore.provider,
           email: ownerEmail,
           role,
+          billingMode,
           createdUser: Boolean(user?.created),
           tempPassword,
           tempPasswordGenerated,

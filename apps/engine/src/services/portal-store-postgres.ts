@@ -9,6 +9,7 @@ import type {
   PortalSiteSummary,
   PortalUser
 } from './portal-store-types';
+import { normalizePortalSiteBillingMode } from './portal-store-types';
 import type { PortalStoreAdapter } from './portal-store-adapter';
 
 function isoNow() {
@@ -72,6 +73,7 @@ type EntitlementRow = {
   stripe_customer_id: string;
   stripe_subscription_id: string;
   stripe_price_id: string;
+  billing_mode: string;
   billing_status: string;
   updated_at: string;
 };
@@ -116,6 +118,7 @@ function asEntitlement(row: EntitlementRow): PortalSiteEntitlement {
     stripeCustomerId: row.stripe_customer_id || '',
     stripeSubscriptionId: row.stripe_subscription_id || '',
     stripePriceId: row.stripe_price_id || '',
+    billingMode: normalizePortalSiteBillingMode(row.billing_mode),
     billingStatus:
       row.billing_status === 'active' ||
       row.billing_status === 'overdue' ||
@@ -200,6 +203,7 @@ export class PostgresPortalStore implements PortalStoreAdapter {
         stripe_customer_id TEXT NOT NULL DEFAULT '',
         stripe_subscription_id TEXT NOT NULL DEFAULT '',
         stripe_price_id TEXT NOT NULL DEFAULT '',
+        billing_mode TEXT NOT NULL DEFAULT 'incubating',
         billing_status TEXT NOT NULL DEFAULT 'trial',
         updated_at TEXT NOT NULL
       )`,
@@ -219,7 +223,8 @@ export class PostgresPortalStore implements PortalStoreAdapter {
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_plan TEXT NOT NULL DEFAULT ''`,
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_monthly_quota INTEGER NOT NULL DEFAULT 0`,
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_effective_at TEXT NOT NULL DEFAULT ''`,
-      `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_stripe_price_id TEXT NOT NULL DEFAULT ''`
+      `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_stripe_price_id TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS billing_mode TEXT NOT NULL DEFAULT 'incubating'`
     ];
 
     for (const statement of statements) {
@@ -414,11 +419,12 @@ export class PostgresPortalStore implements PortalStoreAdapter {
     const normalizedSlug = normalizeSiteSlug(siteSlug);
     if (!normalizedSlug) return;
     await this.ensureSiteRecords(normalizedSlug);
+    const normalizedRole: PortalSiteAccess['role'] = role === 'owner' ? 'owner' : 'owner';
     await this.sql.unsafe(
       `INSERT INTO site_access (user_id, site_slug, role, created_at)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id, site_slug) DO UPDATE SET role = EXCLUDED.role`,
-      [userId, normalizedSlug, role, isoNow()]
+      [userId, normalizedSlug, normalizedRole, isoNow()]
     );
   }
 
@@ -451,8 +457,8 @@ export class PostgresPortalStore implements PortalStoreAdapter {
       await tx.unsafe(
         `INSERT INTO entitlements (
           site_slug, plan, monthly_quota, published_this_month, period_start, period_end,
-          status, stripe_customer_id, stripe_subscription_id, stripe_price_id, billing_status, updated_at
-        ) VALUES ($1, 'base', $2, 0, $3, $4, 'active', '', '', '', 'trial', $5)
+          status, stripe_customer_id, stripe_subscription_id, stripe_price_id, billing_mode, billing_status, updated_at
+        ) VALUES ($1, 'base', $2, 0, $3, $4, 'active', '', '', '', 'incubating', 'n/a', $5)
         ON CONFLICT(site_slug) DO NOTHING`,
         [normalizedSlug, getQuotaForPlan('base'), window.periodStartIso, window.periodEndIso, now]
       );
@@ -556,7 +562,7 @@ export class PostgresPortalStore implements PortalStoreAdapter {
     const rows = await this.sql.unsafe<EntitlementRow[]>(
       `SELECT site_slug, plan, monthly_quota, published_this_month, period_start, period_end,
               pending_plan, pending_monthly_quota, pending_effective_at, pending_stripe_price_id,
-              status, stripe_customer_id, stripe_subscription_id, stripe_price_id, billing_status, updated_at
+              status, stripe_customer_id, stripe_subscription_id, stripe_price_id, billing_mode, billing_status, updated_at
        FROM entitlements
        WHERE site_slug = $1
        LIMIT 1`,
@@ -581,7 +587,8 @@ export class PostgresPortalStore implements PortalStoreAdapter {
         stripeCustomerId: '',
         stripeSubscriptionId: '',
         stripePriceId: '',
-        billingStatus: 'trial',
+        billingMode: 'incubating',
+        billingStatus: 'n/a',
         updatedAt: now
       };
     }
@@ -660,6 +667,7 @@ export class PostgresPortalStore implements PortalStoreAdapter {
       stripeCustomerId: String(patch.stripeCustomerId ?? current.stripeCustomerId ?? ''),
       stripeSubscriptionId: String(patch.stripeSubscriptionId ?? current.stripeSubscriptionId ?? ''),
       stripePriceId: String(patch.stripePriceId ?? current.stripePriceId ?? ''),
+      billingMode: normalizePortalSiteBillingMode(patch.billingMode ?? current.billingMode),
       billingStatus: (
         patch.billingStatus === 'trial' ||
         patch.billingStatus === 'active' ||
@@ -687,9 +695,10 @@ export class PostgresPortalStore implements PortalStoreAdapter {
            stripe_customer_id = $11,
            stripe_subscription_id = $12,
            stripe_price_id = $13,
-           billing_status = $14,
-           updated_at = $15
-       WHERE site_slug = $16`,
+           billing_mode = $14,
+           billing_status = $15,
+           updated_at = $16
+       WHERE site_slug = $17`,
       [
         next.plan,
         Math.max(0, Number(next.monthlyQuota || 0)),
@@ -704,6 +713,7 @@ export class PostgresPortalStore implements PortalStoreAdapter {
         next.stripeCustomerId,
         next.stripeSubscriptionId,
         next.stripePriceId,
+        next.billingMode,
         next.billingStatus,
         updatedAt,
         normalizedSlug
@@ -790,7 +800,7 @@ export class PostgresPortalStore implements PortalStoreAdapter {
     );
     return {
       siteSlug: normalizedSlug,
-      role: rows[0]?.role || 'viewer',
+      role: rows[0]?.role === 'owner' ? 'owner' : 'owner',
       settings: await this.getSiteSettings(normalizedSlug),
       entitlement: await this.getEntitlementEffective(normalizedSlug)
     };

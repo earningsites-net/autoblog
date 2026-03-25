@@ -17,6 +17,12 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function normalizeBillingMode(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'customer_paid' || raw === 'incubating' || raw === 'complimentary') return raw;
+  return 'incubating';
+}
+
 function getCurrentMonthWindow() {
   const now = new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -92,6 +98,7 @@ export async function ensurePostgresPortalSchema(sql) {
       stripe_customer_id TEXT NOT NULL DEFAULT '',
       stripe_subscription_id TEXT NOT NULL DEFAULT '',
       stripe_price_id TEXT NOT NULL DEFAULT '',
+      billing_mode TEXT NOT NULL DEFAULT 'incubating',
       billing_status TEXT NOT NULL DEFAULT 'trial',
       updated_at TEXT NOT NULL
     )`,
@@ -111,7 +118,8 @@ export async function ensurePostgresPortalSchema(sql) {
     `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_plan TEXT NOT NULL DEFAULT ''`,
     `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_monthly_quota INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_effective_at TEXT NOT NULL DEFAULT ''`,
-    `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_stripe_price_id TEXT NOT NULL DEFAULT ''`
+    `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_stripe_price_id TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS billing_mode TEXT NOT NULL DEFAULT 'incubating'`
   ];
 
   for (const statement of statements) {
@@ -147,8 +155,8 @@ async function createPostgresPortalStore(postgresUrl) {
       await tx.unsafe(
         `INSERT INTO entitlements (
           site_slug, plan, monthly_quota, published_this_month, period_start, period_end,
-          status, stripe_customer_id, stripe_subscription_id, stripe_price_id, billing_status, updated_at
-        ) VALUES ($1, 'base', 3, 0, $2, $3, 'active', '', '', '', 'trial', $4)
+          status, stripe_customer_id, stripe_subscription_id, stripe_price_id, billing_mode, billing_status, updated_at
+        ) VALUES ($1, 'base', 3, 0, $2, $3, 'active', '', '', '', 'incubating', 'n/a', $4)
         ON CONFLICT(site_slug) DO NOTHING`,
         [normalizedSlug, window.periodStartIso, window.periodEndIso, now]
       );
@@ -193,6 +201,73 @@ async function createPostgresPortalStore(postgresUrl) {
          ON CONFLICT (user_id, site_slug) DO UPDATE SET role = EXCLUDED.role`,
         [userId, normalizedSlug, role, nowIso()]
       );
+    },
+    async patchEntitlement(siteSlug, patch = {}) {
+      const normalizedSlug = normalizeSiteSlug(siteSlug);
+      if (!normalizedSlug) return null;
+      await ensureSiteRecords(normalizedSlug);
+      const rows = await sql.unsafe(
+        `SELECT site_slug AS "siteSlug", plan, monthly_quota AS "monthlyQuota", published_this_month AS "publishedThisMonth",
+                period_start AS "periodStart", period_end AS "periodEnd", pending_plan AS "pendingPlan",
+                pending_monthly_quota AS "pendingMonthlyQuota", pending_effective_at AS "pendingEffectiveAt",
+                pending_stripe_price_id AS "pendingStripePriceId", status, stripe_customer_id AS "stripeCustomerId",
+                stripe_subscription_id AS "stripeSubscriptionId", stripe_price_id AS "stripePriceId",
+                billing_mode AS "billingMode", billing_status AS "billingStatus"
+         FROM entitlements
+         WHERE site_slug = $1
+         LIMIT 1`,
+        [normalizedSlug]
+      );
+      const current = rows[0];
+      if (!current) return null;
+      const next = {
+        ...current,
+        ...patch,
+        billingMode: normalizeBillingMode(patch.billingMode ?? current.billingMode),
+        billingStatus: String(patch.billingStatus ?? current.billingStatus ?? 'n/a'),
+        status: String(patch.status ?? current.status ?? 'active'),
+        updatedAt: nowIso()
+      };
+      await sql.unsafe(
+        `UPDATE entitlements
+         SET plan = $1,
+             monthly_quota = $2,
+             published_this_month = $3,
+             period_start = $4,
+             period_end = $5,
+             pending_plan = $6,
+             pending_monthly_quota = $7,
+             pending_effective_at = $8,
+             pending_stripe_price_id = $9,
+             status = $10,
+             stripe_customer_id = $11,
+             stripe_subscription_id = $12,
+             stripe_price_id = $13,
+             billing_mode = $14,
+             billing_status = $15,
+             updated_at = $16
+         WHERE site_slug = $17`,
+        [
+          next.plan,
+          Number(next.monthlyQuota || 0),
+          Number(next.publishedThisMonth || 0),
+          next.periodStart,
+          next.periodEnd,
+          next.pendingPlan || '',
+          Number(next.pendingMonthlyQuota || 0),
+          next.pendingEffectiveAt || '',
+          next.pendingStripePriceId || '',
+          next.status,
+          next.stripeCustomerId || '',
+          next.stripeSubscriptionId || '',
+          next.stripePriceId || '',
+          next.billingMode,
+          next.billingStatus,
+          next.updatedAt,
+          normalizedSlug
+        ]
+      );
+      return next;
     },
     async listSiteAccess(siteSlug) {
       const normalizedSlug = normalizeSiteSlug(siteSlug);

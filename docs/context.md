@@ -47,6 +47,14 @@ This file stores durable project context shared across tasks.
 - Frontend supports pluggable content repository via `CONTENT_REPOSITORY_DRIVER`.
 - n8n workflows are template-based and require configured credentials/endpoint ids.
 - Portal/admin store is Postgres-only; configure it with `PORTAL_DATABASE_URL` (fallback `DATABASE_URL`).
+- Portal access model attuale:
+  - ruolo applicativo unico lato cliente: `owner`
+  - niente `viewer/editor` attivi
+  - la distinzione commerciale del sito e' site-level tramite `entitlement.billingMode`:
+    - `customer_paid`
+    - `incubating`
+    - `complimentary`
+  - `customer_paid` senza entitlement operativo deve entrare nel portal ma vedere uno stato `site inactive` con sole azioni di billing/reactivation
 - Il vecchio viewer interno `/ops/db` e il relativo endpoint `/api/ops/db/table` sono stati rimossi: l'ispezione del portal DB va fatta via Postgres esterno (es. DBeaver/SSH tunnel) o query SQL, non tramite route admin nell'engine.
 - Stato attuale Postgres portal:
   - local dev usa il Postgres del compose `infra/n8n` con database dedicato (`autoblog_portal_local`) bootstrapato via `npm run portal:postgres:bootstrap`

@@ -284,6 +284,7 @@ export class SiteRuntimeService {
               'entitlement.periodStart': entitlement.periodStart,
               'entitlement.periodEnd': entitlement.periodEnd,
               'entitlement.status': entitlement.status,
+              'entitlement.billingMode': entitlement.billingMode,
               'entitlement.billingStatus': entitlement.billingStatus
             }
           }

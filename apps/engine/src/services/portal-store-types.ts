@@ -14,8 +14,10 @@ export type PortalSession = {
 
 export type PortalSiteAccess = {
   siteSlug: string;
-  role: 'owner' | 'editor' | 'viewer';
+  role: 'owner';
 };
+
+export type PortalSiteBillingMode = 'customer_paid' | 'incubating' | 'complimentary';
 
 export type PortalSiteSettings = {
   siteSlug: string;
@@ -48,13 +50,33 @@ export type PortalSiteEntitlement = {
   stripeCustomerId: string;
   stripeSubscriptionId: string;
   stripePriceId: string;
+  billingMode: PortalSiteBillingMode;
   billingStatus: 'n/a' | 'trial' | 'active' | 'overdue' | 'canceled';
   updatedAt: string;
 };
 
 export type PortalSiteSummary = {
   siteSlug: string;
-  role: 'owner' | 'editor' | 'viewer';
+  role: 'owner';
   settings: PortalSiteSettings;
   entitlement: PortalSiteEntitlement;
 };
+
+export function normalizePortalSiteBillingMode(value: unknown): PortalSiteBillingMode {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'customer_paid' || raw === 'incubating' || raw === 'complimentary') {
+    return raw;
+  }
+  return 'incubating';
+}
+
+export function isPortalSiteOperational(entitlement: PortalSiteEntitlement): boolean {
+  if (entitlement.status !== 'active') return false;
+  if (entitlement.billingMode !== 'customer_paid') return true;
+  const billingHealthy = entitlement.billingStatus === 'active' || entitlement.billingStatus === 'trial';
+  return billingHealthy && Boolean(String(entitlement.stripeSubscriptionId || '').trim());
+}
+
+export function isPortalSiteInactiveForOwner(entitlement: PortalSiteEntitlement): boolean {
+  return entitlement.billingMode === 'customer_paid' && !isPortalSiteOperational(entitlement);
+}

@@ -360,6 +360,7 @@ export class BillingService {
           stripeCustomerId: details.customerId,
           stripeSubscriptionId: details.subscriptionId,
           stripePriceId: current.stripePriceId,
+          billingMode: 'customer_paid',
           billingStatus: details.billingStatus
         });
         planApplied = false;
@@ -377,6 +378,7 @@ export class BillingService {
           stripeCustomerId: details.customerId,
           stripeSubscriptionId: details.subscriptionId,
           stripePriceId: details.priceId,
+          billingMode: 'customer_paid',
           billingStatus: details.billingStatus
         });
       }
