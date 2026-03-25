@@ -241,7 +241,6 @@ Valori da allineare in `/etc/autoblog/engine.env`:
 
 - `PORTAL_BASE_URL=https://aiblogs.earningsites.net`
 - `ENGINE_HOST=127.0.0.1`
-- `PORTAL_DB_PATH=/var/lib/autoblog/portal.db`
 - `PLAN_AUTOMATION_TRIGGER_URL=https://n8n.earningsites.net/webhook/plan-automation`
 - `PREPOPULATE_TRIGGER_URL=https://n8n.earningsites.net/webhook/factory-prepopulate`
 - `PORTAL_BOOTSTRAP_SITE_SLUGS=` (vuoto di default in multi-site production)
@@ -288,21 +287,9 @@ sudo -u autoblog bash -lc '
 '
 ```
 
-Poi migra il portal SQLite attuale:
-
-```bash
-sudo -u autoblog bash -lc '
-  cd /srv/auto-blog-project
-  PORTAL_DATABASE_URL=postgres://autoblog_portal_prod:<PASSWORD>@127.0.0.1:5432/autoblog_portal_prod \
-  npm run portal:store:migrate:postgres -- \
-    --source-sqlite /var/lib/autoblog/portal.db
-'
-```
-
-Infine aggiorna `/etc/autoblog/engine.env`:
+Aggiorna `/etc/autoblog/engine.env`:
 
 ```env
-PORTAL_STORE_PROVIDER=postgres
 PORTAL_DATABASE_URL=postgres://autoblog_portal_prod:<PASSWORD>@127.0.0.1:5432/autoblog_portal_prod
 ```
 
@@ -324,7 +311,7 @@ Nota su Sanity:
 
 ## 10b. Backup runtime fuori da Git
 
-Il runtime operativo (`portal.db`, `registry`, `.env.generated` per-sito) non va pushato su Git. Va salvato con backup espliciti.
+Il runtime operativo (`registry`, `.env.generated` per-sito) non va pushato su Git. Va salvato con backup espliciti.
 
 Dal VPS, dentro `/srv/auto-blog-project`:
 
@@ -335,12 +322,20 @@ sudo -u autoblog npm run ops:backup:runtime -- --out-dir /var/lib/autoblog/backu
 
 Il backup include:
 
-- `PORTAL_DB_PATH`/`AUTOBLOG_PORTAL_DB_PATH` (`portal.db*`)
 - `AUTOBLOG_SITE_REGISTRY_PATH` oppure `<AUTOBLOG_RUNTIME_ROOT>/sites/registry.json`
 - per ogni sito:
   - `.env.generated`
 
 Il comando scrive anche un `manifest.json` nello snapshot.
+
+Per il database portal su Postgres usa invece `pg_dump`, per esempio:
+
+```bash
+docker exec autoblog-postgres pg_dump \
+  -U autoblog_portal_prod \
+  autoblog_portal_prod \
+  > /var/lib/autoblog/backups/autoblog_portal_prod.sql
+```
 
 Procedura consigliata:
 

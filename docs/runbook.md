@@ -65,4 +65,4 @@
 - Postgres volume snapshot daily.
 - Export n8n workflows weekly.
 - Keep Sanity schema repo under git (this repo).
-- Backup `apps/engine/data/portal.db` (auth, entitlement, billing state).
+- Backup portal Postgres with `pg_dump` (auth, entitlement, billing state).

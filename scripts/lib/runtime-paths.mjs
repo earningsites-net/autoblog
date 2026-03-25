@@ -31,24 +31,13 @@ export function resolveRuntimePaths({ workspaceRoot, env = process.env } = {}) {
   const n8nFlowChecksDir =
     resolveOptionalPath(resolvedWorkspaceRoot, env.AUTOBLOG_N8N_FLOW_CHECKS_DIR) ||
     path.join(reportsRoot, 'n8n-flow-checks');
-  const engineDataRoot =
-    resolveOptionalPath(resolvedWorkspaceRoot, env.AUTOBLOG_ENGINE_DATA_ROOT) ||
-    (runtimeRoot === resolvedWorkspaceRoot
-      ? path.join(resolvedWorkspaceRoot, 'apps', 'engine', 'data')
-      : path.join(runtimeRoot, 'engine'));
-  const portalDbPath =
-    resolveOptionalPath(resolvedWorkspaceRoot, env.AUTOBLOG_PORTAL_DB_PATH || env.PORTAL_DB_PATH) ||
-    path.join(engineDataRoot, 'portal.db');
-
   return {
     workspaceRoot: resolvedWorkspaceRoot,
     runtimeRoot,
     siteRuntimeRoot,
     registryPath,
     reportsRoot,
-    n8nFlowChecksDir,
-    engineDataRoot,
-    portalDbPath
+    n8nFlowChecksDir
   };
 }
 

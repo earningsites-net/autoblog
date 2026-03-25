@@ -10,7 +10,6 @@ const DEFAULT_HOST = 'root@87.106.29.31';
 const DEFAULT_IDENTITY = '~/.ssh/autoblog_ionos';
 const DEFAULT_REPO_ROOT = '/srv/auto-blog-project';
 const DEFAULT_RUNTIME_ROOT = '/var/lib/autoblog';
-const DEFAULT_PORTAL_DB_PATH = '/var/lib/autoblog/portal.db';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -79,7 +78,6 @@ function runCommand(command, args, options = {}) {
 
 function buildRemoteCommand({
   repoRoot,
-  portalDbPath,
   runtimeRoot,
   siteSlug,
   ownerEmail,
@@ -88,7 +86,6 @@ function buildRemoteCommand({
   revokeOtherOwners,
   webBaseUrl,
   studioUrl,
-  storeProvider,
   portalDatabaseUrl
 }) {
   const parts = [
@@ -99,13 +96,8 @@ function buildRemoteCommand({
     '-u',
     'autoblog',
     'env',
-    `PORTAL_DB_PATH=${shellEscape(portalDbPath)}`,
     `AUTOBLOG_RUNTIME_ROOT=${shellEscape(runtimeRoot)}`,
   ];
-
-  if (storeProvider) {
-    parts.push(`PORTAL_STORE_PROVIDER=${shellEscape(storeProvider)}`);
-  }
   if (portalDatabaseUrl) {
     parts.push(`PORTAL_DATABASE_URL=${shellEscape(portalDatabaseUrl)}`);
   }
@@ -138,7 +130,7 @@ function buildRemoteCommand({
 }
 
 function printUsage() {
-  console.log('Usage: node scripts/site-handoff-prod.mjs <site-slug> --owner-email buyer@example.com [--temp-password <password>] [--role owner|editor|viewer] [--web-base-url <url>] [--studio-url <url>] [--revoke-other-owners] [--store-provider sqlite|postgres] [--portal-database-url <url>]');
+  console.log('Usage: node scripts/site-handoff-prod.mjs <site-slug> --owner-email buyer@example.com [--temp-password <password>] [--role owner|editor|viewer] [--web-base-url <url>] [--studio-url <url>] [--revoke-other-owners] [--portal-database-url <url>]');
 }
 
 function main() {
@@ -157,18 +149,12 @@ function main() {
   const host = String(flags.host || process.env.AUTOBLOG_SITE_HANDOFF_PROD_HOST || DEFAULT_HOST).trim();
   const identity = expandHome(flags.identity || process.env.AUTOBLOG_SITE_HANDOFF_PROD_IDENTITY || DEFAULT_IDENTITY);
   const repoRoot = String(flags['repo-root'] || process.env.AUTOBLOG_SITE_HANDOFF_PROD_REPO_ROOT || DEFAULT_REPO_ROOT).trim();
-  const portalDbPath = String(flags['portal-db-path'] || process.env.AUTOBLOG_SITE_HANDOFF_PROD_PORTAL_DB_PATH || DEFAULT_PORTAL_DB_PATH).trim();
   const runtimeRoot = String(flags['runtime-root'] || process.env.AUTOBLOG_SITE_HANDOFF_PROD_RUNTIME_ROOT || DEFAULT_RUNTIME_ROOT).trim();
   const role = String(flags.role || 'owner').trim().toLowerCase();
   const tempPassword = typeof flags['temp-password'] === 'string' ? String(flags['temp-password']) : '';
   const webBaseUrl = String(flags['web-base-url'] || '').trim();
   const studioUrl = String(flags['studio-url'] || '').trim();
   const revokeOtherOwners = asBool(flags['revoke-other-owners'], false);
-  const storeProvider = String(
-    flags['store-provider'] || process.env.AUTOBLOG_SITE_HANDOFF_PROD_STORE_PROVIDER || process.env.PORTAL_STORE_PROVIDER || ''
-  )
-    .trim()
-    .toLowerCase();
   const portalDatabaseUrl = String(
     flags['portal-database-url'] ||
       process.env.AUTOBLOG_SITE_HANDOFF_PROD_PORTAL_DATABASE_URL ||
@@ -179,7 +165,6 @@ function main() {
 
   const remoteCommand = buildRemoteCommand({
     repoRoot,
-    portalDbPath,
     runtimeRoot,
     siteSlug,
     ownerEmail,
@@ -188,7 +173,6 @@ function main() {
     revokeOtherOwners,
     webBaseUrl,
     studioUrl,
-    storeProvider,
     portalDatabaseUrl
   });
 
@@ -202,7 +186,6 @@ function main() {
         host,
         siteSlug,
         ownerEmail,
-        portalDbPath,
         runtimeRoot,
         result: parsed
       },

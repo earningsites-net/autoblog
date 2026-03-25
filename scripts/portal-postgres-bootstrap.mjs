@@ -75,8 +75,7 @@ function upsertEnvValue(content, key, value) {
 function writePortalEnv(filePath, databaseUrl) {
   const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(WORKSPACE_ROOT, filePath);
   const current = fs.existsSync(resolvedPath) ? fs.readFileSync(resolvedPath, 'utf8') : '';
-  let next = upsertEnvValue(current, 'PORTAL_STORE_PROVIDER', 'postgres');
-  next = upsertEnvValue(next, 'PORTAL_DATABASE_URL', databaseUrl);
+  const next = upsertEnvValue(current, 'PORTAL_DATABASE_URL', databaseUrl);
   fs.writeFileSync(resolvedPath, next, 'utf8');
   return resolvedPath;
 }

@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { PortalSiteEntitlement, PortalSiteSettings } from './portal-store';
+import type { PortalSiteEntitlement, PortalSiteSettings } from './portal-store-types';
 import {
   normalizeSiteSlug,
   resolveRuntimePaths,

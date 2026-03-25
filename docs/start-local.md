@@ -70,7 +70,7 @@ npm run dev:up
 
 ### Bootstrap portal Postgres locale
 
-Se vuoi spostare il portal locale da SQLite a Postgres:
+Il portal locale usa Postgres. Per bootstrapare database + utente dedicati:
 
 1. avvia il compose locale (`./scripts/dev-up.sh` oppure `docker compose up -d` in `infra/n8n`)
 2. crea database + utente dedicati per il portal:
@@ -84,24 +84,15 @@ npm run portal:postgres:bootstrap -- \
   --write-env .env
 ```
 
-3. migra i dati attuali del portal:
-
-```bash
-npm run portal:store:migrate:postgres -- \
-  --source-sqlite apps/engine/data/portal.db \
-  --target-url "$(sed -n 's/^PORTAL_DATABASE_URL=//p' .env)"
-```
-
-4. riavvia `engine`:
+3. riavvia `engine`:
 
 ```bash
 npm run dev:engine
 ```
 
-Dopo il bootstrap, in `.env` devono esserci:
+Dopo il bootstrap, in `.env` deve esserci:
 
 ```env
-PORTAL_STORE_PROVIDER=postgres
 PORTAL_DATABASE_URL=postgres://...
 ```
 

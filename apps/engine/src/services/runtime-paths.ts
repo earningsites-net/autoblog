@@ -20,8 +20,6 @@ export type RuntimePaths = {
   registryPath: string;
   reportsRoot: string;
   n8nFlowChecksDir: string;
-  engineDataRoot: string;
-  portalDbPath: string;
 };
 
 export function resolveRuntimePaths(workspaceRoot: string, env: NodeJS.ProcessEnv = process.env): RuntimePaths {
@@ -41,24 +39,13 @@ export function resolveRuntimePaths(workspaceRoot: string, env: NodeJS.ProcessEn
   const n8nFlowChecksDir =
     resolveOptionalPath(resolvedWorkspaceRoot, env.AUTOBLOG_N8N_FLOW_CHECKS_DIR) ||
     path.join(reportsRoot, 'n8n-flow-checks');
-  const engineDataRoot =
-    resolveOptionalPath(resolvedWorkspaceRoot, env.AUTOBLOG_ENGINE_DATA_ROOT) ||
-    (runtimeRoot === resolvedWorkspaceRoot
-      ? path.join(resolvedWorkspaceRoot, 'apps', 'engine', 'data')
-      : path.join(runtimeRoot, 'engine'));
-  const portalDbPath =
-    resolveOptionalPath(resolvedWorkspaceRoot, env.AUTOBLOG_PORTAL_DB_PATH || env.PORTAL_DB_PATH) ||
-    path.join(engineDataRoot, 'portal.db');
-
   return {
     workspaceRoot: resolvedWorkspaceRoot,
     runtimeRoot,
     siteRuntimeRoot,
     registryPath,
     reportsRoot,
-    n8nFlowChecksDir,
-    engineDataRoot,
-    portalDbPath
+    n8nFlowChecksDir
   };
 }
 

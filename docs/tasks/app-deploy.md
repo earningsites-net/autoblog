@@ -4,6 +4,66 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Cleanup finale post-migrazione portal completato:
+  - rimosso `PORTAL_DB_PATH` e il flag legacy `PORTAL_STORE_PROVIDER` dal `.env` locale
+  - aggiornati i riferimenti documentali residui a `portal.db` in `docs/context.md` e `docs/runbook.md`
+  - cancellati i vecchi file SQLite annidati creati da un path relativo legacy:
+    - `apps/engine/apps/engine/data/portal.db`
+    - `apps/engine/apps/engine/data/portal.db-shm`
+    - `apps/engine/apps/engine/data/portal.db-wal`
+  - verifica finale:
+    - `find . -name 'portal.db*'` -> nessun risultato
+    - smoke `npm run site:handoff -- ai-blog-news --owner-email postgres-smoke@example.com ...` ancora OK su Postgres
+    - cleanup del buyer smoke completato e registry locale ripristinato su `danilocmp@hotmail.it`
+- Refactor finale portal Postgres-only completato:
+  - rimossa del tutto la compatibilità SQLite dal portal/admin layer engine + CLI
+  - eliminati `apps/engine/src/services/portal-store.ts` e `scripts/portal-store-migrate.mjs`
+  - `createPortalStore` ora richiede sempre `PORTAL_DATABASE_URL` (o `DATABASE_URL`)
+  - rimossi da env e runbook i flag legacy `PORTAL_STORE_PROVIDER`, `PORTAL_DB_PATH`, `AUTOBLOG_PORTAL_DB_PATH`
+  - `portal:postgres:bootstrap` ora scrive solo `PORTAL_DATABASE_URL`
+  - verifiche eseguite:
+    - assenza di residui SQLite nei path attivi (`rg` su `apps/`, `scripts/`, `package.json`, `.env.example`)
+    - `node --check scripts/autoblog.mjs`
+    - `node --check scripts/site-handoff-prod.mjs`
+    - `node --check scripts/lib/portal-store.mjs`
+    - `node --check scripts/ops-backup-runtime.mjs`
+    - `node --check scripts/portal-postgres-bootstrap.mjs`
+    - `npm --workspace @autoblog/engine run typecheck`
+    - `npm run typecheck`
+    - smoke `npm run site:handoff -- ai-blog-news --owner-email postgres-smoke@example.com ...` con cleanup finale del buyer test sul Postgres locale
+- Pulizia finale del passaggio portal->Postgres:
+  - rimosse dall'engine le route admin `/ops/db` e `/api/ops/db/table`
+  - rimossi dai portal store (`sqlite` e `postgres`) i metodi snapshot usati solo dal viewer interno
+  - verifiche eseguite:
+    - `npm --workspace @autoblog/engine run typecheck`
+    - `npm run typecheck`
+    - smoke locale `npm run site:handoff -- ai-blog-news --owner-email postgres-smoke@example.com ...` con output `provider: "postgres"`
+    - verifica diretta sul DB `autoblog_portal_local` via `psql` nel container Postgres: utente smoke e `site_access` owner presenti, `site_settings`/`entitlements` leggibili
+    - cleanup smoke completato sul DB locale (`postgres-smoke@example.com` rimosso)
+  - ripristinato il runtime registry locale di `ai-blog-news` su `ownerEmail=danilocmp@hotmail.it`
+  - rimossi i file SQLite locali non piu necessari:
+    - `apps/engine/data/portal.db`
+    - `apps/engine/data/portal.db-shm`
+    - `apps/engine/data/portal.db-wal`
+    - `apps/engine/data/portal.db.backup-2026-03-09T13-58-06-945Z`
+- Cutover Postgres completato per local e production portal:
+  - local:
+    - avviato `infra/n8n` Postgres su `127.0.0.1:5432`
+    - bootstrapato `autoblog_portal_local` con `npm run portal:postgres:bootstrap`
+    - migrato `apps/engine/data/portal.db` verso Postgres con `npm run portal:store:migrate:postgres`
+    - verificato che `npm run site:handoff -- ai-blog-news ...` usi `provider: "postgres"`
+  - production IONOS:
+    - backup SQLite salvato in `/var/lib/autoblog/backups/portal-postgres-cutover-20260324-115620`
+    - `autoblog-postgres` ricreato con binding loopback `127.0.0.1:5432->5432`
+    - bootstrapato DB dedicato `autoblog_portal_prod`
+    - migrato `/var/lib/autoblog/portal.db` verso Postgres (`users=3`, `sessions=4`, `passwordResetTokens=1`, `siteAccess=3`, `siteSettings=4`, `entitlements=4`, `publishedArticleEvents=7`)
+    - aggiornato `/etc/autoblog/engine.env` con:
+      - `PORTAL_STORE_PROVIDER=postgres`
+      - `PORTAL_DATABASE_URL=postgres://autoblog_portal_prod:...@127.0.0.1:5432/autoblog_portal_prod`
+    - riavviato `autoblog-engine`
+    - smoke post-cutover OK:
+      - login portal live `POST /api/portal/auth/login` -> `200`
+      - `GET /v1/sites/ai-blog-news/health` -> `ok:true`
 - Reso operativo il setup Postgres per `local|staging|prod` del portal:
   - `infra/n8n/docker-compose.yml` ora espone Postgres solo su `127.0.0.1:${POSTGRES_PORT}:5432`, così engine host e GUI locali possono collegarsi senza esporre il DB in pubblico
   - aggiunto `POSTGRES_PORT` a `infra/n8n/.env.example`
@@ -616,6 +676,9 @@
     - verifica import workflow production: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`
 
 ## Decisions
+- Il portal/admin layer resta definitivamente Postgres-only; SQLite non è più un fallback supportato.
+- Il riferimento operativo per il portal DB diventa `PORTAL_DATABASE_URL`; i vecchi path file-based `portal.db*` escono dall’architettura attiva.
+- Il vecchio viewer DB interno non va mantenuto: l'ispezione del portal DB passa a tool esterni su Postgres (DBeaver/SQL via tunnel), non a route admin nell'engine.
 - Sul VPS production continuiamo con `fetch + checkout mirato` invece di `pull`, perché il working tree contiene ancora stato runtime e un `HEAD` locale che non va riscritto ciecamente.
 - Il gap Git tra VPS production e repo locale va chiuso con sync esplicito source-safe, non con auto-commit/auto-push dal server.
 - Il source of truth Git per i siti creati via Factory resta `sites/<slug>/site.blueprint.json` (+ opzionale `README.md`); `.env.generated`, `registry` e artefatti runtime restano fuori da Git.
@@ -661,6 +724,9 @@
   - rimosse solo le righe `site_access` dell'admin, senza cancellare `site_settings` o `entitlements`, per evitare perdita non necessaria di storico/config
 
 ## Next
+- Commit/push del refactor Postgres-only e rollout VPS dello stesso cleanup, così production perde anche gli ultimi riferimenti legacy a SQLite nei file sorgente.
+- Quando servirà uno staging reale, provisionare un database Postgres dedicato con lo stesso pattern `portal-local` / `portal-prod`.
+- Configurare in modo stabile le connessioni GUI `portal-local` e `portal-production` via DBeaver, poi documentare la procedura operativa di cleanup/handoff direttamente da Postgres.
 - Se vogliamo un VPS davvero “clean”, il prossimo step strutturale è spostare fuori dal repo almeno `sites/registry.json`, `sites/<slug>/.env.generated` e i report flow-check, così si potrà tornare a `git pull --ff-only`.
 - Verificare il nuovo workflow su un sito creato ex novo con `6` categorie manuali, così chiudiamo il regression check storico `4 vs 6`.
 - Fare uno smoke su VPS/production di `discover-topics` con Sanity raggiungibile, per validare anche il ramo di dedupe contro topic/article remoti.
@@ -743,6 +809,9 @@
   - definizione della policy editoriale: recap/news analysis/roundup invece di news factual in tempo reale
 
 ## Risks
+- Il task file contiene storico del passaggio incrementale `sqlite|postgres`; i blocchi iniziali e `docs/context.md` sono la fonte aggiornata.
+- I comandi/runbook esterni o annotazioni personali che citano ancora `PORTAL_STORE_PROVIDER` o `portal.db` vanno considerati obsoleti.
+- Nota storica ormai superata: il vecchio fallback `PORTAL_STORE_PROVIDER=sqlite` non esiste più; eventuali env/copy-paste che lo citano vanno rimossi.
 - `infra/n8n/instructions.md` resta fuori dal pass corrente per scelta esplicita: contiene note manuali locali e non deve bloccare il refactor Postgres.
 - Dopo il checkout mirato, `git status` sul VPS mostra i file sorgente allineati come `M/A` rispetto all'`HEAD` locale del server: è atteso, ma rende il clone production ancora poco leggibile finché non separiamo source e runtime.
 - Se Sanity non è raggiungibile, `discover-topics` usa il preview locale come fallback: ottimo per il loop dev, ma la dedupe contro gli articoli pubblicati remoti va comunque verificata su un run con accesso rete reale.
@@ -1024,9 +1093,13 @@
 - Il prompt immagini deve restare article-driven: titolo ed excerpt decidono il concept, mentre il workflow aggiunge solo guardrail generici e limiti di sicurezza/branding.
 
 ## Next
-- Eseguire il bootstrap reale del database portal locale e aggiornare `.env` locale con `PORTAL_STORE_PROVIDER=postgres` e `PORTAL_DATABASE_URL=...`.
-- Migrare il `portal.db` locale verso il nuovo Postgres e verificare login/handoff/billing in local.
-- Replicare lo stesso pattern su staging e poi su production VPS, aggiornando `/etc/autoblog/engine.env` solo dopo la migrazione dati.
+- Se serve uno staging reale, provisionare un host/VM o un ambiente dedicato e replicare lo stesso pattern:
+  - Postgres loopback accessibile al solo host
+  - DB dedicato `autoblog_portal_staging`
+  - `PORTAL_STORE_PROVIDER=postgres`
+  - migrazione iniziale da eventuale SQLite staging
+- Aggiungere una procedura/script di backup Postgres (`pg_dump`) per il portal, così `ops:backup:runtime` non resta SQLite/file-centric.
+- Valutare la pulizia del vecchio `/var/lib/autoblog/portal.db` dopo un periodo di osservazione del cutover production.
 - Decidere il target del primo cutover reale:
   - local dev su Postgres
   - staging su Postgres
@@ -1067,6 +1140,7 @@
   - rieseguire un batch ridotto immagini su `ai-blog-1` per validare che sparisca il bias `modern workspace scene`
 
 ## Risks
+- Il pass staging resta solo "ready-by-code": senza un host o servizio staging dedicato non esiste ancora un ambiente staging realmente attivo.
 - Il supporto Postgres e' completo per engine HTTP + handoff CLI, ma non c'e' ancora un backup Postgres equivalente in `ops:backup:runtime`; prima del cutover production conviene aggiungere una procedura `pg_dump`.
 - C'e una modifica inattesa nel worktree su `infra/n8n/instructions.md` che non ho toccato io; mi fermo prima di commit/push finche' non mi dici come vuoi gestirla.
 - È comparsa una modifica inattesa a `.dev/config/sanity/config.json`; prima di chiudere il teardown Git del sito va deciso se lasciarla fuori commit o se conservarla esplicitamente.

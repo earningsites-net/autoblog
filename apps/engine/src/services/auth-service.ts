@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { PortalUser } from './portal-store';
+import type { PortalUser } from './portal-store-types';
 import type { PortalStoreAdapter } from './portal-store-adapter';
 
 const SESSION_COOKIE_NAME = 'portal_session';

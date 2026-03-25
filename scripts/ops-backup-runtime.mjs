@@ -77,9 +77,6 @@ function main() {
   };
 
   copyIntoSnapshot(runtimePaths.registryPath, 'runtime/sites/registry.json', snapshotRoot, manifest);
-  copyIntoSnapshot(runtimePaths.portalDbPath, 'runtime/engine/portal.db', snapshotRoot, manifest);
-  copyIntoSnapshot(`${runtimePaths.portalDbPath}-shm`, 'runtime/engine/portal.db-shm', snapshotRoot, manifest);
-  copyIntoSnapshot(`${runtimePaths.portalDbPath}-wal`, 'runtime/engine/portal.db-wal', snapshotRoot, manifest);
 
   for (const siteSlug of listRuntimeSiteSlugs(runtimePaths)) {
     copyIntoSnapshot(

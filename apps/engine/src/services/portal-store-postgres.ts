@@ -2,15 +2,13 @@ import crypto from 'node:crypto';
 import postgres, { type Sql } from 'postgres';
 import { getCurrentMonthWindow, getQuotaForPlan, isIsoBefore, normalizePlan } from '../config/plans';
 import type {
-  PortalAdminDbTable,
-  PortalAdminDbTableSnapshot,
   PortalSession,
   PortalSiteAccess,
   PortalSiteEntitlement,
   PortalSiteSettings,
   PortalSiteSummary,
   PortalUser
-} from './portal-store';
+} from './portal-store-types';
 import type { PortalStoreAdapter } from './portal-store-adapter';
 
 function isoNow() {
@@ -814,145 +812,5 @@ export class PostgresPortalStore implements PortalStoreAdapter {
        ON CONFLICT (event_id) DO NOTHING`,
       [eventId, isoNow()]
     );
-  }
-
-  listAdminDbTables(): PortalAdminDbTable[] {
-    return [
-      'users',
-      'sessions',
-      'password_reset_tokens',
-      'site_access',
-      'site_settings',
-      'entitlements',
-      'processed_webhook_events',
-      'published_article_events'
-    ];
-  }
-
-  async getAdminDbTableSnapshot(table: PortalAdminDbTable, limit = 100): Promise<PortalAdminDbTableSnapshot> {
-    const safeLimit = Math.max(1, Math.min(500, Number(limit || 100)));
-    const safeTable: PortalAdminDbTable = this.listAdminDbTables().includes(table) ? table : 'users';
-
-    if (safeTable === 'users') {
-      const rows = await this.sql.unsafe<Array<Record<string, string | number>>>(
-        `SELECT id, email, created_at AS "createdAt", updated_at AS "updatedAt"
-         FROM users
-         ORDER BY id DESC
-         LIMIT $1`,
-        [safeLimit]
-      );
-      const countRow = await this.sql.unsafe<Array<{ count: string | number }>>('SELECT COUNT(*) AS count FROM users');
-      return { table: safeTable, count: Number(countRow[0]?.count || 0), rows };
-    }
-
-    if (safeTable === 'sessions') {
-      const rowsRaw = await this.sql.unsafe<Array<{ token: string; userid: number; email: string; expiresat: string; createdat: string }>>(
-        `SELECT s.token, s.user_id AS userId, u.email, s.expires_at AS expiresAt, s.created_at AS createdAt
-         FROM sessions s
-         INNER JOIN users u ON u.id = s.user_id
-         ORDER BY s.created_at DESC
-         LIMIT $1`,
-        [safeLimit]
-      );
-      const rows = rowsRaw.map((row) => ({
-        tokenPreview: row.token ? `${row.token.slice(0, 8)}...${row.token.slice(-4)}` : '',
-        userId: Number((row as any).userId ?? row.userid),
-        email: row.email,
-        expiresAt: (row as any).expiresAt ?? row.expiresat,
-        createdAt: (row as any).createdAt ?? row.createdat
-      }));
-      const countRow = await this.sql.unsafe<Array<{ count: string | number }>>('SELECT COUNT(*) AS count FROM sessions');
-      return { table: safeTable, count: Number(countRow[0]?.count || 0), rows };
-    }
-
-    if (safeTable === 'password_reset_tokens') {
-      const rowsRaw = await this.sql.unsafe<Array<{ tokenhash: string; userid: number; email: string; expiresat: string; createdat: string; usedat: string | null }>>(
-        `SELECT prt.token_hash AS tokenHash, prt.user_id AS userId, u.email,
-                prt.expires_at AS expiresAt, prt.created_at AS createdAt, prt.used_at AS usedAt
-         FROM password_reset_tokens prt
-         INNER JOIN users u ON u.id = prt.user_id
-         ORDER BY prt.created_at DESC
-         LIMIT $1`,
-        [safeLimit]
-      );
-      const rows = rowsRaw.map((row) => ({
-        tokenPreview: ((row as any).tokenHash ?? row.tokenhash) ? `${String((row as any).tokenHash ?? row.tokenhash).slice(0, 8)}...${String((row as any).tokenHash ?? row.tokenhash).slice(-4)}` : '',
-        userId: Number((row as any).userId ?? row.userid),
-        email: row.email,
-        expiresAt: (row as any).expiresAt ?? row.expiresat,
-        createdAt: (row as any).createdAt ?? row.createdat,
-        usedAt: (row as any).usedAt ?? row.usedat
-      }));
-      const countRow = await this.sql.unsafe<Array<{ count: string | number }>>('SELECT COUNT(*) AS count FROM password_reset_tokens');
-      return { table: safeTable, count: Number(countRow[0]?.count || 0), rows };
-    }
-
-    if (safeTable === 'site_access') {
-      const rows = await this.sql.unsafe<Array<Record<string, string | number>>>(
-        `SELECT sa.user_id AS "userId", u.email, sa.site_slug AS "siteSlug", sa.role, sa.created_at AS "createdAt"
-         FROM site_access sa
-         INNER JOIN users u ON u.id = sa.user_id
-         ORDER BY sa.created_at DESC
-         LIMIT $1`,
-        [safeLimit]
-      );
-      const countRow = await this.sql.unsafe<Array<{ count: string | number }>>('SELECT COUNT(*) AS count FROM site_access');
-      return { table: safeTable, count: Number(countRow[0]?.count || 0), rows };
-    }
-
-    if (safeTable === 'site_settings') {
-      const rows = await this.sql.unsafe<Array<Record<string, string | number | boolean>>>(
-        `SELECT site_slug AS "siteSlug", publishing_enabled AS "publishingEnabled", max_publishes_per_run AS "maxPublishesPerRun",
-                ad_slots_enabled AS "adSlotsEnabled", ads_mode AS "adsMode", ads_preview_enabled AS "adsPreviewEnabled",
-                adsense_publisher_id AS "adsensePublisherId", adsense_slot_header AS "slotHeader",
-                adsense_slot_in_content AS "slotInContent", adsense_slot_footer AS "slotFooter",
-                fallback_to_platform AS "fallbackToPlatform", studio_url AS "studioUrl", updated_at AS "updatedAt"
-         FROM site_settings
-         ORDER BY updated_at DESC
-         LIMIT $1`,
-        [safeLimit]
-      );
-      const countRow = await this.sql.unsafe<Array<{ count: string | number }>>('SELECT COUNT(*) AS count FROM site_settings');
-      return { table: safeTable, count: Number(countRow[0]?.count || 0), rows };
-    }
-
-    if (safeTable === 'entitlements') {
-      const rows = await this.sql.unsafe<Array<Record<string, string | number>>>(
-        `SELECT site_slug AS "siteSlug", plan, monthly_quota AS "monthlyQuota", published_this_month AS "publishedThisMonth",
-                period_start AS "periodStart", period_end AS "periodEnd", pending_plan AS "pendingPlan",
-                pending_monthly_quota AS "pendingMonthlyQuota", pending_effective_at AS "pendingEffectiveAt",
-                pending_stripe_price_id AS "pendingStripePriceId", status, stripe_customer_id AS "stripeCustomerId",
-                stripe_subscription_id AS "stripeSubscriptionId", stripe_price_id AS "stripePriceId",
-                billing_status AS "billingStatus", updated_at AS "updatedAt"
-         FROM entitlements
-         ORDER BY updated_at DESC
-         LIMIT $1`,
-        [safeLimit]
-      );
-      const countRow = await this.sql.unsafe<Array<{ count: string | number }>>('SELECT COUNT(*) AS count FROM entitlements');
-      return { table: safeTable, count: Number(countRow[0]?.count || 0), rows };
-    }
-
-    if (safeTable === 'published_article_events') {
-      const rows = await this.sql.unsafe<Array<Record<string, string | number>>>(
-        `SELECT site_slug AS "siteSlug", article_id AS "articleId", increment_by AS "incrementBy", counted_at AS "countedAt"
-         FROM published_article_events
-         ORDER BY counted_at DESC
-         LIMIT $1`,
-        [safeLimit]
-      );
-      const countRow = await this.sql.unsafe<Array<{ count: string | number }>>('SELECT COUNT(*) AS count FROM published_article_events');
-      return { table: safeTable, count: Number(countRow[0]?.count || 0), rows };
-    }
-
-    const rows = await this.sql.unsafe<Array<Record<string, string | number>>>(
-      `SELECT event_id AS "eventId", received_at AS "receivedAt"
-       FROM processed_webhook_events
-       ORDER BY received_at DESC
-       LIMIT $1`,
-      [safeLimit]
-    );
-    const countRow = await this.sql.unsafe<Array<{ count: string | number }>>('SELECT COUNT(*) AS count FROM processed_webhook_events');
-    return { table: safeTable, count: Number(countRow[0]?.count || 0), rows };
   }
 }

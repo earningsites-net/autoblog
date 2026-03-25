@@ -29,7 +29,7 @@ node scripts/autoblog.mjs discover-topics my-garden-notes --count 60 --source su
 node scripts/autoblog.mjs launch-site my-garden-notes --theme-tone auto --topic-count 60 --source suggest --apply-sanity
 node scripts/autoblog.mjs doctor my-garden-notes
 node scripts/autoblog.mjs handoff-pack my-garden-notes
-npm run portal:store:migrate:postgres -- --source-sqlite apps/engine/data/portal.db --target-url postgres://user:pass@localhost:5432/autoblog_portal
+npm run portal:postgres:bootstrap -- --admin-url postgres://n8n:password@127.0.0.1:5432/postgres --database autoblog_portal_local --user autoblog_portal_local --write-env .env
 ```
 
 ## Theme Engine
@@ -141,20 +141,11 @@ Safe defaults:
 
 This command does **not** automate Sanity or Vercel account transfer. It prepares the portal/runtime side and writes an explicit follow-up checklist.
 
-If the portal runtime has been moved to Postgres, the same handoff commands must run with the matching provider env:
+The handoff commands must run with the same `PORTAL_DATABASE_URL` used by the portal service:
 
 ```bash
-PORTAL_STORE_PROVIDER=postgres \
 PORTAL_DATABASE_URL=postgres://user:pass@localhost:5432/autoblog_portal \
 npm run site:handoff -- ai-blog-news --owner-email buyer@example.com
-```
-
-For the initial cutover from SQLite:
-
-```bash
-npm run portal:store:migrate:postgres -- \
-  --source-sqlite apps/engine/data/portal.db \
-  --target-url postgres://user:pass@localhost:5432/autoblog_portal
 ```
 
 ## Topic Discovery Diversity

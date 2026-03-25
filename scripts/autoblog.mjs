@@ -39,7 +39,7 @@ Usage:
   autoblog release-site <site-slug> [--from-sanity]
   autoblog deploy <site-slug>
   autoblog doctor <site-slug>
-  autoblog handoff-site <site-slug> --owner-email <email> [--role owner|editor|viewer] [--temp-password <password>] [--revoke-other-owners] [--store-provider sqlite|postgres] [--portal-database-url <url>]
+  autoblog handoff-site <site-slug> --owner-email <email> [--role owner|editor|viewer] [--temp-password <password>] [--revoke-other-owners] [--portal-database-url <url>]
   autoblog handoff-pack <site-slug>
   autoblog list-blueprints
 `);
@@ -2593,8 +2593,6 @@ async function commandHandoffSite(siteSlug, flags) {
   ).trim();
   const ownerType = String(flags['owner-type'] || (mode === 'managed' ? 'internal' : 'client')).trim();
   const portalStore = await createPortalStore({
-    provider: flags['store-provider'] || process.env.PORTAL_STORE_PROVIDER || 'sqlite',
-    sqlitePath: RUNTIME_PATHS.portalDbPath,
     postgresUrl: flags['portal-database-url'] || process.env.PORTAL_DATABASE_URL || process.env.DATABASE_URL || ''
   });
   let user = null;
@@ -2649,7 +2647,6 @@ async function commandHandoffSite(siteSlug, flags) {
     siteSlug: normalizedSlug,
     ownerEmail,
     role,
-    portalDbPath: RUNTIME_PATHS.portalDbPath,
     runtimeEnvPath: resolveSiteEnvPath(normalizedSlug),
     registryPath: SITE_REGISTRY_PATH,
     webBaseUrl: nextSite.webBaseUrl,
