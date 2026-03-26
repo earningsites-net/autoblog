@@ -76,6 +76,25 @@ function runCommand(command, args, options = {}) {
   return result;
 }
 
+function parseJsonFromMixedOutput(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {}
+
+  const lines = text.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const candidate = lines.slice(index).join('\n').trim();
+    if (!candidate.startsWith('{') && !candidate.startsWith('[')) continue;
+    try {
+      return JSON.parse(candidate);
+    } catch {}
+  }
+
+  throw new Error(`Unable to parse JSON from remote output: ${text}`);
+}
+
 function buildRemoteCommand({
   repoRoot,
   runtimeRoot,
@@ -177,7 +196,7 @@ function main() {
   });
 
   const result = runCommand('ssh', ['-i', identity, host, remoteCommand], { inherit: false });
-  const parsed = JSON.parse((result.stdout || '{}').trim() || '{}');
+  const parsed = parseJsonFromMixedOutput(result.stdout || '');
   console.log(
     JSON.stringify(
       {

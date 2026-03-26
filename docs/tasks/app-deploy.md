@@ -4,6 +4,29 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Pushato e rollato il refactor `billingMode`/inactive portal:
+  - commit `0513871` (`Add portal billing modes and inactive-state gating`) pushato su `origin/main`
+  - VPS production allineato a `0513871` con `git pull --ff-only origin main`
+  - `autoblog-engine` riavviato con successo
+  - smoke produzione confermati:
+    - `https://aiblogs.earningsites.net/healthz` -> `200`
+    - `https://aiblogs.earningsites.net/v1/sites/ai-blog-news/health` -> `200`
+    - `https://aiblogs.earningsites.net/portal` -> `200`
+- Eseguito smoke E2E production del nuovo flusso `customer_paid -> site inactive` su `ai-blog-news`:
+  - handoff production verso `inactive-e2e@example.com` con `billingMode=customer_paid`
+  - login portal owner test -> `200`
+  - `GET /api/portal/sites/ai-blog-news` ha restituito:
+    - `inactiveForOwner=true`
+    - `operationalStatus=stopped`
+    - `entitlement.billingMode=customer_paid`
+  - `PATCH /api/portal/sites/ai-blog-news/publishing` ha restituito `409 SITE_INACTIVE`
+  - restore production completato:
+    - entitlement riportato a `status=active`, `billingMode=incubating`
+    - `registry.ownerEmail` riportato a `danilocmp@hotmail.it`
+    - buyer smoke `inactive-e2e@example.com` rimosso da `users`/`site_access`
+- Corretto il wrapper locale `site:handoff:prod`:
+  - `scripts/site-handoff-prod.mjs` ora parse-a anche output misto testo+JSON del comando remoto, invece di fallire sulla riga `Generated handoff pack in ...`
+  - verifica sintattica locale: `node --check scripts/site-handoff-prod.mjs`
 - Implementato il nuovo access model commerciale del portal senza introdurre `platform_admin`:
   - ruolo cliente effettivo semplificato a `owner` (`viewer/editor` non piu' usati nel codice attivo)
   - aggiunto `entitlement.billingMode` con valori:
@@ -707,6 +730,8 @@
     - verifica import workflow production: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`
 
 ## Decisions
+- Il rollout `billingMode` e' validato in produzione: il blocco owner-side deve scattare solo per `customer_paid` non operativo, mentre il sito `incubating` resta gestibile normalmente.
+- Il wrapper locale `site:handoff:prod` deve tollerare output remoto non strettamente JSON, perche' `handoff-site` stampa anche log operativi prima del payload finale.
 - Il portal/admin layer resta definitivamente Postgres-only; SQLite non è più un fallback supportato.
 - Il riferimento operativo per il portal DB diventa `PORTAL_DATABASE_URL`; i vecchi path file-based `portal.db*` escono dall’architettura attiva.
 - Il vecchio viewer DB interno non va mantenuto: l'ispezione del portal DB passa a tool esterni su Postgres (DBeaver/SQL via tunnel), non a route admin nell'engine.
@@ -755,6 +780,8 @@
   - rimosse solo le righe `site_access` dell'admin, senza cancellare `site_settings` o `entitlements`, per evitare perdita non necessaria di storico/config
 
 ## Next
+- Pushare anche il fix locale di `site:handoff:prod` e allineare il repo, senza bisogno di rollout server-side aggiuntivo.
+- Capire perche' `handoff-site` production puo' restare appeso quando viene rilanciato verso un owner esistente (`danilocmp@hotmail.it`), dato che l'E2E ha richiesto restore manuale via SQL/registry.
 - Quando servirà uno staging reale, provisionare un database Postgres dedicato con lo stesso pattern `portal-local` / `portal-prod`.
 - Configurare in modo stabile le connessioni GUI `portal-local` e `portal-production` via DBeaver, poi documentare la procedura operativa di cleanup/handoff direttamente da Postgres.
 - Se vogliamo un VPS davvero “clean”, il prossimo step strutturale è spostare fuori dal repo almeno `sites/registry.json`, `sites/<slug>/.env.generated` e i report flow-check, così si potrà tornare a `git pull --ff-only`.
@@ -839,6 +866,7 @@
   - definizione della policy editoriale: recap/news analysis/roundup invece di news factual in tempo reale
 
 ## Risks
+- Resta un bug aperto nel comando `handoff-site`/`site:handoff:prod` su production: il restore verso un owner gia' esistente puo' andare in hang e ha richiesto cleanup manuale via SQL + registry.
 - Il task file contiene storico del passaggio incrementale `sqlite|postgres`; i blocchi iniziali e `docs/context.md` sono la fonte aggiornata.
 - I comandi/runbook esterni o annotazioni personali che citano ancora `PORTAL_STORE_PROVIDER` o `portal.db` vanno considerati obsoleti.
 - Nota storica ormai superata: il vecchio fallback `PORTAL_STORE_PROVIDER=sqlite` non esiste più; eventuali env/copy-paste che lo citano vanno rimossi.
