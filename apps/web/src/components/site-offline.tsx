@@ -12,7 +12,8 @@ const portalShellStyle = {
 } as const;
 
 const portalCardStyle = {
-  background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)'
+  background:
+    'radial-gradient(420px 240px at -8% -10%, rgba(255,255,255,.24) 0%, rgba(255,255,255,0) 65%), radial-gradient(340px 200px at 120% 110%, rgba(255,255,255,.2) 0%, rgba(255,255,255,0) 62%), linear-gradient(140deg, #2b66ff 0%, #3551dc 48%, #8b3cf2 100%)'
 } as const;
 
 export function SiteOffline({ brandName, portalBaseUrl }: SiteOfflineProps) {
@@ -23,14 +24,14 @@ export function SiteOffline({ brandName, portalBaseUrl }: SiteOfflineProps) {
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl items-center justify-center">
         <section
           style={portalCardStyle}
-          className="w-full max-w-3xl rounded-[1.75rem] border border-[#dfe6f5] px-8 py-10 text-[#101a34] shadow-[0_30px_84px_-44px_rgba(18,48,115,.46)] sm:px-12 sm:py-14"
+          className="w-full max-w-3xl rounded-[1.75rem] border border-[#dfe6f5] px-8 py-10 text-center text-white shadow-[0_30px_84px_-44px_rgba(18,48,115,.46)] sm:px-12 sm:py-14"
         >
-          <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-[#5a6f96]">Site Offline</p>
-          <h1 className="mt-4 text-4xl font-semibold leading-[1.02] tracking-[-0.02em] sm:text-5xl">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-white/80">Site Offline</p>
+          <h1 className="mt-4 text-3xl font-semibold leading-[1.08] tracking-[-0.02em] sm:text-4xl">
             {brandName} is temporarily unavailable.
           </h1>
-          <div className="mt-8 border-t border-[#e2e9fb] pt-5 text-sm text-[#5a6f96]">
-            <Link href={ownerPortalHref} className="font-semibold text-[#2458d1] underline underline-offset-2 hover:text-[#193f9b]">
+          <div className="mt-8 border-t border-white/20 pt-5 text-sm text-white/90">
+            <Link href={ownerPortalHref} className="font-semibold text-white underline underline-offset-2 hover:text-white/85">
               Site owner? Access the portal
             </Link>
           </div>

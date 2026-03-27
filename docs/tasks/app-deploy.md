@@ -999,6 +999,10 @@
   - refinement successivo:
     - la card offline usa ora il surface `auth-form` del portal (`linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)`)
     - label, testo secondario e link owner usano la stessa palette del blocco auth (`#101a34`, `#5a6f96`, `#2458d1`)
+  - refinement successivo 2:
+    - la card offline usa ora il gradiente `auth-brand` del portal (`#2b66ff -> #3551dc -> #8b3cf2`)
+    - contenuto centrato
+    - titolo ridotto di uno step per migliorare il bilanciamento visivo
   - il link resta funzionale verso il portal reale configurato (`<portalBaseUrl>/portal`), con fallback locale a `/portal`
   - verifica locale: `npm --workspace @autoblog/web run typecheck`
 - Rollout production completato per la migrazione enum del portal:
