@@ -1008,6 +1008,9 @@
     - gerarchia visiva tipo `h1` + `h2`
     - il link owner usa ora sempre `/portal` sul dominio del sito
     - aggiunta route web `apps/web/src/app/portal/page.tsx` che redirige al portal centrale con `siteSlug`
+  - fix successivo:
+    - `apps/web/next.config.ts` ora definisce un vero redirect Next per `/portal`
+    - il redirect avviene prima del layout offline, quindi `/portal` non resta piu' intrappolato nella schermata `Site Offline` quando il sito e' inattivo
   - il link resta funzionale verso il portal reale configurato (`<portalBaseUrl>/portal`), con fallback locale a `/portal`
   - verifica locale: `npm --workspace @autoblog/web run typecheck`
 - Rollout production completato per la migrazione enum del portal:

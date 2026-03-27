@@ -60,6 +60,7 @@ This file stores durable project context shared across tasks.
     - il portal resta navigabile con banner `site inactive`
     - il frontend pubblico deve mostrare una schermata offline al posto del magazine live
   - il frontend pubblico espone anche un path first-party `/portal` che fa redirect al portal centrale con `siteSlug`, cosi il dominio del sito puo' restare il punto di ingresso owner-facing
+  - questo redirect deve vivere nel routing/config di Next (`next.config.ts`), non solo in una page route, altrimenti il layout offline puo' renderizzarsi prima del redirect quando il sito e' inattivo
 - Il vecchio viewer interno `/ops/db` e il relativo endpoint `/api/ops/db/table` sono stati rimossi: l'ispezione del portal DB va fatta via Postgres esterno (es. DBeaver/SSH tunnel) o query SQL, non tramite route admin nell'engine.
 - Stato attuale Postgres portal:
   - local dev usa il Postgres del compose `infra/n8n` con database dedicato (`autoblog_portal_local`) bootstrapato via `npm run portal:postgres:bootstrap`
