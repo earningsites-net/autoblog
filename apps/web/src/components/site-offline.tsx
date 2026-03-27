@@ -12,7 +12,7 @@ const portalShellStyle = {
 } as const;
 
 const portalCardStyle = {
-  background: 'linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(250,252,255,.96) 100%)'
+  background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)'
 } as const;
 
 export function SiteOffline({ brandName, portalBaseUrl }: SiteOfflineProps) {
@@ -23,14 +23,14 @@ export function SiteOffline({ brandName, portalBaseUrl }: SiteOfflineProps) {
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl items-center justify-center">
         <section
           style={portalCardStyle}
-          className="w-full max-w-3xl rounded-[1.75rem] border border-[#dfe6f5] px-8 py-10 text-[#101a34] shadow-[0_20px_54px_-36px_rgba(19,49,111,.4)] sm:px-12 sm:py-14"
+          className="w-full max-w-3xl rounded-[1.75rem] border border-[#dfe6f5] px-8 py-10 text-[#101a34] shadow-[0_30px_84px_-44px_rgba(18,48,115,.46)] sm:px-12 sm:py-14"
         >
-          <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-[#6c7a98]">Site Offline</p>
+          <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-[#5a6f96]">Site Offline</p>
           <h1 className="mt-4 text-4xl font-semibold leading-[1.02] tracking-[-0.02em] sm:text-5xl">
             {brandName} is temporarily unavailable.
           </h1>
-          <div className="mt-8 rounded-2xl border border-[#d4def5] bg-[#f3f7ff] px-5 py-4 text-sm text-[#29467f]">
-            <Link href={ownerPortalHref} className="font-medium underline decoration-[#90adff] underline-offset-4">
+          <div className="mt-8 border-t border-[#e2e9fb] pt-5 text-sm text-[#5a6f96]">
+            <Link href={ownerPortalHref} className="font-semibold text-[#2458d1] underline underline-offset-2 hover:text-[#193f9b]">
               Site owner? Access the portal
             </Link>
           </div>
