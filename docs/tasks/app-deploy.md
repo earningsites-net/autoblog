@@ -989,6 +989,15 @@
 - Gli ID `N8N_WORKFLOW_ID_*` possono diventare stantii dopo import bootstrap su istanze n8n nuove; senza riallineamento gli orchestratori falliscono con `Workflow does not exist`.
 
 ## Done
+- Restylata la pagina pubblica `site offline` per renderla shared e non piu' dipendente dal tema per-sito:
+  - componente aggiornato: `apps/web/src/components/site-offline.tsx`
+  - il layout non passa piu' `siteSlug`; la pagina mostra solo:
+    - label `Site Offline`
+    - titolo `${brandName} is temporarily unavailable.`
+    - link `Site owner? Access the portal`
+  - background, surface card e font stack ora riusano il look del portal (`/portal`) invece dei token del tema editoriale del sito
+  - il link resta funzionale verso il portal reale configurato (`<portalBaseUrl>/portal`), con fallback locale a `/portal`
+  - verifica locale: `npm --workspace @autoblog/web run typecheck`
 - Rollout production completato per la migrazione enum del portal:
   - commit pushato su `main`: `52444fd` (`Migrate portal entitlement domains to enums`)
   - VPS production allineato con `git pull --ff-only origin main`
@@ -1223,6 +1232,10 @@
     - le fonti/link esterni non possono essere ottenuti solo via prompt: `article.body` non supporta annotazioni link e il renderer frontend tratta i mark `link` come `span`, non `<a>`
 
 ## Decisions
+- La pagina pubblica `site offline` deve usare uno stile shared di piattaforma, non i token del tema del sito:
+  - e' una schermata operativa/commerciale
+  - non deve cambiare font, background o accenti in base al brand theme editoriale
+- Il link owner della schermata offline non deve essere un semplice path relativo se esiste `portalBaseUrl`, per evitare 404 sul sito pubblico Vercel quando il portal vive su dominio separato.
 - Per gli stati chiusi del portal non usiamo tabelle relazionate di dominio:
   - `entitlements.status`
   - `entitlements.billing_mode`
@@ -1289,6 +1302,7 @@
 - Il prompt immagini deve restare article-driven: titolo ed excerpt decidono il concept, mentre il workflow aggiunge solo guardrail generici e limiti di sicurezza/branding.
 
 ## Next
+- Pushare il restyle del `site offline` e verificare il deploy Vercel live su `ai-blog-news`.
 - Aggiornare `site:handoff`/runbook di handoff per esplicitare i casi:
   - `--billing-mode customer_paid` per consegna cliente
   - `--billing-mode complimentary` per beta/free access

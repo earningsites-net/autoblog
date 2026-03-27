@@ -165,7 +165,6 @@ gtag('config', '${gaId}');`}
         {publicSiteInactive ? (
           <SiteOffline
             brandName={runtimeState.brandName || siteConfig.name}
-            siteSlug={runtimeState.siteSlug || siteConfig.slug}
             portalBaseUrl={portalBaseUrl}
           />
         ) : (

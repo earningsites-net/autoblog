@@ -2,60 +2,38 @@ import Link from 'next/link';
 
 type SiteOfflineProps = {
   brandName: string;
-  siteSlug: string;
   portalBaseUrl: string;
 };
 
-export function SiteOffline({ brandName, siteSlug, portalBaseUrl }: SiteOfflineProps) {
-  const ownerPortalHref = portalBaseUrl ? `${portalBaseUrl}/portal` : '';
+const portalShellStyle = {
+  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  background:
+    'radial-gradient(980px 620px at 0% -8%, rgba(75, 118, 255, .24) 0%, rgba(75, 118, 255, 0) 62%), radial-gradient(900px 560px at 100% -12%, rgba(255, 111, 184, .22) 0%, rgba(255, 111, 184, 0) 60%), radial-gradient(840px 520px at 50% 118%, rgba(75, 214, 255, .16) 0%, rgba(75, 214, 255, 0) 58%), linear-gradient(135deg, #f9fbff 0%, #f1f6ff 52%, #fff5fa 100%)'
+} as const;
+
+const portalCardStyle = {
+  background: 'linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(250,252,255,.96) 100%)'
+} as const;
+
+export function SiteOffline({ brandName, portalBaseUrl }: SiteOfflineProps) {
+  const ownerPortalHref = portalBaseUrl ? `${portalBaseUrl}/portal` : '/portal';
 
   return (
-    <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl items-center">
-        <section className="grid w-full gap-8 overflow-hidden rounded-[2rem] border border-black/10 bg-white/80 p-8 shadow-[0_28px_90px_-44px_rgba(0,0,0,0.45)] backdrop-blur sm:p-10 lg:grid-cols-[1.3fr_0.7fr] lg:p-14 dark:border-white/10 dark:bg-coal/75">
-          <div className="space-y-6">
-            <p className="inline-flex rounded-full border border-rust/30 bg-rust/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-rust">
-              Site Offline
-            </p>
-            <div className="space-y-3">
-              <p className="text-sm uppercase tracking-[0.22em] text-ink/55 dark:text-paper/55">{siteSlug}</p>
-              <h1 className="font-display text-4xl leading-[0.96] text-ink sm:text-5xl lg:text-6xl dark:text-paper">
-                {brandName} is temporarily unavailable.
-              </h1>
-              <p className="max-w-2xl text-base leading-7 text-ink/72 dark:text-paper/72">
-                This publication is currently offline while access is being reactivated. Content and archives remain managed
-                behind the scenes, but the public storefront is paused until the subscription status is restored.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {ownerPortalHref ? (
-                <Link
-                  href={ownerPortalHref}
-                  className="inline-flex items-center rounded-full bg-ink px-5 py-3 text-sm font-semibold text-paper transition hover:bg-coal dark:bg-paper dark:text-coal dark:hover:bg-paper/85"
-                >
-                  Owner Portal
-                </Link>
-              ) : null}
-              <span className="inline-flex items-center rounded-full border border-black/10 px-5 py-3 text-sm text-ink/68 dark:border-white/15 dark:text-paper/68">
-                Status: unavailable to visitors
-              </span>
-            </div>
+    <div style={portalShellStyle} className="min-h-screen px-4 py-8 sm:px-6">
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl items-center justify-center">
+        <section
+          style={portalCardStyle}
+          className="w-full max-w-3xl rounded-[1.75rem] border border-[#dfe6f5] px-8 py-10 text-[#101a34] shadow-[0_20px_54px_-36px_rgba(19,49,111,.4)] sm:px-12 sm:py-14"
+        >
+          <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-[#6c7a98]">Site Offline</p>
+          <h1 className="mt-4 text-4xl font-semibold leading-[1.02] tracking-[-0.02em] sm:text-5xl">
+            {brandName} is temporarily unavailable.
+          </h1>
+          <div className="mt-8 rounded-2xl border border-[#d4def5] bg-[#f3f7ff] px-5 py-4 text-sm text-[#29467f]">
+            <Link href={ownerPortalHref} className="font-medium underline decoration-[#90adff] underline-offset-4">
+              Site owner? Access the portal
+            </Link>
           </div>
-
-          <aside className="grid gap-4 self-stretch">
-            <div className="rounded-[1.5rem] border border-black/10 bg-paper/70 p-5 dark:border-white/10 dark:bg-black/20">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink/55 dark:text-paper/55">What this means</p>
-              <p className="mt-3 text-sm leading-6 text-ink/72 dark:text-paper/72">
-                Visitors see this holding page instead of the live magazine until the site returns to an active commercial state.
-              </p>
-            </div>
-            <div className="rounded-[1.5rem] border border-black/10 bg-paper/70 p-5 dark:border-white/10 dark:bg-black/20">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink/55 dark:text-paper/55">Owner note</p>
-              <p className="mt-3 text-sm leading-6 text-ink/72 dark:text-paper/72">
-                Use the portal to reactivate billing or restore service access. Editorial content remains managed separately.
-              </p>
-            </div>
-          </aside>
         </section>
       </div>
     </div>
