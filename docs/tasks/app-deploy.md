@@ -4,6 +4,10 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Verificata la persistenza reale del Postgres production su IONOS:
+  - container attivo: `autoblog-postgres`
+  - bind mount reale: `/srv/auto-blog-project/infra/n8n/postgres` -> `/var/lib/postgresql/data`
+  - porta esposta solo in loopback: `127.0.0.1:5432->5432`
 - Pushato e rollato il refactor `billingMode`/inactive portal:
   - commit `0513871` (`Add portal billing modes and inactive-state gating`) pushato su `origin/main`
   - VPS production allineato a `0513871` con `git pull --ff-only origin main`
@@ -730,6 +734,7 @@
     - verifica import workflow production: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`
 
 ## Decisions
+- La persistenza del Postgres production oggi dipende dal bind mount host `infra/n8n/postgres`, non dal filesystem effimero del container.
 - Il rollout `billingMode` e' validato in produzione: il blocco owner-side deve scattare solo per `customer_paid` non operativo, mentre il sito `incubating` resta gestibile normalmente.
 - Il wrapper locale `site:handoff:prod` deve tollerare output remoto non strettamente JSON, perche' `handoff-site` stampa anche log operativi prima del payload finale.
 - Il portal/admin layer resta definitivamente Postgres-only; SQLite non è più un fallback supportato.
@@ -780,6 +785,7 @@
   - rimosse solo le righe `site_access` dell'admin, senza cancellare `site_settings` o `entitlements`, per evitare perdita non necessaria di storico/config
 
 ## Next
+- Aggiungere un backup esplicito del path host Postgres o un `pg_dump` schedulato, perche' il bind mount protegge dai recreate del container ma non da errori umani o guasto disco VPS.
 - Pushare anche il fix locale di `site:handoff:prod` e allineare il repo, senza bisogno di rollout server-side aggiuntivo.
 - Capire perche' `handoff-site` production puo' restare appeso quando viene rilanciato verso un owner esistente (`danilocmp@hotmail.it`), dato che l'E2E ha richiesto restore manuale via SQL/registry.
 - Quando servirà uno staging reale, provisionare un database Postgres dedicato con lo stesso pattern `portal-local` / `portal-prod`.

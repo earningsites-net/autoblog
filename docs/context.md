@@ -59,6 +59,13 @@ This file stores durable project context shared across tasks.
 - Stato attuale Postgres portal:
   - local dev usa il Postgres del compose `infra/n8n` con database dedicato (`autoblog_portal_local`) bootstrapato via `npm run portal:postgres:bootstrap`
   - production IONOS usa Postgres dedicato per il portal (`autoblog_portal_prod`) sullo stesso server Postgres di n8n, con `PORTAL_DATABASE_URL` in `/etc/autoblog/engine.env`
+  - sul VPS production il container `autoblog-postgres` persiste i dati tramite bind mount host:
+    - host: `/srv/auto-blog-project/infra/n8n/postgres`
+    - container: `/var/lib/postgresql/data`
+  - quindi un normale `docker compose up -d` / recreate del container non perde dati; il rischio reale di perdita arriva da:
+    - cancellazione manuale della directory host
+    - `docker compose down -v` se la strategia di storage venisse cambiata a volume nominato
+    - snapshot/backup assenti in caso di guasto disco VPS
 - Per ambienti `local|staging|prod` il portal puo' usare lo stesso server Postgres di n8n, ma con database + utente dedicati e credenziali separate; il compose n8n espone Postgres solo su `127.0.0.1:${POSTGRES_PORT}`.
 - I comandi ops che toccano il portal runtime (`autoblog handoff-site`, `site:handoff:prod`) devono usare la stessa `PORTAL_DATABASE_URL` del servizio, oppure si rischia di scrivere nel backend sbagliato.
 - I file runtime (`registry`, `.env.generated`) restano file-based e non entrano nel DB Postgres.
