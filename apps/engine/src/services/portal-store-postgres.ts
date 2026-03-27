@@ -9,7 +9,11 @@ import type {
   PortalSiteSummary,
   PortalUser
 } from './portal-store-types';
-import { normalizePortalSiteBillingMode } from './portal-store-types';
+import {
+  normalizePortalSiteBillingMode,
+  normalizePortalSiteBillingStatus,
+  normalizePortalSiteEntitlementStatus
+} from './portal-store-types';
 import type { PortalStoreAdapter } from './portal-store-adapter';
 
 function isoNow() {
@@ -114,18 +118,12 @@ function asEntitlement(row: EntitlementRow): PortalSiteEntitlement {
     pendingMonthlyQuota: Math.max(0, Number(row.pending_monthly_quota || 0)),
     pendingEffectiveAt: String(row.pending_effective_at || ''),
     pendingStripePriceId: String(row.pending_stripe_price_id || ''),
-    status: (row.status === 'paused' || row.status === 'stopped' ? row.status : 'active') as PortalSiteEntitlement['status'],
+    status: normalizePortalSiteEntitlementStatus(row.status),
     stripeCustomerId: row.stripe_customer_id || '',
     stripeSubscriptionId: row.stripe_subscription_id || '',
     stripePriceId: row.stripe_price_id || '',
     billingMode: normalizePortalSiteBillingMode(row.billing_mode),
-    billingStatus:
-      row.billing_status === 'active' ||
-      row.billing_status === 'overdue' ||
-      row.billing_status === 'canceled' ||
-      row.billing_status === 'trial'
-        ? row.billing_status
-        : 'n/a' as PortalSiteEntitlement['billingStatus'],
+    billingStatus: normalizePortalSiteBillingStatus(row.billing_status),
     updatedAt: row.updated_at
   };
 }
@@ -144,6 +142,27 @@ export class PostgresPortalStore implements PortalStoreAdapter {
 
   async init() {
     const statements = [
+      `DO $$
+      BEGIN
+        CREATE TYPE portal_entitlement_status AS ENUM ('active', 'paused', 'stopped');
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END
+      $$`,
+      `DO $$
+      BEGIN
+        CREATE TYPE portal_billing_mode AS ENUM ('customer_paid', 'incubating', 'complimentary');
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END
+      $$`,
+      `DO $$
+      BEGIN
+        CREATE TYPE portal_billing_status AS ENUM ('n/a', 'trial', 'active', 'overdue', 'canceled');
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END
+      $$`,
       `CREATE TABLE IF NOT EXISTS users (
         id BIGSERIAL PRIMARY KEY,
         email TEXT NOT NULL UNIQUE,
@@ -199,12 +218,12 @@ export class PostgresPortalStore implements PortalStoreAdapter {
         pending_monthly_quota INTEGER NOT NULL DEFAULT 0,
         pending_effective_at TEXT NOT NULL DEFAULT '',
         pending_stripe_price_id TEXT NOT NULL DEFAULT '',
-        status TEXT NOT NULL DEFAULT 'active',
+        status portal_entitlement_status NOT NULL DEFAULT 'active',
         stripe_customer_id TEXT NOT NULL DEFAULT '',
         stripe_subscription_id TEXT NOT NULL DEFAULT '',
         stripe_price_id TEXT NOT NULL DEFAULT '',
-        billing_mode TEXT NOT NULL DEFAULT 'incubating',
-        billing_status TEXT NOT NULL DEFAULT 'trial',
+        billing_mode portal_billing_mode NOT NULL DEFAULT 'incubating',
+        billing_status portal_billing_status NOT NULL DEFAULT 'trial',
         updated_at TEXT NOT NULL
       )`,
       `CREATE TABLE IF NOT EXISTS processed_webhook_events (
@@ -224,7 +243,32 @@ export class PostgresPortalStore implements PortalStoreAdapter {
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_monthly_quota INTEGER NOT NULL DEFAULT 0`,
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_effective_at TEXT NOT NULL DEFAULT ''`,
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_stripe_price_id TEXT NOT NULL DEFAULT ''`,
-      `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS billing_mode TEXT NOT NULL DEFAULT 'incubating'`
+      `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS billing_mode portal_billing_mode NOT NULL DEFAULT 'incubating'`,
+      `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS billing_status portal_billing_status NOT NULL DEFAULT 'trial'`,
+      `ALTER TABLE entitlements ALTER COLUMN status DROP DEFAULT`,
+      `ALTER TABLE entitlements ALTER COLUMN status TYPE portal_entitlement_status USING (
+        CASE
+          WHEN status IN ('active', 'paused', 'stopped') THEN status::portal_entitlement_status
+          ELSE 'active'::portal_entitlement_status
+        END
+      )`,
+      `ALTER TABLE entitlements ALTER COLUMN status SET DEFAULT 'active'`,
+      `ALTER TABLE entitlements ALTER COLUMN billing_mode DROP DEFAULT`,
+      `ALTER TABLE entitlements ALTER COLUMN billing_mode TYPE portal_billing_mode USING (
+        CASE
+          WHEN billing_mode IN ('customer_paid', 'incubating', 'complimentary') THEN billing_mode::portal_billing_mode
+          ELSE 'incubating'::portal_billing_mode
+        END
+      )`,
+      `ALTER TABLE entitlements ALTER COLUMN billing_mode SET DEFAULT 'incubating'`,
+      `ALTER TABLE entitlements ALTER COLUMN billing_status DROP DEFAULT`,
+      `ALTER TABLE entitlements ALTER COLUMN billing_status TYPE portal_billing_status USING (
+        CASE
+          WHEN billing_status IN ('n/a', 'trial', 'active', 'overdue', 'canceled') THEN billing_status::portal_billing_status
+          ELSE 'n/a'::portal_billing_status
+        END
+      )`,
+      `ALTER TABLE entitlements ALTER COLUMN billing_status SET DEFAULT 'trial'`
     ];
 
     for (const statement of statements) {
@@ -661,22 +705,12 @@ export class PostgresPortalStore implements PortalStoreAdapter {
       pendingMonthlyQuota: Number(patch.pendingMonthlyQuota ?? current.pendingMonthlyQuota ?? 0),
       pendingEffectiveAt: String(patch.pendingEffectiveAt ?? current.pendingEffectiveAt ?? ''),
       pendingStripePriceId: String(patch.pendingStripePriceId ?? current.pendingStripePriceId ?? ''),
-      status: (
-        patch.status === 'paused' || patch.status === 'stopped' || patch.status === 'active' ? patch.status : current.status
-      ) as PortalSiteEntitlement['status'],
+      status: normalizePortalSiteEntitlementStatus(patch.status ?? current.status),
       stripeCustomerId: String(patch.stripeCustomerId ?? current.stripeCustomerId ?? ''),
       stripeSubscriptionId: String(patch.stripeSubscriptionId ?? current.stripeSubscriptionId ?? ''),
       stripePriceId: String(patch.stripePriceId ?? current.stripePriceId ?? ''),
       billingMode: normalizePortalSiteBillingMode(patch.billingMode ?? current.billingMode),
-      billingStatus: (
-        patch.billingStatus === 'trial' ||
-        patch.billingStatus === 'active' ||
-        patch.billingStatus === 'overdue' ||
-        patch.billingStatus === 'canceled' ||
-        patch.billingStatus === 'n/a'
-          ? patch.billingStatus
-          : current.billingStatus
-      ) as PortalSiteEntitlement['billingStatus'],
+      billingStatus: normalizePortalSiteBillingStatus(patch.billingStatus ?? current.billingStatus),
       updatedAt
     };
 

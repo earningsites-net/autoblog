@@ -23,6 +23,18 @@ function normalizeBillingMode(value) {
   return 'incubating';
 }
 
+function normalizeEntitlementStatus(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'paused' || raw === 'stopped' || raw === 'active') return raw;
+  return 'active';
+}
+
+function normalizeBillingStatus(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'trial' || raw === 'active' || raw === 'overdue' || raw === 'canceled' || raw === 'n/a') return raw;
+  return 'n/a';
+}
+
 function getCurrentMonthWindow() {
   const now = new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -41,6 +53,27 @@ function hashPassword(password) {
 
 export async function ensurePostgresPortalSchema(sql) {
   const statements = [
+    `DO $$
+    BEGIN
+      CREATE TYPE portal_entitlement_status AS ENUM ('active', 'paused', 'stopped');
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END
+    $$`,
+    `DO $$
+    BEGIN
+      CREATE TYPE portal_billing_mode AS ENUM ('customer_paid', 'incubating', 'complimentary');
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END
+    $$`,
+    `DO $$
+    BEGIN
+      CREATE TYPE portal_billing_status AS ENUM ('n/a', 'trial', 'active', 'overdue', 'canceled');
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END
+    $$`,
     `CREATE TABLE IF NOT EXISTS users (
       id BIGSERIAL PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
@@ -94,12 +127,12 @@ export async function ensurePostgresPortalSchema(sql) {
       pending_monthly_quota INTEGER NOT NULL DEFAULT 0,
       pending_effective_at TEXT NOT NULL DEFAULT '',
       pending_stripe_price_id TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'active',
+      status portal_entitlement_status NOT NULL DEFAULT 'active',
       stripe_customer_id TEXT NOT NULL DEFAULT '',
       stripe_subscription_id TEXT NOT NULL DEFAULT '',
       stripe_price_id TEXT NOT NULL DEFAULT '',
-      billing_mode TEXT NOT NULL DEFAULT 'incubating',
-      billing_status TEXT NOT NULL DEFAULT 'trial',
+      billing_mode portal_billing_mode NOT NULL DEFAULT 'incubating',
+      billing_status portal_billing_status NOT NULL DEFAULT 'trial',
       updated_at TEXT NOT NULL
     )`,
     `CREATE TABLE IF NOT EXISTS processed_webhook_events (
@@ -119,7 +152,32 @@ export async function ensurePostgresPortalSchema(sql) {
     `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_monthly_quota INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_effective_at TEXT NOT NULL DEFAULT ''`,
     `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_stripe_price_id TEXT NOT NULL DEFAULT ''`,
-    `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS billing_mode TEXT NOT NULL DEFAULT 'incubating'`
+    `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS billing_mode portal_billing_mode NOT NULL DEFAULT 'incubating'`,
+    `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS billing_status portal_billing_status NOT NULL DEFAULT 'trial'`,
+    `ALTER TABLE entitlements ALTER COLUMN status DROP DEFAULT`,
+    `ALTER TABLE entitlements ALTER COLUMN status TYPE portal_entitlement_status USING (
+      CASE
+        WHEN status IN ('active', 'paused', 'stopped') THEN status::portal_entitlement_status
+        ELSE 'active'::portal_entitlement_status
+      END
+    )`,
+    `ALTER TABLE entitlements ALTER COLUMN status SET DEFAULT 'active'`,
+    `ALTER TABLE entitlements ALTER COLUMN billing_mode DROP DEFAULT`,
+    `ALTER TABLE entitlements ALTER COLUMN billing_mode TYPE portal_billing_mode USING (
+      CASE
+        WHEN billing_mode IN ('customer_paid', 'incubating', 'complimentary') THEN billing_mode::portal_billing_mode
+        ELSE 'incubating'::portal_billing_mode
+      END
+    )`,
+    `ALTER TABLE entitlements ALTER COLUMN billing_mode SET DEFAULT 'incubating'`,
+    `ALTER TABLE entitlements ALTER COLUMN billing_status DROP DEFAULT`,
+    `ALTER TABLE entitlements ALTER COLUMN billing_status TYPE portal_billing_status USING (
+      CASE
+        WHEN billing_status IN ('n/a', 'trial', 'active', 'overdue', 'canceled') THEN billing_status::portal_billing_status
+        ELSE 'n/a'::portal_billing_status
+      END
+    )`,
+    `ALTER TABLE entitlements ALTER COLUMN billing_status SET DEFAULT 'trial'`
   ];
 
   for (const statement of statements) {
@@ -224,8 +282,8 @@ async function createPostgresPortalStore(postgresUrl) {
         ...current,
         ...patch,
         billingMode: normalizeBillingMode(patch.billingMode ?? current.billingMode),
-        billingStatus: String(patch.billingStatus ?? current.billingStatus ?? 'n/a'),
-        status: String(patch.status ?? current.status ?? 'active'),
+        billingStatus: normalizeBillingStatus(patch.billingStatus ?? current.billingStatus),
+        status: normalizeEntitlementStatus(patch.status ?? current.status),
         updatedAt: nowIso()
       };
       await sql.unsafe(

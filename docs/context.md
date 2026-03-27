@@ -63,6 +63,11 @@ This file stores durable project context shared across tasks.
 - Stato attuale Postgres portal:
   - local dev usa il Postgres del compose `infra/n8n` con database dedicato (`autoblog_portal_local`) bootstrapato via `npm run portal:postgres:bootstrap`
   - production IONOS usa Postgres dedicato per il portal (`autoblog_portal_prod`) sullo stesso server Postgres di n8n, con `PORTAL_DATABASE_URL` in `/etc/autoblog/engine.env`
+  - i campi dominio del portal su `entitlements` non sono piu' `TEXT` liberi:
+    - `status` -> enum `portal_entitlement_status`
+    - `billing_mode` -> enum `portal_billing_mode`
+    - `billing_status` -> enum `portal_billing_status`
+  - per questo MVP i valori chiusi restano modellati come enum Postgres, non come tabelle relazionate di dominio
   - sul VPS production il container `autoblog-postgres` persiste i dati tramite bind mount host:
     - host: `/srv/auto-blog-project/infra/n8n/postgres`
     - container: `/var/lib/postgresql/data`

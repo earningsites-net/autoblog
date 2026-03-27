@@ -70,6 +70,22 @@ export function normalizePortalSiteBillingMode(value: unknown): PortalSiteBillin
   return 'incubating';
 }
 
+export function normalizePortalSiteEntitlementStatus(value: unknown): PortalSiteEntitlement['status'] {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'paused' || raw === 'stopped' || raw === 'active') {
+    return raw;
+  }
+  return 'active';
+}
+
+export function normalizePortalSiteBillingStatus(value: unknown): PortalSiteEntitlement['billingStatus'] {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'trial' || raw === 'active' || raw === 'overdue' || raw === 'canceled' || raw === 'n/a') {
+    return raw;
+  }
+  return 'n/a';
+}
+
 export function isPortalSiteOperational(entitlement: PortalSiteEntitlement): boolean {
   if (entitlement.status !== 'active') return false;
   if (entitlement.billingMode !== 'customer_paid') return true;
