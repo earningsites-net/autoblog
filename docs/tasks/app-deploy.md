@@ -989,6 +989,16 @@
 - Gli ID `N8N_WORKFLOW_ID_*` possono diventare stantii dopo import bootstrap su istanze n8n nuove; senza riallineamento gli orchestratori falliscono con `Workflow does not exist`.
 
 ## Done
+- Rollout production completato per la migrazione enum del portal:
+  - commit pushato su `main`: `52444fd` (`Migrate portal entitlement domains to enums`)
+  - VPS production allineato con `git pull --ff-only origin main`
+  - `autoblog-engine` riavviato con successo
+  - verifica schema su `autoblog_portal_prod` completata via `information_schema.columns`:
+    - `status -> portal_entitlement_status`
+    - `billing_mode -> portal_billing_mode`
+    - `billing_status -> portal_billing_status`
+  - smoke post-rollout:
+    - `http://127.0.0.1:8787/healthz` sul VPS -> `ok:true`
 - Migrati i campi stato/billing del portal da `TEXT` libero a enum Postgres su `entitlements`:
   - engine: `apps/engine/src/services/portal-store-postgres.ts`
   - CLI/runtime store: `scripts/lib/portal-store.mjs`
@@ -1279,11 +1289,6 @@
 - Il prompt immagini deve restare article-driven: titolo ed excerpt decidono il concept, mentre il workflow aggiunge solo guardrail generici e limiti di sicurezza/branding.
 
 ## Next
-- Rollout production della migrazione enum:
-  - push su `main`
-  - `git pull --ff-only origin main` sul VPS
-  - restart `autoblog-engine`
-  - verifica schema su `autoblog_portal_prod` via `information_schema.columns`
 - Aggiornare `site:handoff`/runbook di handoff per esplicitare i casi:
   - `--billing-mode customer_paid` per consegna cliente
   - `--billing-mode complimentary` per beta/free access
