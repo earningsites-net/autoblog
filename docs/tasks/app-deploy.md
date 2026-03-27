@@ -4,6 +4,20 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Rollout production completato per il refactor `inactive site`:
+  - commit pushato su `main`: `32f6817` (`Align inactive-site UX across portal and web`)
+  - VPS engine allineato con `git pull --ff-only origin main`
+  - `autoblog-engine` riavviato con successo
+  - verifiche production:
+    - `https://aiblogs.earningsites.net/healthz` -> `ok:true`
+    - `https://aiblogs.earningsites.net/api/public/sites/ai-blog-news/state` -> `publicStatus=offline`, `operationalStatus=stopped`, `billingMode=customer_paid`
+    - `https://aiblogs.earningsites.net/portal` serve il nuovo JS embedded con:
+      - banner `Site inactive`
+      - copy `No active subscription is attached to this site...`
+      - hint `Monetization settings are visible, but updates stay locked...`
+- Verificato anche il lato web live:
+  - il progetto Vercel collegato al repo ha già recepito il push su `main`
+  - `https://ai-blog-news-mu.vercel.app` serve ora la schermata offline pubblica (`Site Offline`, `AI Blog News is temporarily unavailable`, `Owner Portal`)
 - Implementato localmente il riallineamento `inactive site` fra portal e frontend pubblico:
   - engine:
     - aggiunto endpoint pubblico `GET /api/public/sites/:siteSlug/state` basato su Postgres + blueprint locale
@@ -837,8 +851,6 @@
   - rimosse solo le righe `site_access` dell'admin, senza cancellare `site_settings` o `entitlements`, per evitare perdita non necessaria di storico/config
 
 ## Next
-- Rollout engine production del nuovo endpoint pubblico e del fix portal inactive UX.
-- Deploy Vercel del frontend per rendere operativo il gate offline sul sito pubblico.
 - Eseguire un E2E completo su `ai-blog-news`:
   - `customer_paid + inactive` -> portal con banner + billing attivo + sito pubblico offline
   - `incubating/complimentary + active` -> portal normale + sito pubblico online
