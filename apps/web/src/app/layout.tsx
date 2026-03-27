@@ -23,8 +23,7 @@ import { defaultMetadata } from '@web/lib/seo';
 import {
   getPublicSiteRuntimeState,
   getPublicSiteSettings,
-  resolveAdPublisherId,
-  resolvePortalBaseUrl
+  resolveAdPublisherId
 } from '@web/lib/site-settings';
 import { siteConfig } from '@web/lib/site';
 import { getActiveSiteTheme } from '@web/lib/theme';
@@ -97,7 +96,6 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const bodyStyle = theme.cssVars as CSSProperties;
   const runtimeState = await getPublicSiteRuntimeState();
   const publicSiteInactive = runtimeState.publicStatus === 'offline';
-  const portalBaseUrl = resolvePortalBaseUrl();
   const siteSettings = await getPublicSiteSettings();
   const adsPublisherId = resolveAdPublisherId(siteSettings);
   const adsEnabled =
@@ -163,10 +161,7 @@ gtag('config', '${gaId}');`}
           </>
         ) : null}
         {publicSiteInactive ? (
-          <SiteOffline
-            brandName={runtimeState.brandName || siteConfig.name}
-            portalBaseUrl={portalBaseUrl}
-          />
+          <SiteOffline brandName={runtimeState.brandName || siteConfig.name} />
         ) : (
           <div className="min-h-screen">
             <SiteHeader />

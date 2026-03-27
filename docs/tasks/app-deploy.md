@@ -1003,6 +1003,11 @@
     - la card offline usa ora il gradiente `auth-brand` del portal (`#2b66ff -> #3551dc -> #8b3cf2`)
     - contenuto centrato
     - titolo ridotto di uno step per migliorare il bilanciamento visivo
+  - refinement successivo 3:
+    - nome del blog separato dal claim `is temporarily unavailable.`
+    - gerarchia visiva tipo `h1` + `h2`
+    - il link owner usa ora sempre `/portal` sul dominio del sito
+    - aggiunta route web `apps/web/src/app/portal/page.tsx` che redirige al portal centrale con `siteSlug`
   - il link resta funzionale verso il portal reale configurato (`<portalBaseUrl>/portal`), con fallback locale a `/portal`
   - verifica locale: `npm --workspace @autoblog/web run typecheck`
 - Rollout production completato per la migrazione enum del portal:
@@ -1242,7 +1247,9 @@
 - La pagina pubblica `site offline` deve usare uno stile shared di piattaforma, non i token del tema del sito:
   - e' una schermata operativa/commerciale
   - non deve cambiare font, background o accenti in base al brand theme editoriale
-- Il link owner della schermata offline non deve essere un semplice path relativo se esiste `portalBaseUrl`, per evitare 404 sul sito pubblico Vercel quando il portal vive su dominio separato.
+- Il dominio del sito deve esporre un path `/portal` first-party che faccia redirect al portal centrale con `siteSlug`; cosi:
+  - la schermata offline puo' linkare `/portal`
+  - il dominio brandizzato resta il punto di ingresso anche per l'owner
 - Per gli stati chiusi del portal non usiamo tabelle relazionate di dominio:
   - `entitlements.status`
   - `entitlements.billing_mode`

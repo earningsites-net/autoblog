@@ -2,7 +2,6 @@ import Link from 'next/link';
 
 type SiteOfflineProps = {
   brandName: string;
-  portalBaseUrl: string;
 };
 
 const portalShellStyle = {
@@ -16,8 +15,8 @@ const portalCardStyle = {
     'radial-gradient(420px 240px at -8% -10%, rgba(255,255,255,.24) 0%, rgba(255,255,255,0) 65%), radial-gradient(340px 200px at 120% 110%, rgba(255,255,255,.2) 0%, rgba(255,255,255,0) 62%), linear-gradient(140deg, #2b66ff 0%, #3551dc 48%, #8b3cf2 100%)'
 } as const;
 
-export function SiteOffline({ brandName, portalBaseUrl }: SiteOfflineProps) {
-  const ownerPortalHref = portalBaseUrl ? `${portalBaseUrl}/portal` : '/portal';
+export function SiteOffline({ brandName }: SiteOfflineProps) {
+  const ownerPortalHref = '/portal';
 
   return (
     <div style={portalShellStyle} className="min-h-screen px-4 py-8 sm:px-6">
@@ -27,9 +26,12 @@ export function SiteOffline({ brandName, portalBaseUrl }: SiteOfflineProps) {
           className="w-full max-w-3xl rounded-[1.75rem] border border-[#dfe6f5] px-8 py-10 text-center text-white shadow-[0_30px_84px_-44px_rgba(18,48,115,.46)] sm:px-12 sm:py-14"
         >
           <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-white/80">Site Offline</p>
-          <h1 className="mt-4 text-3xl font-semibold leading-[1.08] tracking-[-0.02em] sm:text-4xl">
-            {brandName} is temporarily unavailable.
+          <h1 className="mt-4 text-4xl font-semibold leading-[1.02] tracking-[-0.02em] sm:text-5xl">
+            {brandName}
           </h1>
+          <p className="mt-3 text-xl font-medium leading-[1.15] tracking-[-0.01em] text-white/92 sm:text-2xl">
+            is temporarily unavailable.
+          </p>
           <div className="mt-8 border-t border-white/20 pt-5 text-sm text-white/90">
             <Link href={ownerPortalHref} className="font-semibold text-white underline underline-offset-2 hover:text-white/85">
               Site owner? Access the portal
