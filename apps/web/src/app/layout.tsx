@@ -18,8 +18,15 @@ import './globals.css';
 import { SiteHeader } from '@web/components/site-header';
 import { SiteFooter } from '@web/components/site-footer';
 import { RouteLoadingOverlay } from '@web/components/route-loading-overlay';
+import { SiteOffline } from '@web/components/site-offline';
 import { defaultMetadata } from '@web/lib/seo';
-import { getPublicSiteSettings, resolveAdPublisherId } from '@web/lib/site-settings';
+import {
+  getPublicSiteRuntimeState,
+  getPublicSiteSettings,
+  resolveAdPublisherId,
+  resolvePortalBaseUrl
+} from '@web/lib/site-settings';
+import { siteConfig } from '@web/lib/site';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 const sora = Sora({
@@ -88,9 +95,13 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const gaId = process.env.GA_MEASUREMENT_ID;
   const theme = getActiveSiteTheme();
   const bodyStyle = theme.cssVars as CSSProperties;
+  const runtimeState = await getPublicSiteRuntimeState();
+  const publicSiteInactive = runtimeState.publicStatus === 'offline';
+  const portalBaseUrl = resolvePortalBaseUrl();
   const siteSettings = await getPublicSiteSettings();
   const adsPublisherId = resolveAdPublisherId(siteSettings);
-  const adsEnabled = siteSettings.adSlotsEnabled && (Boolean(adsPublisherId) || process.env.NODE_ENV !== 'production');
+  const adsEnabled =
+    !publicSiteInactive && siteSettings.adSlotsEnabled && (Boolean(adsPublisherId) || process.env.NODE_ENV !== 'production');
   const adsMode = siteSettings.adsMode || 'auto';
   const adsPreviewEnabled = process.env.NODE_ENV !== 'production' ? true : siteSettings.adsPreviewEnabled;
 
@@ -151,11 +162,19 @@ gtag('config', '${gaId}');`}
             </Script>
           </>
         ) : null}
-        <div className="min-h-screen">
-          <SiteHeader />
-          <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
-          <SiteFooter />
-        </div>
+        {publicSiteInactive ? (
+          <SiteOffline
+            brandName={runtimeState.brandName || siteConfig.name}
+            siteSlug={runtimeState.siteSlug || siteConfig.slug}
+            portalBaseUrl={portalBaseUrl}
+          />
+        ) : (
+          <div className="min-h-screen">
+            <SiteHeader />
+            <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+            <SiteFooter />
+          </div>
+        )}
         <Suspense fallback={null}>
           <RouteLoadingOverlay />
         </Suspense>

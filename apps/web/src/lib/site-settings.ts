@@ -34,6 +34,21 @@ export type PublicSiteSettings = {
   };
 };
 
+export type PublicSiteRuntimeState = {
+  siteSlug: string;
+  brandName: string;
+  inactiveForOwner: boolean;
+  operationalStatus: 'active' | 'stopped';
+  publicStatus: 'online' | 'offline';
+  entitlement: {
+    plan: 'base' | 'standard' | 'pro';
+    status: 'active' | 'stopped';
+    billingMode: 'customer_paid' | 'incubating' | 'complimentary';
+    billingStatus: 'n/a' | 'trial' | 'active' | 'overdue' | 'canceled';
+  };
+  source: 'engine' | 'fallback';
+};
+
 function currentMonthWindow() {
   const now = new Date();
   const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
@@ -186,4 +201,96 @@ export function resolveAdPublisherId(settings: PublicSiteSettings) {
 
 export function resolvePortalBaseUrl() {
   return String(process.env.NEXT_PUBLIC_PORTAL_BASE_URL || process.env.PORTAL_BASE_URL || '').replace(/\/$/, '');
+}
+
+function resolveEnginePublicBaseUrl() {
+  return String(
+    process.env.CONTENT_ENGINE_URL || process.env.NEXT_PUBLIC_PORTAL_BASE_URL || process.env.PORTAL_BASE_URL || ''
+  ).replace(/\/$/, '');
+}
+
+function defaultRuntimeState(): PublicSiteRuntimeState {
+  return {
+    siteSlug: siteConfig.slug,
+    brandName: siteConfig.name,
+    inactiveForOwner: false,
+    operationalStatus: 'active',
+    publicStatus: 'online',
+    entitlement: {
+      plan: 'base',
+      status: 'active',
+      billingMode: 'incubating',
+      billingStatus: 'n/a'
+    },
+    source: 'fallback'
+  };
+}
+
+async function fetchPublicSiteRuntimeStateUncached(): Promise<PublicSiteRuntimeState> {
+  const fallback = defaultRuntimeState();
+  const baseUrl = resolveEnginePublicBaseUrl();
+  if (!baseUrl || !siteConfig.slug) return fallback;
+
+  try {
+    const response = await fetch(`${baseUrl}/api/public/sites/${encodeURIComponent(siteConfig.slug)}/state`, {
+      cache: 'no-store'
+    });
+    if (!response.ok) return fallback;
+    const payload = (await response.json()) as {
+      site?: {
+        siteSlug?: string;
+        brandName?: string;
+        inactiveForOwner?: boolean;
+        operationalStatus?: string;
+        publicStatus?: string;
+        entitlement?: {
+          plan?: string;
+          status?: string;
+          billingMode?: string;
+          billingStatus?: string;
+        };
+      };
+    };
+
+    const site = payload.site;
+    if (!site) return fallback;
+
+    return {
+      siteSlug: String(site.siteSlug || fallback.siteSlug),
+      brandName: String(site.brandName || fallback.brandName),
+      inactiveForOwner: Boolean(site.inactiveForOwner),
+      operationalStatus: site.operationalStatus === 'stopped' ? 'stopped' : 'active',
+      publicStatus: site.publicStatus === 'offline' ? 'offline' : 'online',
+      entitlement: {
+        plan:
+          site.entitlement?.plan === 'standard' || site.entitlement?.plan === 'pro' || site.entitlement?.plan === 'base'
+            ? site.entitlement.plan
+            : fallback.entitlement.plan,
+        status: site.entitlement?.status === 'stopped' ? 'stopped' : 'active',
+        billingMode:
+          site.entitlement?.billingMode === 'customer_paid' ||
+          site.entitlement?.billingMode === 'incubating' ||
+          site.entitlement?.billingMode === 'complimentary'
+            ? site.entitlement.billingMode
+            : fallback.entitlement.billingMode,
+        billingStatus:
+          site.entitlement?.billingStatus === 'n/a' ||
+          site.entitlement?.billingStatus === 'trial' ||
+          site.entitlement?.billingStatus === 'active' ||
+          site.entitlement?.billingStatus === 'overdue' ||
+          site.entitlement?.billingStatus === 'canceled'
+            ? site.entitlement.billingStatus
+            : fallback.entitlement.billingStatus
+      },
+      source: 'engine'
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+const fetchPublicSiteRuntimeStateCached = cache(fetchPublicSiteRuntimeStateUncached);
+
+export async function getPublicSiteRuntimeState() {
+  return fetchPublicSiteRuntimeStateCached();
 }

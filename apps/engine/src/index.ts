@@ -1582,43 +1582,42 @@ app.get('/portal', async (_req, reply) => {
             '</strong>. Current quota remains active until then.</div>'
           : '';
         const currentAdsMode = site.settings?.adsMode === 'manual' ? 'manual' : 'auto';
+        const inactiveReason =
+          site.entitlement?.billingStatus === 'overdue'
+            ? 'Payment is overdue. Reactivate the subscription to resume publishing and site management.'
+            : 'No active subscription is attached to this site. Choose a plan in Billing & Plan or open the billing portal to reactivate it.';
+        const inactiveBannerHtml = inactiveForOwner
+          ? \`
+            <div class="billing-note warn" style="margin-bottom:16px;">
+              <strong>Site inactive.</strong> \${escapeHtml(inactiveReason)}
+              <div class="hint" style="margin-top:8px;">Billing mode: <strong>\${escapeHtml(billingMode)}</strong> • Current plan: <strong>\${escapeHtml(currentPlanLabel)}</strong></div>
+              <div class="actions" style="margin-top:12px;">
+                <button class="ghost" data-action="open-billing" data-slug="\${escapeHtml(slug)}">Open Billing Portal</button>
+              </div>
+            </div>
+          \`
+          : '';
+        const monetizationLockHintHtml = inactiveForOwner
+          ? '<div class="hint" style="margin-bottom:12px;">Monetization settings are visible, but updates stay locked until the site is reactivated.</div>'
+          : '';
+        const disableMutationsAttr = inactiveForOwner ? 'disabled aria-disabled="true" title="Site inactive"' : '';
+        const isCurrentPlanDisabled = (plan) => currentPlan === plan && !inactiveForOwner;
+        const planButtonLabel = (plan, label) => {
+          if (currentPlan === plan) return inactiveForOwner ? 'Activate ' + label : 'Current plan';
+          return 'Choose ' + label;
+        };
         const wrapper = document.createElement('div');
         wrapper.className = 'panel';
-        if (inactiveForOwner) {
-          const inactiveReason =
-            site.entitlement?.billingStatus === 'overdue'
-              ? 'Payment is overdue. Reactivate the subscription to resume publishing and site management.'
-              : 'This site is currently inactive. Choose a plan or open the billing portal to reactivate it.';
-          wrapper.innerHTML = \`
-            <div class="title">
-              <div>
-                <h3>\${escapeHtml(site.brandName || slug)}</h3>
-                <p class="subtitle">Site slug: <code>\${escapeHtml(slug)}</code></p>
-              </div>
-              <span class="chip">Site inactive</span>
-            </div>
-            <div class="billing-note warn">
-              <strong>Access limited.</strong> \${escapeHtml(inactiveReason)}
-            </div>
-            <div class="hint">Billing mode: <strong>\${escapeHtml(billingMode)}</strong> • Current plan: <strong>\${escapeHtml(currentPlanLabel)}</strong></div>
-            <div class="actions">
-              <button class="plan-btn" data-action="start-plan" data-plan="base" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}">Activate Base</button>
-              <button class="plan-btn" data-action="start-plan" data-plan="standard" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}">Activate Standard</button>
-              <button class="plan-btn" data-action="start-plan" data-plan="pro" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}">Activate Pro</button>
-              <button class="ghost" data-action="open-billing" data-slug="\${escapeHtml(slug)}">Open Billing Portal</button>
-            </div>
-          \`;
-          sitesEl.appendChild(wrapper);
-          continue;
-        }
         wrapper.innerHTML = \`
           <div class="title">
             <div>
               <h3>\${escapeHtml(site.brandName || slug)}</h3>
               <p class="subtitle">Site slug: <code>\${escapeHtml(slug)}</code></p>
             </div>
-            <span class="chip">Billing: \${escapeHtml(site.entitlement?.billingStatus || 'trial')}</span>
+            <span class="chip">\${inactiveForOwner ? 'Site inactive' : 'Billing: ' + escapeHtml(site.entitlement?.billingStatus || 'trial')}</span>
           </div>
+
+          \${inactiveBannerHtml}
 
           <div data-view-panel="monetization">
             <input type="hidden" id="adsMode-\${idSafe}" value="\${escapeHtml(currentAdsMode)}" />
@@ -1656,8 +1655,9 @@ app.get('/portal', async (_req, reply) => {
               </div>
             </div>
 
+            \${monetizationLockHintHtml}
             <div class="actions">
-              <button class="primary" data-action="save-ads" data-slug="\${escapeHtml(slug)}">Save Monetization</button>
+              <button class="primary" data-action="save-ads" data-slug="\${escapeHtml(slug)}" \${disableMutationsAttr}>Save Monetization</button>
               <a href="${baseUrl}/api/factory/site/\${encodeURIComponent(slug)}/status" target="_blank" class="inline-link">Site status JSON</a>
               <p id="saveAdsFeedback-\${idSafe}" class="action-feedback c12" role="status" aria-live="polite"></p>
             </div>
@@ -1677,7 +1677,7 @@ app.get('/portal', async (_req, reply) => {
                 <div class="spacer"></div>
                 <div class="price">4,99 USD<small>/month</small></div>
                 <p class="meta">Starter plan for small traffic sites.</p>
-                <button class="plan-btn \${currentPlan === 'base' ? 'active' : ''}" data-action="start-plan" data-plan="base" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${currentPlan === 'base' ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${currentPlan === 'base' ? 'Current plan' : 'Choose Base'}</button>
+                <button class="plan-btn \${currentPlan === 'base' ? 'active' : ''}" data-action="start-plan" data-plan="base" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${isCurrentPlanDisabled('base') ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${planButtonLabel('base', 'Base')}</button>
               </div>
               <div class="plan popular">
                 <span class="badge">Most Popular</span>
@@ -1692,7 +1692,7 @@ app.get('/portal', async (_req, reply) => {
                 <div class="spacer"></div>
                 <div class="price">19,90 USD<small>/month</small></div>
                 <p class="meta">Recommended for growing editorial sites.</p>
-                <button class="plan-btn \${currentPlan === 'standard' ? 'active' : ''}" data-action="start-plan" data-plan="standard" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${currentPlan === 'standard' ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${currentPlan === 'standard' ? 'Current plan' : 'Choose Standard'}</button>
+                <button class="plan-btn \${currentPlan === 'standard' ? 'active' : ''}" data-action="start-plan" data-plan="standard" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${isCurrentPlanDisabled('standard') ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${planButtonLabel('standard', 'Standard')}</button>
               </div>
               <div class="plan">
                 <h5>Pro</h5>
@@ -1706,7 +1706,7 @@ app.get('/portal', async (_req, reply) => {
                 <div class="spacer"></div>
                 <div class="price">49,90 USD<small>/month</small></div>
                 <p class="meta">For aggressive growth and scale.</p>
-                <button class="plan-btn \${currentPlan === 'pro' ? 'active' : ''}" data-action="start-plan" data-plan="pro" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${currentPlan === 'pro' ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${currentPlan === 'pro' ? 'Current plan' : 'Choose Pro'}</button>
+                <button class="plan-btn \${currentPlan === 'pro' ? 'active' : ''}" data-action="start-plan" data-plan="pro" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${isCurrentPlanDisabled('pro') ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${planButtonLabel('pro', 'Pro')}</button>
               </div>
             </div>
             <div class="hint">Current plan: <strong>\${escapeHtml(currentPlanLabel)}</strong> • Monthly quota: <strong>\${escapeHtml(site.entitlement?.monthlyQuota || 0)}</strong> • Published this month: <strong>\${escapeHtml(site.entitlement?.publishedThisMonth || 0)}</strong></div>
@@ -2127,6 +2127,40 @@ app.get('/api/portal/sites/:siteSlug', async (req, reply) => {
       ...site,
       inactiveForOwner: isPortalSiteInactiveForOwner(site.entitlement),
       operationalStatus: getOperationalSiteStatus(site.entitlement)
+    }
+  };
+});
+
+app.get('/api/public/sites/:siteSlug/state', async (req, reply) => {
+  const params = req.params as { siteSlug: string };
+  const siteSlug = sanitizeSiteSlug(params.siteSlug);
+  if (!siteSlug) {
+    return reply.code(400).send({ ok: false, error: 'Invalid site slug' });
+  }
+
+  const blueprint = await siteRegistry.getSite(siteSlug);
+  if (!blueprint) {
+    return reply.code(404).send({ ok: false, error: 'Site not found' });
+  }
+
+  const entitlement = await portalStore.getEntitlementEffective(siteSlug);
+  const operationalStatus = getOperationalSiteStatus(entitlement);
+  const inactiveForOwner = isPortalSiteInactiveForOwner(entitlement);
+
+  return {
+    ok: true,
+    site: {
+      siteSlug,
+      brandName: blueprint.brandName || siteSlug,
+      inactiveForOwner,
+      operationalStatus,
+      publicStatus: operationalStatus === 'active' ? 'online' : 'offline',
+      entitlement: {
+        plan: entitlement.plan,
+        status: operationalStatus,
+        billingMode: entitlement.billingMode,
+        billingStatus: entitlement.billingStatus
+      }
     }
   };
 });

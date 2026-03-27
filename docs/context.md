@@ -55,6 +55,10 @@ This file stores durable project context shared across tasks.
     - `incubating`
     - `complimentary`
   - `customer_paid` senza entitlement operativo deve entrare nel portal ma vedere uno stato `site inactive` con sole azioni di billing/reactivation
+  - il web pubblico non deve leggere direttamente Postgres: il source of truth operativo resta il portal DB, ma il frontend legge lo stato tramite un endpoint engine pubblico dedicato
+  - per i siti `customer_paid` non operativi:
+    - il portal resta navigabile con banner `site inactive`
+    - il frontend pubblico deve mostrare una schermata offline al posto del magazine live
 - Il vecchio viewer interno `/ops/db` e il relativo endpoint `/api/ops/db/table` sono stati rimossi: l'ispezione del portal DB va fatta via Postgres esterno (es. DBeaver/SSH tunnel) o query SQL, non tramite route admin nell'engine.
 - Stato attuale Postgres portal:
   - local dev usa il Postgres del compose `infra/n8n` con database dedicato (`autoblog_portal_local`) bootstrapato via `npm run portal:postgres:bootstrap`

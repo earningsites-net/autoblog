@@ -4,6 +4,51 @@
 - Rendere eseguibile il rilascio produzione del pilot `lux-living-01` (web + Sanity + n8n + engine/portal/factory) con staging/production separati e controlli operativi ripetibili.
 
 ## Done
+- Implementato localmente il riallineamento `inactive site` fra portal e frontend pubblico:
+  - engine:
+    - aggiunto endpoint pubblico `GET /api/public/sites/:siteSlug/state` basato su Postgres + blueprint locale
+    - il frontend web puo' leggere lo stato operativo senza accesso diretto al DB e senza dipendere da Sanity come source of truth runtime
+  - portal:
+    - `loadSites()` non sostituisce piu' l'intera dashboard con una card dedicata
+    - mantiene `Monetization` e `Billing & Plan` visibili
+    - aggiunge banner `Site inactive` con CTA `Open Billing Portal`
+    - il piano corrente diventa riattivabile (`Activate Base/Standard/Pro`) quando il sito e' inattivo
+    - `Save Monetization` resta visibile ma disabled quando il sito e' inattivo
+  - web:
+    - aggiunto `SiteOffline`
+    - il layout server-side legge `CONTENT_ENGINE_URL || NEXT_PUBLIC_PORTAL_BASE_URL || PORTAL_BASE_URL`
+    - se l'engine restituisce `publicStatus=offline`, il sito pubblico mostra la schermata offline invece del magazine
+    - ads soppressi quando il sito e' offline
+  - verifiche locali:
+    - `npm --workspace @autoblog/engine run typecheck`
+    - `npm run typecheck`
+- Diagnosticato perche' le ultime modifiche `inactive site` non risultano operative come atteso:
+  - portal engine:
+    - il comportamento attuale e' effettivamente attivo e deriva da `apps/engine/src/index.ts`
+    - `loadSites()` costruisce una card dedicata `Site inactive` e fa `continue`, quindi sostituisce completamente le schermate normali `Monetization` / `Billing & Plan`
+    - inoltre il link `Publishing Controls (Sanity)` viene disabilitato esplicitamente quando `firstSite.inactiveForOwner === true`
+  - web pubblico su Vercel:
+    - `apps/web/src/lib/site-settings.ts` legge `entitlement.status/billingMode/billingStatus`
+    - ma `apps/web/src/app/layout.tsx` e le pagine pubbliche non usano quei campi per applicare alcun gate offline
+    - quindi lo stato `customer_paid + inactive` oggi non puo' produrre una pagina stile Shopify: il sito resta visibile perche' il gate non e' stato implementato
+- Diagnosticato anche il timeout portal osservato dall'utente:
+  - causa reale: sessione DBeaver production `idle in transaction` sulla tabella `entitlements`
+  - il PID bloccante era `195932`
+  - le query `postgres.js` dell'engine su `INSERT INTO entitlements ...` restavano in attesa del lock, causando timeout nginx su:
+    - `/api/portal/sites`
+    - `/api/portal/me`
+    - talvolta `/api/portal/auth/login`
+- Diagnosticato il caso `portal vuoto` per `danilocmp@hotmail.it` / `ai-blog-news`:
+  - in production il `site_access` owner esiste correttamente per l'utente `3`
+  - ma l'entitlement reale non e' `active/trial/incubating`; al momento e':
+    - `plan=base`
+    - `status=inactive`
+    - `billing_mode=customer_paid`
+    - `billing_status=n/a`
+  - il registry production invece e' coerente su:
+    - `ownerEmail=danilocmp@hotmail.it`
+    - `studioUrl=https://ai-blog-news.sanity.studio`
+  - quindi `Publishing Controls` disabilitato e gating portal sono coerenti con lo stato inattivo; la dashboard completamente vuota non lo e' e va verificata contro la sessione utente reale (`/api/portal/me`, `/api/portal/sites`)
 - Verificata la persistenza reale del Postgres production su IONOS:
   - container attivo: `autoblog-postgres`
   - bind mount reale: `/srv/auto-blog-project/infra/n8n/postgres` -> `/var/lib/postgresql/data`
@@ -734,6 +779,13 @@
     - verifica import workflow production: `Checked workflows: 11`, `pass=9 warn=2 fail=0`, `Smoke: pass=11 fail=0 skipped=0`
 
 ## Decisions
+- Il gating del sito pubblico non deve dipendere da Sanity `siteSettings.entitlement` come source of truth operativo.
+- Il frontend Vercel non deve collegarsi direttamente al DB: lo stato operativo passa da un endpoint engine pubblico backed by Postgres.
+- Per i siti inattivi nel portal l'UX corretta e':
+  - schermate normali ancora visibili
+  - banner `Site inactive`
+  - billing/reactivation evidenti
+  - controlli mutabili editoriali/monetization non operativi
 - La persistenza del Postgres production oggi dipende dal bind mount host `infra/n8n/postgres`, non dal filesystem effimero del container.
 - Il rollout `billingMode` e' validato in produzione: il blocco owner-side deve scattare solo per `customer_paid` non operativo, mentre il sito `incubating` resta gestibile normalmente.
 - Il wrapper locale `site:handoff:prod` deve tollerare output remoto non strettamente JSON, perche' `handoff-site` stampa anche log operativi prima del payload finale.
@@ -785,6 +837,19 @@
   - rimosse solo le righe `site_access` dell'admin, senza cancellare `site_settings` o `entitlements`, per evitare perdita non necessaria di storico/config
 
 ## Next
+- Rollout engine production del nuovo endpoint pubblico e del fix portal inactive UX.
+- Deploy Vercel del frontend per rendere operativo il gate offline sul sito pubblico.
+- Eseguire un E2E completo su `ai-blog-news`:
+  - `customer_paid + inactive` -> portal con banner + billing attivo + sito pubblico offline
+  - `incubating/complimentary + active` -> portal normale + sito pubblico online
+- Aggiungere una nota/runbook per l'uso di DBeaver su production:
+  - `auto-commit` attivo
+  - evitare tab `idle in transaction`
+  - usare production in lettura quando possibile
+- Verificare dal browser dell'utente loggato:
+  - `GET /api/portal/me`
+  - `GET /api/portal/sites`
+  per capire se il portal vuoto dipende da una sessione utente diversa da `danilocmp@hotmail.it` oppure da una regressione UI lato client.
 - Aggiungere un backup esplicito del path host Postgres o un `pg_dump` schedulato, perche' il bind mount protegge dai recreate del container ma non da errori umani o guasto disco VPS.
 - Pushare anche il fix locale di `site:handoff:prod` e allineare il repo, senza bisogno di rollout server-side aggiuntivo.
 - Capire perche' `handoff-site` production puo' restare appeso quando viene rilanciato verso un owner esistente (`danilocmp@hotmail.it`), dato che l'E2E ha richiesto restore manuale via SQL/registry.
@@ -872,6 +937,8 @@
   - definizione della policy editoriale: recap/news analysis/roundup invece di news factual in tempo reale
 
 ## Risks
+- Se l'engine pubblico non e' raggiungibile dal web, il layout oggi fa fallback `online` per evitare downtime globale del magazine; questo privilegia availability rispetto a un enforcement hard dello stato offline.
+- C'e' una discrepanza operativa fra lo stato che l'utente pensa di aver impostato (`active/trial/incubating`) e lo stato realmente presente nel Postgres production (`inactive/customer_paid/n-a`); finche' non riallineiamo i dati e la sessione, i sintomi portal possono risultare fuorvianti.
 - Resta un bug aperto nel comando `handoff-site`/`site:handoff:prod` su production: il restore verso un owner gia' esistente puo' andare in hang e ha richiesto cleanup manuale via SQL + registry.
 - Il task file contiene storico del passaggio incrementale `sqlite|postgres`; i blocchi iniziali e `docs/context.md` sono la fonte aggiornata.
 - I comandi/runbook esterni o annotazioni personali che citano ancora `PORTAL_STORE_PROVIDER` o `portal.db` vanno considerati obsoleti.
