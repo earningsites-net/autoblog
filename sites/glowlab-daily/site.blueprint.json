@@ -1,0 +1,210 @@
+{
+  "version": 1,
+  "siteSlug": "glowlab-daily",
+  "brandName": "GlowLab Daily",
+  "siteDescription": "The site focuses on modern beauty, skincare, and self-care routines for everyday users. Content includes practical guides, beginner-friendly routines, product-agnostic tips, and educational articles about ingredients and",
+  "businessMode": "transfer_first",
+  "delivery": {
+    "handoffEnabled": true,
+    "managedEligible": true
+  },
+  "opsDefaults": {
+    "publishEnabled": true,
+    "maxPublishesPerRun": 1,
+    "cadenceRules": [
+      {
+        "label": "Launch burst (1 per 3 minutes)",
+        "startAt": "2026-01-01T00:00:00.000Z",
+        "endAt": "2026-01-02T00:00:00.000Z",
+        "maxPublishes": 1,
+        "perMinutes": 3
+      },
+      {
+        "label": "Steady cadence (1 per day)",
+        "startAt": "2026-01-02T00:00:00.000Z",
+        "endAt": null,
+        "maxPublishes": 1,
+        "perDays": 1
+      }
+    ]
+  },
+  "locale": "en-US",
+  "theme": {
+    "palette": {
+      "paper": "#ecf7e9",
+      "ink": "#273a33",
+      "rust": "#dc6850",
+      "sage": "#609073",
+      "coal": "#283e36"
+    },
+    "typography": {
+      "headingFont": "Sora",
+      "bodyFont": "Merriweather"
+    },
+    "visualStyle": "calm wellness editorial with warm neutrals and soft gradients"
+  },
+  "themeProfile": {
+    "tone": "wellness",
+    "recipe": "warm_wellness",
+    "layoutDensity": "airy",
+    "cardStyle": "soft",
+    "accentIntensity": "medium",
+    "backgroundStyle": "gradient"
+  },
+  "niche": {
+    "primaryNiche": "Beauty & Self-Care",
+    "allowedSubtopics": [
+      "Skincare Basics",
+      "Hair Care & Styling",
+      "Self-Care Routines",
+      "Beauty Tips & Hacks",
+      "Ingredients Explained",
+      "Daily Beauty Habits",
+      "skincare routines",
+      "beauty habits and daily routines",
+      "hair care tips and techniques",
+      "self-care ideas and practices"
+    ],
+    "excludedSubtopics": [
+      "Medical advice",
+      "Legal advice",
+      "Financial advice",
+      "Dangerous how-to instructions",
+      "Invented facts or unsupported claims"
+    ],
+    "scopeNotes": [
+      "Informational only",
+      "No unsupported claims",
+      "Adapt output to the configured niche prompt",
+      "Use the configured niche prompt as editorial context."
+    ],
+    "disclaimerVariants": [
+      "general",
+      "safety"
+    ],
+    "editorialPrompt": "The site focuses on modern beauty, skincare, and self-care routines for everyday users. Content includes practical guides, beginner-friendly routines, product-agnostic tips, and educational articles about ingredients and beauty habits. The tone is clean, accessible, and editorial, similar to a digital beauty magazine. The content avoids medical claims, clinical advice, or professional dermatological recommendations. Instead, it focuses on general wellness, beauty tips, and lifestyle-oriented content that is safe, evergreen, and easy to consume."
+  },
+  "categories": [
+    {
+      "slug": "skincare-basics",
+      "title": "Skincare Basics",
+      "description": "Editorial coverage of skincare basics within beauty & self-care.",
+      "accent": "rust"
+    },
+    {
+      "slug": "hair-care-styling",
+      "title": "Hair Care & Styling",
+      "description": "Editorial coverage of hair care & styling within beauty & self-care.",
+      "accent": "sage"
+    },
+    {
+      "slug": "self-care-routines",
+      "title": "Self-Care Routines",
+      "description": "Editorial coverage of self-care routines within beauty & self-care.",
+      "accent": "rust"
+    },
+    {
+      "slug": "beauty-tips-hacks",
+      "title": "Beauty Tips & Hacks",
+      "description": "Editorial coverage of beauty tips & hacks within beauty & self-care.",
+      "accent": "sage"
+    },
+    {
+      "slug": "ingredients-explained",
+      "title": "Ingredients Explained",
+      "description": "Editorial coverage of ingredients explained within beauty & self-care.",
+      "accent": "rust"
+    },
+    {
+      "slug": "daily-beauty-habits",
+      "title": "Daily Beauty Habits",
+      "description": "Editorial coverage of daily beauty habits within beauty & self-care.",
+      "accent": "sage"
+    }
+  ],
+  "seedTopics": [
+    "skincare routines",
+    "beauty habits and daily routines",
+    "hair care tips and techniques",
+    "self-care ideas and practices",
+    "beauty mistakes to avoid",
+    "skincare ingredients explained",
+    "natural beauty tips",
+    "beginner beauty guides",
+    "personal care routines",
+    "healthy skin habits"
+  ],
+  "budgetPolicy": {
+    "monthlyCapUsd": 100,
+    "publishQuota": {
+      "minPerDay": 4,
+      "maxPerDay": 8,
+      "topicCandidatesPerDay": 20
+    },
+    "thresholds": {
+      "normalMaxRatio": 0.6,
+      "economyMaxRatio": 0.85,
+      "throttleMaxRatio": 1
+    }
+  },
+  "promptPresetVersions": {
+    "topicDiscovery": "topic-discovery-v1",
+    "briefGeneration": "brief-generation-v1",
+    "articleGeneration": "article-generation-v1",
+    "imageGeneration": "image-generation-v1",
+    "qaScoring": "qa-scoring-v1"
+  },
+  "publishingTarget": {
+    "kind": "sanity",
+    "dataset": "production",
+    "apiVersion": "2025-01-01"
+  },
+  "deploymentTarget": {
+    "kind": "vercel"
+  },
+  "legalTemplates": {
+    "privacyTemplate": "mvp-standard-v1",
+    "cookieTemplate": "mvp-standard-v1",
+    "disclaimerTemplate": "general-informational-v1",
+    "contactEmailPlaceholder": "hello@example.com"
+  },
+  "providerRefs": {
+    "textProviderKeyRef": "OPENAI_API_KEY",
+    "imageProviderKeyRef": "REPLICATE_API_TOKEN",
+    "cmsReadKeyRef": "SANITY_READ_TOKEN",
+    "cmsWriteKeyRef": "SANITY_WRITE_TOKEN"
+  },
+  "prepopulate": {
+    "targetPublishedCount": 24,
+    "batchSize": 3,
+    "mode": "bulk_direct",
+    "maxRunMinutes": 90,
+    "maxCostUsd": 15
+  },
+  "publishing": {
+    "strategy": "steady_scheduled",
+    "timezone": "Europe/Rome",
+    "revalidateEnabled": true,
+    "revalidateContinueOnFail": true,
+    "maxPublishesPerRun": 1,
+    "cadenceRules": [
+      {
+        "label": "Launch burst (1 per 3 minutes)",
+        "startAt": "2026-01-01T00:00:00.000Z",
+        "endAt": "2026-01-02T00:00:00.000Z",
+        "maxPublishes": 1,
+        "perMinutes": 3
+      },
+      {
+        "label": "Steady cadence (1 per day)",
+        "startAt": "2026-01-02T00:00:00.000Z",
+        "endAt": null,
+        "maxPublishes": 1,
+        "perDays": 1
+      }
+    ]
+  },
+  "featureFlags": {
+    "adSlotsDefault": false
+  }
+}
