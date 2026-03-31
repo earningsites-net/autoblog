@@ -47,3 +47,33 @@ ssh -i ~/.ssh/autoblog_ionos autoblog@87.106.29.31
 
 # Pull repo github sul server VPS:
 sudo -u autoblog -H bash -lc 'cd /srv/auto-blog-project && git fetch origin && git pull --ff-only origin main'
+
+# Handoff
+
+## Prod
+
+npm run site:handoff:prod -- ai-blog-news \
+ --owner-email buyer@example.com \
+ --temp-password 'TempPass123!' \
+ --web-base-url https://ai-blog-news-mu.vercel.app \
+ --studio-url https://ai-blog-news.sanity.studio
+
+## Local
+
+npm run site:handoff -- ai-blog-news \
+ --owner-email buyer@example.com \
+ --web-base-url https://ai-blog-news-mu.vercel.app \
+ --studio-url https://ai-blog-news.sanity.studio
+
+## Se vuoi impostare anche una password provvisoria portal:
+
+npm run site:handoff -- ai-blog-news \
+ --owner-email buyer@example.com \
+ --temp-password 'TempPass123!' \
+ --web-base-url https://ai-blog-news-mu.vercel.app \
+ --studio-url https://ai-blog-news.sanity.studio
+
+## Se vuoi fare il vero cutover owner:
+npm run site:handoff -- ai-blog-news \
+ --owner-email buyer@example.com \
+ --revoke-other-owners

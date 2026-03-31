@@ -1245,6 +1245,11 @@
     - `publishedAt` è già presente nel model e già reso nel frontend/SEO
     - il model `article` oggi non ha un campo autore/byline
     - le fonti/link esterni non possono essere ottenuti solo via prompt: `article.body` non supporta annotazioni link e il renderer frontend tratta i mark `link` come `span`, non `<a>`
+  - valutata una possibile integrazione futura di Lovable per la generazione del tema:
+    - il contratto attuale è già per-sito e vive in `site.blueprint.json` come `theme` + `themeProfile`
+    - `theme-generate` oggi scrive palette, typography e recipe finite consumate dal frontend shared
+    - il web non supporta layout arbitrari generati esternamente: oggi accetta soprattutto token + recipe note
+    - la doc Lovable consultata sembra orientata a `Build with URL` ed export/GitHub, non a un endpoint server-side che restituisca un tema strutturato pronto da applicare al repo esistente
 
 ## Decisions
 - La pagina pubblica `site offline` deve usare uno stile shared di piattaforma, non i token del tema del sito:
@@ -1317,6 +1322,10 @@
 - Per il rollout immediato non serve un deploy Vercel aggiuntivo: il cambiamento che impatta i prossimi contenuti vive soprattutto in `autoblog.mjs` + workflow n8n + dataset Sanity; il rendering web aggiornato resta pronto nel repo per il prossimo deploy frontend.
 - Gli stub `direct` dell'engine non devono mai diventare una seconda fonte di prompt/editorial assumptions; vanno tenuti neutrali per non contaminare debug o smoke locali.
 - Il prompt immagini deve restare article-driven: titolo ed excerpt decidono il concept, mentre il workflow aggiunge solo guardrail generici e limiti di sicurezza/branding.
+- Se testiamo Lovable, il boundary corretto è questo:
+  - Lovable può al massimo proporre concept, token e asset brand
+  - il source of truth applicabile al prodotto resta `site.blueprint.json`
+  - il frontend shared non va sostituito con codice Lovable per-sito in questa fase
 
 ## Next
 - Pushare il restyle del `site offline` e verificare il deploy Vercel live su `ai-blog-news`.
@@ -1371,6 +1380,10 @@
   - commit locale selettivo dei file `workflow-runners.ts`, `image_generation_worker.json`, `disclaimer/page.tsx`, `docs/*`
   - update production del workflow immagini e reimport n8n
   - rieseguire un batch ridotto immagini su `ai-blog-1` per validare che sparisca il bias `modern workspace scene`
+- Se vogliamo esplorare Lovable in modo serio, fare un POC separato:
+  - introdurre un provider astratto `theme-generator` con output `theme`, `themeProfile` e opzionali `brandAssets`
+  - costruire un adapter `lovable -> blueprint` con review umana
+  - evitare per ora un flusso fully automatic senza passaggio di validazione
 
 ## Risks
 - La migrazione enum su DB esistenti forza i valori legacy fuori dominio verso default sicuri; se in futuro emergono stati storici non previsti, verranno normalizzati e non preservati come stringa raw.
@@ -1391,3 +1404,52 @@
 - Gli autori sui siti già creati non appaiono automaticamente finché non viene rieseguito il seed CMS/autori sul dataset relativo.
 - Il pass attuale migliora molto il prompt e la struttura, ma non garantisce da solo qualità alta costante: restano da osservare i primi articoli post-deploy per capire se servono ulteriori strette su style guide, excerpt e prompt immagini.
 - Rischio attivo ancora aperto: in `article_generation_worker`, se `categorySlug` manca, il fallback categoria punta ancora a slug Home & DIY (`home-organization`, `cleaning-maintenance`, `garden-basics`); questo non dovrebbe attivarsi nel path normale, ma resta un edge case da correggere.
+- Lovable oggi sembra più forte come generatore di progetto/prototipo che come API machine-to-machine per restituire token tema tipizzati a un repo Next.js già esistente; senza adapter intermedio il rischio è introdurre un passaggio fragile e manuale.
+
+## Done
+- Chiuso il giro `inactive-site` anche sul dominio del sito:
+  - la pagina offline pubblica usa stile comune ispirato al portal, non il tema del sito
+  - il messaggio live e' ora centrato su:
+    - nome blog grande
+    - sottotitolo `is temporarily unavailable.`
+    - link owner-facing `Site owner? Access the portal`
+- Reso robusto l'ingresso owner-facing first-party dal dominio del sito:
+  - `apps/web/next.config.ts` gestisce `/portal` con redirect anticipato al portal centrale
+  - questo evita che il layout offline intercetti la route quando il sito e' inattivo
+  - verifica live confermata:
+    - `https://ai-blog-news-mu.vercel.app/portal` -> `307` verso `https://aiblogs.earningsites.net/portal?siteSlug=ai-blog-news`
+- Stabilizzato il perimetro MVP attuale per un nuovo test E2E:
+  - portal Postgres-only
+  - enum Postgres per `status`, `billing_mode`, `billing_status`
+  - gating coerente portal/web per i siti `customer_paid` non operativi
+  - accesso owner sempre possibile via portal anche a sito offline
+
+## Decisions
+- Per l'MVP il modello commerciale resta:
+  - ruolo cliente unico: `owner`
+  - gating site-level tramite `entitlements.status`, `entitlements.billing_mode`, `entitlements.billing_status`
+- Non introduciamo ora lookup tables relazionali per gli stati:
+  - il DB usa enum Postgres, che danno vincoli forti e visibilita' chiara in DBeaver senza aggiungere join e seed inutili
+- Il dominio del sito deve restare punto di ingresso owner-facing anche quando il magazine e' offline:
+  - `/portal` sul sito resta sempre raggiungibile e redirige al portal centrale
+
+## Next
+- Rifare un test E2E ex novo da Factory su un nuovo slug, verificando:
+  - creazione sito
+  - sync locale source-safe
+  - Studio collegato
+  - qualita' topic/article
+  - comportamento `incubating` vs `customer_paid`
+  - offline page + `/portal` redirect dal dominio del sito
+- Se l'E2E passa, aprire un pass separato di hardening operativo:
+  - backup Postgres (`pg_dump`)
+  - eventuale spostamento del data dir Postgres fuori dal repo clone sul VPS
+  - runbook DBeaver/SSH tunnel uso production in sola lettura salvo interventi mirati
+
+## Risks
+- La logica `status + billingMode + billingStatus` e' coerente per l'MVP, ma non e' ancora accompagnata da una UI portal per cambiare esplicitamente `billingMode`; oggi il cambio resta CLI/DB-driven.
+- Il data dir Postgres production persiste correttamente via bind mount host, ma vive ancora sotto `/srv/auto-blog-project/infra/n8n/postgres`; va considerato runtime state e spostato fuori dal clone repo in un pass successivo.
+- Il worktree locale contiene ancora file non di rollout da lasciare fuori commit:
+  - `infra/n8n/instructions.md`
+  - `.dev/`
+  - `.vscode/`
