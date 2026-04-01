@@ -3192,12 +3192,27 @@ app.get('/ops/factory', async (req, reply) => {
     .toggles{display:flex;gap:14px;flex-wrap:wrap;}
     .toggle{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text);}
     .toggle input{width:auto;}
-    pre{margin:0;background:#0a0f15;color:#d0e7ff;border:1px solid #223049;padding:12px;overflow:auto;border-radius:10px;min-height:220px;}
+    pre{margin:0;background:#0a0f15;color:#d0e7ff;border:1px solid #223049;padding:12px;overflow:auto;border-radius:10px;min-height:56px;max-height:220px;}
+    details{margin-top:10px;}
+    summary{cursor:pointer;color:var(--muted);font-size:12px;}
+    .response-line{padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:#0f131a;color:#d0e7ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;}
+    .guide{display:grid;gap:12px;}
+    .guide-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px;}
+    .guide-card{grid-column:span 12;border:1px solid var(--line);border-radius:10px;background:#11161e;padding:12px;}
+    .guide-card.half{grid-column:span 6;}
+    .guide-card h3{margin:0 0 8px;font-size:15px;}
+    .guide-card p{margin:0 0 8px;}
+    .guide-card ol{margin:8px 0 0 18px;padding:0;}
+    .guide-card li+li{margin-top:6px;}
+    .code{margin:8px 0 0;background:#0a0f15;color:#d0e7ff;border:1px solid #223049;padding:12px;overflow:auto;border-radius:10px;white-space:pre-wrap;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;}
+    .mini{font-size:12px;color:var(--muted);}
+    .pill{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:#0f131a;color:var(--muted);font-size:11px;margin-right:6px;}
     .status{font-size:12px;color:var(--muted);}
     .status.ok{color:var(--ok);}
     .status.err{color:var(--err);}
     @media (max-width: 900px){
       .col-6,.col-4,.col-3{grid-column:span 12;}
+      .guide-card.half{grid-column:span 12;}
     }
   </style>
 </head>
@@ -3358,13 +3373,27 @@ app.get('/ops/factory', async (req, reply) => {
     </section>
     <section class="panel">
       <h2>Result</h2>
-      <pre id="out">Ready</pre>
+      <div id="resultSummary" class="response-line">Ready.</div>
+      <details>
+        <summary>Raw response</summary>
+        <pre id="out">Ready</pre>
+      </details>
+    </section>
+    <section class="panel">
+      <h2>Complete Deploy</h2>
+      <div id="guide" class="guide">
+        <p class="hint">Launch or check a site to see the exact next steps, Vercel env values, and Studio deploy command.</p>
+      </div>
     </section>
   </div>
   <script>
     const out = document.getElementById('out');
+    const resultSummary = document.getElementById('resultSummary');
     const status = document.getElementById('status');
+    const guide = document.getElementById('guide');
     const FACTORY_SECRET_STORAGE_KEY = 'factory_api_secret';
+    let latestResponseData = null;
+    let latestStatusData = null;
 
     function getValue(id) {
       const el = document.getElementById(id);
@@ -3383,6 +3412,156 @@ app.get('/ops/factory', async (req, reply) => {
     function setStatus(message, type) {
       status.textContent = message;
       status.className = 'status' + (type ? ' ' + type : '');
+    }
+
+    function parseJsonSafe(text) {
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    }
+
+    function summarizeResponse(text, payload) {
+      if (payload && typeof payload === 'object') {
+        if (payload.ok === true) {
+          const siteSlug = payload.siteSlug || payload.input?.siteSlug || getValue('siteSlug') || '';
+          return siteSlug ? ('Completed for ' + siteSlug) : 'Completed.';
+        }
+        if (payload.ok === false) {
+          return 'Failed: ' + String(payload.step || payload.error || 'Request failed');
+        }
+      }
+      const firstLine = String(text || '').split(/\\r?\\n/).find(Boolean) || 'Ready.';
+      return firstLine.slice(0, 220);
+    }
+
+    function shellEscape(value) {
+      return "'" + String(value || '').replace(/'/g, "'\"'\"'") + "'";
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function buildGuideData() {
+      const deploy = latestStatusData && latestStatusData.deploy ? latestStatusData.deploy : {};
+      const vercelEnv = deploy.vercelEnv || {};
+      const studioDeploy = deploy.studioDeploy || {};
+      const siteSlug = String(vercelEnv.SITE_SLUG || getValue('siteSlug') || '').trim();
+      const brandName = String(vercelEnv.NEXT_PUBLIC_SITE_NAME || getValue('brandName') || '').trim();
+      const projectId = String(vercelEnv.SANITY_PROJECT_ID || getValue('sanityProjectId') || '').trim();
+      const dataset = String(vercelEnv.SANITY_DATASET || getValue('sanityDataset') || 'production').trim();
+      const apiVersion = String(vercelEnv.SANITY_API_VERSION || getValue('sanityApiVersion') || '2025-01-01').trim();
+      const readToken = String(vercelEnv.SANITY_READ_TOKEN || getValue('sanityReadToken') || '').trim();
+      const siteDescription = String(vercelEnv.NEXT_PUBLIC_SITE_DESCRIPTION || '').trim();
+      const revalidateSecret = String(vercelEnv.REVALIDATE_SECRET || '').trim();
+      const portalBaseUrl = String(vercelEnv.NEXT_PUBLIC_PORTAL_BASE_URL || 'https://aiblogs.earningsites.net').trim();
+      const blueprintPath = String(vercelEnv.SITE_BLUEPRINT_PATH || ('../../sites/' + siteSlug + '/site.blueprint.json')).trim();
+      const enableAds = String(vercelEnv.ENABLE_AD_SLOTS || 'false').trim() || 'false';
+      const contentDriver = String(vercelEnv.CONTENT_REPOSITORY_DRIVER || 'sanity').trim() || 'sanity';
+      const suggestedStudioUrl = String(studioDeploy.suggestedUrl || ('https://' + siteSlug + '.sanity.studio')).trim();
+      const studioHostname = String(studioDeploy.hostname || siteSlug).trim() || siteSlug;
+
+      const vercelEnvText = [
+        'SITE_SLUG=' + siteSlug,
+        'NEXT_PUBLIC_SITE_SLUG=' + siteSlug,
+        'SANITY_STUDIO_SITE_SLUG=' + siteSlug,
+        'SITE_BLUEPRINT_PATH=' + blueprintPath,
+        '',
+        'CONTENT_REPOSITORY_DRIVER=' + contentDriver,
+        'ENABLE_AD_SLOTS=' + enableAds,
+        '',
+        'SANITY_PROJECT_ID=' + projectId,
+        'SANITY_DATASET=' + dataset,
+        'SANITY_API_VERSION=' + apiVersion,
+        'SANITY_READ_TOKEN=' + readToken,
+        '',
+        'NEXT_PUBLIC_SITE_NAME=' + brandName,
+        'NEXT_PUBLIC_SITE_DESCRIPTION=' + siteDescription,
+        'NEXT_PUBLIC_PORTAL_BASE_URL=' + portalBaseUrl,
+        'REVALIDATE_SECRET=' + revalidateSecret,
+        'NEXT_PUBLIC_SITE_URL=https://<set-after-first-vercel-deploy>'
+      ].join('\\n');
+
+      const studioCommand = [
+        'env \\\\',
+        '  SANITY_STUDIO_PROJECT_ID=' + projectId + ' \\\\',
+        '  SANITY_STUDIO_DATASET=' + dataset + ' \\\\',
+        '  SANITY_STUDIO_SITE_SLUG=' + siteSlug + ' \\\\',
+        '  SANITY_STUDIO_HOSTNAME=' + studioHostname + ' \\\\',
+        '  npm --workspace @autoblog/studio run deploy -- --yes'
+      ].join('\\n');
+
+      const pullCommand = 'npm run site:pull -- ' + shellEscape(siteSlug);
+      const vercelDomainHint = 'After the first deploy, set NEXT_PUBLIC_SITE_URL to the stable production domain assigned by Vercel and redeploy.';
+      const studioHint = 'After deploy, the expected Studio URL is ' + suggestedStudioUrl + '. If the hostname is unavailable, deploy again with a different SANITY_STUDIO_HOSTNAME.';
+
+      return {
+        siteSlug,
+        pullCommand,
+        vercelEnvText,
+        studioCommand,
+        vercelDomainHint,
+        studioHint,
+        suggestedStudioUrl
+      };
+    }
+
+    function renderGuide() {
+      const data = buildGuideData();
+      if (!data.siteSlug) {
+        guide.innerHTML = '<p class="hint">Launch or check a site to see the exact next steps, Vercel env values, and Studio deploy command.</p>';
+        return;
+      }
+
+      guide.innerHTML = [
+        '<div class="guide-grid">',
+        '  <section class="guide-card">',
+        '    <h3>Recommended Flow</h3>',
+        '    <span class="pill">' + escapeHtml(data.siteSlug) + '</span>',
+        '    <ol>',
+        '      <li>Pull the site locally and inspect it in Studio before public deploy.</li>',
+        '      <li>Create a new Vercel project from the monorepo with <strong>Root Directory = apps/web</strong> and paste the env block below.</li>',
+        '      <li>After the first Vercel deploy, replace <code>NEXT_PUBLIC_SITE_URL</code> with the stable production domain and redeploy.</li>',
+        '      <li>Deploy the Sanity Studio with the command below.</li>',
+        '      <li>When Studio is live, use <code>' + escapeHtml(data.suggestedStudioUrl) + '</code> as the site Studio URL/runtime value.</li>',
+        '    </ol>',
+        '    <div class="code">' + escapeHtml(data.pullCommand) + '</div>',
+        '  </section>',
+        '  <section class="guide-card half">',
+        '    <h3>Vercel Env</h3>',
+        '    <p class="mini">Project: same repo, Framework = Next.js, Root Directory = <code>apps/web</code>.</p>',
+        '    <div class="code">' + escapeHtml(data.vercelEnvText) + '</div>',
+        '    <p class="mini">' + escapeHtml(data.vercelDomainHint) + '</p>',
+        '  </section>',
+        '  <section class="guide-card half">',
+        '    <h3>Studio Deploy</h3>',
+        '    <p class="mini">Run this from the repo root on your local machine. Your Sanity CLI login or <code>SANITY_AUTH_TOKEN</code> must already be valid.</p>',
+        '    <div class="code">' + escapeHtml(data.studioCommand) + '</div>',
+        '    <p class="mini">' + escapeHtml(data.studioHint) + '</p>',
+        '  </section>',
+        '</div>'
+      ].join('');
+    }
+
+    async function loadSiteStatus(siteSlug) {
+      const secret = getFactorySecret();
+      if (!siteSlug || !secret) return;
+      const res = await fetch('/api/factory/site/' + encodeURIComponent(siteSlug) + '/status', {
+        headers: { 'x-factory-secret': secret }
+      });
+      const text = await res.text();
+      const data = parseJsonSafe(text);
+      if (res.ok && data) {
+        latestStatusData = data;
+        renderGuide();
+      }
     }
 
     function buildPayload() {
@@ -3449,10 +3628,12 @@ app.get('/ops/factory', async (req, reply) => {
       if (!secret) {
         setStatus('Factory API secret is required.', 'err');
         out.textContent = 'Missing factory secret (x-factory-secret).';
+        resultSummary.textContent = 'Missing factory secret (x-factory-secret).';
         return;
       }
       setStatus('Running...', '');
       out.textContent = 'Running...';
+      resultSummary.textContent = 'Running...';
       const res = await fetch(path, {
         method: 'POST',
         headers: {
@@ -3462,9 +3643,13 @@ app.get('/ops/factory', async (req, reply) => {
         body: JSON.stringify(payload)
       });
       const text = await res.text();
+      const data = parseJsonSafe(text);
+      latestResponseData = data;
       out.textContent = text;
+      resultSummary.textContent = summarizeResponse(text, data);
       if (res.ok) {
         setStatus('Completed.', 'ok');
+        await loadSiteStatus(payload.siteSlug);
       } else {
         setStatus('Failed. Check output.', 'err');
       }
@@ -3509,7 +3694,11 @@ app.get('/ops/factory', async (req, reply) => {
         headers: { 'x-factory-secret': secret }
       });
       const text = await res.text();
+      const data = parseJsonSafe(text);
+      latestStatusData = data;
       out.textContent = text;
+      resultSummary.textContent = summarizeResponse(text, data);
+      renderGuide();
       setStatus(res.ok ? 'Status loaded.' : 'Status request failed.', res.ok ? 'ok' : 'err');
     });
 
@@ -3527,6 +3716,7 @@ app.get('/ops/factory', async (req, reply) => {
         if (!res.ok) return;
         const data = await res.json();
       } catch {}
+      renderGuide();
     })();
   </script>
 </body>

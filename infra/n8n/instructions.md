@@ -45,6 +45,64 @@ sudo systemctl status autoblog-n8n --no-pager
 
 ssh -i ~/.ssh/autoblog_ionos autoblog@87.106.29.31
 
+# Orientamento filesystem VPS
+
+## Per capire dove ti trovi davvero
+
+pwd
+ls -la
+ls -la /
+
+## Directory importanti
+
+### Source code
+/srv/auto-blog-project
+
+### Runtime live
+/var/lib/autoblog
+
+Contenuto tipico:
+/var/lib/autoblog/sites
+/var/lib/autoblog/reports
+/var/lib/autoblog/backups
+
+### Env production
+/etc/autoblog
+
+Contenuto tipico:
+/etc/autoblog/engine.env
+/etc/autoblog/n8n.env
+
+### n8n + docker compose
+/srv/auto-blog-project/infra/n8n
+
+### Dati n8n
+/srv/auto-blog-project/infra/n8n/data
+
+### Dati Postgres attuali
+/srv/auto-blog-project/infra/n8n/postgres
+
+### systemd
+/etc/systemd/system/autoblog-engine.service
+/etc/systemd/system/autoblog-n8n.service
+
+### nginx
+/etc/nginx
+/var/log/nginx
+
+## Giro rapido di orientamento
+
+ls -la /srv
+ls -la /srv/auto-blog-project
+ls -la /var/lib/autoblog
+ls -la /var/lib/autoblog/sites
+ls -la /etc/autoblog
+
+## Vista ad albero sintetica
+
+find /srv/auto-blog-project -maxdepth 2 -type d | sort
+find /var/lib/autoblog -maxdepth 3 -type d | sort
+
 # Pull repo github sul server VPS:
 sudo -u autoblog -H bash -lc 'cd /srv/auto-blog-project && git fetch origin && git pull --ff-only origin main'
 

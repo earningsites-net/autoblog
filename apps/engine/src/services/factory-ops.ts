@@ -963,6 +963,58 @@ export class FactoryOpsService {
       }
     }
 
+    let deploy: Record<string, unknown> | null = null;
+    if (envExists) {
+      try {
+        const env = await this.siteRuntime.readSiteEnv(siteSlug);
+        const normalizedSlug = String(env.SITE_SLUG || env.NEXT_PUBLIC_SITE_SLUG || siteSlug).trim() || siteSlug;
+        const siteName = String(env.NEXT_PUBLIC_SITE_NAME || '').trim();
+        const siteDescription = String(env.NEXT_PUBLIC_SITE_DESCRIPTION || '').trim();
+        const projectId = String(env.SANITY_PROJECT_ID || '').trim();
+        const dataset = String(env.SANITY_DATASET || 'production').trim();
+        const apiVersion = String(env.SANITY_API_VERSION || '2025-01-01').trim();
+        const readToken = String(env.SANITY_READ_TOKEN || '').trim();
+        const revalidateSecret = String(env.REVALIDATE_SECRET || '').trim();
+        const portalBaseUrl = String(env.NEXT_PUBLIC_PORTAL_BASE_URL || process.env.PORTAL_BASE_URL || '').trim();
+        const suggestedStudioUrl =
+          String(
+            (registryEntry && typeof registryEntry.studioUrl === 'string' && registryEntry.studioUrl) ||
+              env.SANITY_STUDIO_URL ||
+              ''
+          ).trim() || `https://${normalizedSlug}.sanity.studio`;
+
+        deploy = {
+          vercelEnv: {
+            SITE_SLUG: normalizedSlug,
+            NEXT_PUBLIC_SITE_SLUG: normalizedSlug,
+            SANITY_STUDIO_SITE_SLUG: normalizedSlug,
+            SITE_BLUEPRINT_PATH: `../../sites/${normalizedSlug}/site.blueprint.json`,
+            CONTENT_REPOSITORY_DRIVER: String(env.CONTENT_REPOSITORY_DRIVER || 'sanity').trim() || 'sanity',
+            ENABLE_AD_SLOTS: String(env.ENABLE_AD_SLOTS || 'false').trim() || 'false',
+            SANITY_PROJECT_ID: projectId,
+            SANITY_DATASET: dataset,
+            SANITY_API_VERSION: apiVersion,
+            SANITY_READ_TOKEN: readToken,
+            NEXT_PUBLIC_SITE_NAME: siteName,
+            NEXT_PUBLIC_SITE_DESCRIPTION: siteDescription,
+            NEXT_PUBLIC_PORTAL_BASE_URL: portalBaseUrl,
+            REVALIDATE_SECRET: revalidateSecret,
+            NEXT_PUBLIC_SITE_URL: 'https://<set-after-first-vercel-deploy>'
+          },
+          studioDeploy: {
+            projectId,
+            dataset,
+            apiVersion,
+            siteSlug: normalizedSlug,
+            hostname: normalizedSlug,
+            suggestedUrl: suggestedStudioUrl
+          }
+        };
+      } catch {
+        deploy = null;
+      }
+    }
+
     return {
       siteSlug,
       exists: blueprintExists,
@@ -974,7 +1026,8 @@ export class FactoryOpsService {
         handoffManifest: handoffExists,
         registry: registryExists
       },
-      registryEntry
+      registryEntry,
+      deploy
     };
   }
 }

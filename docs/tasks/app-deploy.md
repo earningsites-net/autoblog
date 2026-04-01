@@ -1423,6 +1423,16 @@
   - enum Postgres per `status`, `billing_mode`, `billing_status`
   - gating coerente portal/web per i siti `customer_paid` non operativi
   - accesso owner sempre possibile via portal anche a sito offline
+- Aggiornato `infra/n8n/instructions.md` con una mappa pratica del filesystem VPS:
+  - distinzione netta tra `source` (`/srv/auto-blog-project`), `runtime` (`/var/lib/autoblog`) e `config` (`/etc/autoblog`)
+  - comandi base di orientamento (`pwd`, `ls -la /`, `find ... -maxdepth ...`)
+- Migliorata la UI `Factory Ops` per il completamento post-launch:
+  - il box `Result` e' ora compatto e tiene il raw JSON dentro un `details`
+  - aggiunta una sezione `Complete Deploy` che mostra per lo slug corrente:
+    - comando `site:pull`
+    - env Vercel gia' compilate
+    - comando reale di deploy Sanity Studio
+  - `siteStatus()` ora espone anche un payload `deploy` derivato da `.env.generated`, utile per popolare la guida senza reinserire a mano gli stessi valori
 
 ## Decisions
 - Per l'MVP il modello commerciale resta:
@@ -1432,6 +1442,8 @@
   - il DB usa enum Postgres, che danno vincoli forti e visibilita' chiara in DBeaver senza aggiungere join e seed inutili
 - Il dominio del sito deve restare punto di ingresso owner-facing anche quando il magazine e' offline:
   - `/portal` sul sito resta sempre raggiungibile e redirige al portal centrale
+- La pagina `ops/factory` deve guidare il completamento del sito fino al deploy, non limitarsi a mostrare il JSON grezzo della risposta:
+  - meglio una checklist operativa con valori reali per Vercel/Studio che costringere l'operatore a recuperare ogni volta env e comandi da thread o note sparse
 
 ## Next
 - Rifare un test E2E ex novo da Factory su un nuovo slug, verificando:
@@ -1445,6 +1457,7 @@
   - backup Postgres (`pg_dump`)
   - eventuale spostamento del data dir Postgres fuori dal repo clone sul VPS
   - runbook DBeaver/SSH tunnel uso production in sola lettura salvo interventi mirati
+- Valutare se aggiungere nella guida `Factory Ops` anche il passo finale di registrazione `SANITY_STUDIO_URL` nel runtime site env/portal dopo il deploy Studio, evitando l'ultimo passaggio manuale.
 
 ## Risks
 - La logica `status + billingMode + billingStatus` e' coerente per l'MVP, ma non e' ancora accompagnata da una UI portal per cambiare esplicitamente `billingMode`; oggi il cambio resta CLI/DB-driven.
@@ -1453,3 +1466,4 @@
   - `infra/n8n/instructions.md`
   - `.dev/`
   - `.vscode/`
+- La guida `Factory Ops` ora espone anche valori sensibili utili al deploy (`SANITY_READ_TOKEN`, `REVALIDATE_SECRET`) per l'operatore interno; questo e' voluto, ma resta corretto solo finche' la pagina rimane protetta da Basic Auth + factory secret.
