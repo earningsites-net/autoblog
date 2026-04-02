@@ -76,6 +76,16 @@ function runCommand(command, args, options = {}) {
   return result;
 }
 
+function readRemotePortalDatabaseUrl({ host, identity }) {
+  const result = runCommand('ssh', ['-i', identity, host, "grep '^PORTAL_DATABASE_URL=' /etc/autoblog/engine.env"], {
+    inherit: false
+  });
+  const line = String(result.stdout || '')
+    .split(/\r?\n/)
+    .find((item) => item.startsWith('PORTAL_DATABASE_URL='));
+  return line ? line.slice('PORTAL_DATABASE_URL='.length).trim() : '';
+}
+
 function parseJsonFromMixedOutput(raw) {
   const text = String(raw || '').trim();
   if (!text) return {};
@@ -175,12 +185,8 @@ function main() {
   const studioUrl = String(flags['studio-url'] || '').trim();
   const revokeOtherOwners = asBool(flags['revoke-other-owners'], false);
   const portalDatabaseUrl = String(
-    flags['portal-database-url'] ||
-      process.env.AUTOBLOG_SITE_HANDOFF_PROD_PORTAL_DATABASE_URL ||
-      process.env.PORTAL_DATABASE_URL ||
-      process.env.DATABASE_URL ||
-      ''
-  ).trim();
+    flags['portal-database-url'] || process.env.AUTOBLOG_SITE_HANDOFF_PROD_PORTAL_DATABASE_URL || ''
+  ).trim() || readRemotePortalDatabaseUrl({ host, identity });
 
   const remoteCommand = buildRemoteCommand({
     repoRoot,

@@ -105,6 +105,14 @@
   - il blocco reale era una sessione `DBeaver ... idle in transaction` su `autoblog_portal_prod`
   - quella sessione tratteneva il lock su `entitlements` mentre il bootstrap Postgres dell'engine eseguiva `ALTER TABLE ... IF NOT EXISTS`
 - Terminata la sessione Postgres bloccante, eseguiti `systemctl daemon-reload` e restart engine, poi verificato `GET /healthz -> ok:true` in production.
+- Corretto un bug nei wrapper locali production:
+  - `site:studio:prod` e `site:handoff:prod` prendevano di default `PORTAL_DATABASE_URL` dal `.env` locale
+  - questo faceva puntare i comandi production al DB `autoblog_portal_local`
+  - ora, in assenza di `--portal-database-url`, i wrapper leggono `PORTAL_DATABASE_URL` da `/etc/autoblog/engine.env` via SSH
+- Verificato il fix con `npm run site:studio:prod -- glowlab-daily --studio-url https://glowlab-daily.sanity.studio`:
+  - aggiornato runtime env production
+  - aggiornato `registry.studioUrl`
+  - aggiornato `site_settings.studio_url` in Postgres production
 
 ## Decisions
 - Le password portal non vanno mai "decifrate" dal DB: in caso di password persa si deve impostarne una nuova passando dai flussi applicativi o rigenerando un hash compatibile `scrypt`.
@@ -150,6 +158,7 @@
   - `publicContactEmail` owner-configurable come override successivo nel portal
 - Verificare da UI `ops/factory` che la nuova sezione `Complete Deploy` mostri correttamente anche il comando `site:studio:prod`.
 - Valutare se spostare il bootstrap schema Postgres fuori dal path di startup dell'engine, così un lock DBeaver non impedisce il restart del servizio.
+- Verificare dal portal owner-facing che `glowlab-daily` apra davvero `https://glowlab-daily.sanity.studio` senza ulteriori override manuali.
 
 ## Risks
 - Il build mirato con `SITE_SLUG=glowlab-daily` fallisce in sandbox per fetch esterno di Google Fonts (`fonts.googleapis.com`), quindi la verifica specifica del sito warm non è completa in questo ambiente offline.
@@ -160,3 +169,4 @@
 - In questo ambiente sandbox non sono riuscito a fare uno smoke runtime dell'engine su porta alternativa perché `tsx` tenta di aprire un IPC pipe negato dal sandbox (`EPERM` su pipe temporanea); la verifica reale dell'endpoint pubblico contact/legal va quindi fatta con stack locale già attivo fuori sandbox.
 - Il push aggregato include modifiche provenienti da più thread già presenti/staged nel worktree condiviso; il contenuto è stato accettato esplicitamente come sync complessivo, non come commit tematico minimale.
 - Finche' l'engine avvia lo schema bootstrap direttamente all'avvio, la superficie operativa di production resta sensibile a client SQL lasciati in transazione aperta; il runbook DBeaver va considerato parte della sicurezza operativa del VPS.
+- Se in futuro un wrapper production rilegge variabili critiche dal contesto locale, il rischio è sempre lo stesso: scrivere sul backend sbagliato pur parlando con il VPS corretto.

@@ -92,6 +92,7 @@ This file stores durable project context shared across tasks.
     - snapshot/backup assenti in caso di guasto disco VPS
 - Per ambienti `local|staging|prod` il portal puo' usare lo stesso server Postgres di n8n, ma con database + utente dedicati e credenziali separate; il compose n8n espone Postgres solo su `127.0.0.1:${POSTGRES_PORT}`.
 - I comandi ops che toccano il portal runtime (`autoblog handoff-site`, `site:handoff:prod`) devono usare la stessa `PORTAL_DATABASE_URL` del servizio, oppure si rischia di scrivere nel backend sbagliato.
+- I wrapper locali `site:handoff:prod` e `site:studio:prod` non devono ereditare di default `PORTAL_DATABASE_URL` dal `.env` locale: se non ricevono un override esplicito, devono risolvere il valore production leggendo `/etc/autoblog/engine.env` via SSH.
 - I file runtime (`registry`, `.env.generated`) restano file-based e non entrano nel DB Postgres.
 - Quota piani applicata lato backend:
   - `base=3/mese`
