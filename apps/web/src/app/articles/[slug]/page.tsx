@@ -220,7 +220,7 @@ export default async function ArticlePage({ params }: Props) {
           <AdSlot name="Article Sidebar Top" minHeight={280} slotKey="header" />
 
           <section className={sidebarPanelClass}>
-            <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentLabelClass}`}>Internal Links</p>
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentLabelClass}`}>More to explore</p>
             <h2 className="mt-2 font-display text-xl text-ink">Read next</h2>
             {sidebarLinks.length > 0 ? (
               <ul className="mt-4 space-y-3 text-sm">

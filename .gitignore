@@ -29,3 +29,7 @@ sites/*/seed-content
 sites/*/handoff
 .runtime/
 .runtime-backups/
+.dev/runtime/
+*.tsbuildinfo
+
+settings.json

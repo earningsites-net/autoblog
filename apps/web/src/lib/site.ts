@@ -34,6 +34,14 @@ export const siteConfig = {
     'https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=1600&q=80'
 } as const;
 
+export type SiteLogoMonogram = {
+  letter: string;
+  background: string;
+  foreground: string;
+  border: string;
+  radius: number;
+};
+
 export const featureFlags = {
   adSlots:
     process.env.ENABLE_AD_SLOTS !== undefined
@@ -60,4 +68,52 @@ export function estimateReadingTime(wordCount: number) {
 
 export function getActiveSiteBlueprint() {
   return activeBlueprint;
+}
+
+export function getSiteLogoMonogram(): SiteLogoMonogram {
+  const palette = siteConfig.themePalette || {};
+  const recipe = siteConfig.themeProfile?.recipe || 'bold_magazine';
+  const letter = String(siteConfig.name || '').trim().charAt(0).toUpperCase() || 'A';
+  const paper = String(palette.paper || '#F6F1E9');
+  const ink = String(palette.ink || '#1F1B16');
+  const rust = String(palette.rust || '#E08748');
+  const coal = String(palette.coal || '#221F1B');
+
+  if (recipe === 'editorial_luxury') {
+    return {
+      letter,
+      background: paper,
+      foreground: rust,
+      border: ink,
+      radius: 10
+    };
+  }
+
+  if (recipe === 'technical_minimal') {
+    return {
+      letter,
+      background: coal,
+      foreground: paper,
+      border: ink,
+      radius: 10
+    };
+  }
+
+  if (recipe === 'warm_wellness') {
+    return {
+      letter,
+      background: paper,
+      foreground: rust,
+      border: rust,
+      radius: 32
+    };
+  }
+
+  return {
+    letter,
+    background: coal,
+    foreground: rust,
+    border: paper,
+    radius: recipe === 'arcade_play_dark' ? 12 : recipe === 'noir_luxury_dark' ? 6 : 16
+  };
 }

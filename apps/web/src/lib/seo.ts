@@ -1,8 +1,25 @@
 import type { Metadata } from 'next';
 import type { Article } from './types';
-import { absoluteUrl, siteConfig } from './site';
+import { absoluteUrl, getSiteLogoMonogram, siteConfig } from './site';
+
+function buildSiteMonogramIcon() {
+  const monogram = getSiteLogoMonogram();
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="${monogram.radius}" fill="${monogram.background}"/>
+      <rect x="4" y="4" width="56" height="56" rx="${Math.max(8, monogram.radius - 2)}" fill="none" stroke="${monogram.border}" stroke-width="2" opacity="0.9"/>
+      <text x="50%" y="53%" text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="${monogram.foreground}">${monogram.letter}</text>
+    </svg>
+  `.trim();
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function getSiteIconUrl() {
+  return siteConfig.brandAssets.logoUrl || buildSiteMonogramIcon();
+}
 
 export function defaultMetadata(): Metadata {
+  const iconUrl = getSiteIconUrl();
   return {
     metadataBase: new URL(siteConfig.url),
     title: {
@@ -24,6 +41,11 @@ export function defaultMetadata(): Metadata {
       title: siteConfig.name,
       description: siteConfig.description,
       images: [siteConfig.defaultOgImage]
+    },
+    icons: {
+      icon: [{ url: iconUrl }],
+      shortcut: [{ url: iconUrl }],
+      apple: [{ url: iconUrl }]
     },
     verification: {
       google: process.env.GOOGLE_SITE_VERIFICATION || undefined
@@ -86,7 +108,7 @@ export function articleJsonLd(article: Article) {
       name: siteConfig.name,
       logo: {
         '@type': 'ImageObject',
-        url: absoluteUrl('/logo-mark.svg')
+        url: siteConfig.brandAssets.logoUrl || absoluteUrl('/logo-mark.svg')
       }
     },
     articleSection: article.category.title,

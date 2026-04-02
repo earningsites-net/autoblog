@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { PageHero } from '@web/components/page-hero';
+import { getPublicSiteSettings } from '@web/lib/site-settings';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 export const metadata: Metadata = {
@@ -7,7 +8,9 @@ export const metadata: Metadata = {
   description: 'Contact page for editorial and business inquiries related to the site.'
 };
 
-export default function ContactPage() {
+export default async function ContactPage() {
+  const settings = await getPublicSiteSettings();
+  const publicContactEmail = String(settings.publicContactEmail || '').trim();
   const theme = getActiveSiteTheme();
   const recipe = theme.recipe;
   const isDark = theme.isDark;
@@ -37,8 +40,14 @@ export default function ContactPage() {
       <section className="grid gap-6 lg:grid-cols-2">
         <div className={cardClass}>
           <h2 className={titleClass}>Business Contact</h2>
-          <p className={textClass}>Use your preferred email address here so readers can contact you directly.</p>
-          <p className={emailClass}>hello@example.com</p>
+          <p className={textClass}>Use the public address below for partnerships, business inquiries, privacy requests, or content-related questions.</p>
+          {publicContactEmail ? (
+            <a href={`mailto:${publicContactEmail}`} className={`${emailClass} block font-medium underline-offset-4 hover:underline`}>
+              {publicContactEmail}
+            </a>
+          ) : (
+            <p className={emailClass}>Public contact details will be available soon.</p>
+          )}
         </div>
         <div className={cardClass}>
           <h2 className={titleClass}>Important Note</h2>

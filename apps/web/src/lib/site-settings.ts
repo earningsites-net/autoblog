@@ -14,6 +14,10 @@ export type PublicSiteSettings = {
   adsenseSlotFooter: string;
   fallbackToPlatform: boolean;
   studioUrl: string;
+  publicContactEmail: string;
+  privacyPolicyOverride: string;
+  cookiePolicyOverride: string;
+  disclaimerOverride: string;
   publishing: {
     mode: 'bulk_direct' | 'steady_scheduled';
     maxPublishesPerRun: number;
@@ -72,6 +76,10 @@ function defaultSettings(): PublicSiteSettings {
     adsenseSlotFooter: '',
     fallbackToPlatform: true,
     studioUrl: process.env.SANITY_STUDIO_URL || '',
+    publicContactEmail: '',
+    privacyPolicyOverride: '',
+    cookiePolicyOverride: '',
+    disclaimerOverride: '',
     publishing: {
       mode: 'steady_scheduled',
       maxPublishesPerRun: 1,
@@ -93,93 +101,152 @@ function defaultSettings(): PublicSiteSettings {
   };
 }
 
-async function fetchSiteSettingsUncached(): Promise<PublicSiteSettings> {
-  const fallback = defaultSettings();
-  if (!hasSanityConfig || !sanityClient) return fallback;
-  const isProd = process.env.NODE_ENV === 'production';
+type PublicPortalSiteSettingsOverlay = Pick<
+  PublicSiteSettings,
+  'publicContactEmail' | 'privacyPolicyOverride' | 'cookiePolicyOverride' | 'disclaimerOverride'
+>;
+
+async function fetchPublicSitePortalSettingsUncached(): Promise<PublicPortalSiteSettingsOverlay | null> {
+  const baseUrl = resolveEnginePublicBaseUrl();
+  if (!baseUrl || !siteConfig.slug) return null;
 
   try {
-    const data = await sanityClient.fetch<Partial<PublicSiteSettings>>(
-      groq`*[_type == "siteSettings" && siteSlug == $siteSlug][0]{
-        siteSlug,
-        adSlotsEnabled,
-        adsMode,
-        adsPreviewEnabled,
-        adsensePublisherId,
-        adsenseSlotHeader,
-        adsenseSlotInContent,
-        adsenseSlotFooter,
-        fallbackToPlatform,
-        studioUrl,
-        publishing,
-        entitlement
-      }`,
-      { siteSlug: siteConfig.slug },
-      isProd ? { next: { revalidate: 300 } } : { cache: 'no-store' }
-    );
+    const isProd = process.env.NODE_ENV === 'production';
+    const response = await fetch(`${baseUrl}/api/public/sites/${encodeURIComponent(siteConfig.slug)}/settings`, isProd
+      ? { next: { revalidate: 300 } }
+      : { cache: 'no-store' });
+    if (!response.ok) return null;
 
-    if (!data) return fallback;
+    const payload = (await response.json()) as {
+      site?: {
+        publicContactEmail?: string;
+        privacyPolicyOverride?: string;
+        cookiePolicyOverride?: string;
+        disclaimerOverride?: string;
+      };
+    };
+    const site = payload.site;
+    if (!site) return null;
 
     return {
-      ...fallback,
-      ...data,
-      siteSlug: String(data.siteSlug || fallback.siteSlug),
-      adSlotsEnabled: Boolean(data.adSlotsEnabled ?? fallback.adSlotsEnabled),
-      adsMode:
-        data.adsMode === 'manual' || data.adsMode === 'hybrid' || data.adsMode === 'auto'
-          ? data.adsMode
-          : fallback.adsMode,
-      adsPreviewEnabled: Boolean(data.adsPreviewEnabled ?? fallback.adsPreviewEnabled),
-      adsensePublisherId: String(data.adsensePublisherId || ''),
-      adsenseSlotHeader: String(data.adsenseSlotHeader || ''),
-      adsenseSlotInContent: String(data.adsenseSlotInContent || ''),
-      adsenseSlotFooter: String(data.adsenseSlotFooter || ''),
-      fallbackToPlatform: Boolean(data.fallbackToPlatform ?? fallback.fallbackToPlatform),
-      studioUrl: String(data.studioUrl || fallback.studioUrl),
-      publishing: {
-        ...fallback.publishing,
-        ...(data.publishing || {}),
-        mode: data.publishing?.mode === 'bulk_direct' ? 'bulk_direct' : 'steady_scheduled',
-        maxPublishesPerRun: Number(data.publishing?.maxPublishesPerRun || fallback.publishing.maxPublishesPerRun),
-        planMonthlyQuota: Number(data.publishing?.planMonthlyQuota || fallback.publishing.planMonthlyQuota),
-        publishedThisMonth: Number(data.publishing?.publishedThisMonth || fallback.publishing.publishedThisMonth),
-        quotaPeriodStart: String(data.publishing?.quotaPeriodStart || fallback.publishing.quotaPeriodStart),
-        quotaPeriodEnd: String(data.publishing?.quotaPeriodEnd || fallback.publishing.quotaPeriodEnd)
-      },
-      entitlement: {
-        ...fallback.entitlement,
-        ...(data.entitlement || {}),
-        plan:
-          data.entitlement?.plan === 'standard' || data.entitlement?.plan === 'pro' || data.entitlement?.plan === 'base'
-            ? data.entitlement.plan
-            : fallback.entitlement.plan,
-        monthlyQuota: Number(data.entitlement?.monthlyQuota || fallback.entitlement.monthlyQuota),
-        publishedThisMonth: Number(data.entitlement?.publishedThisMonth || fallback.entitlement.publishedThisMonth),
-        periodStart: String(data.entitlement?.periodStart || fallback.entitlement.periodStart),
-        periodEnd: String(data.entitlement?.periodEnd || fallback.entitlement.periodEnd),
-        status:
-          data.entitlement?.status === 'paused' || data.entitlement?.status === 'stopped' || data.entitlement?.status === 'active'
-            ? data.entitlement.status
-            : fallback.entitlement.status,
-        billingMode:
-          data.entitlement?.billingMode === 'customer_paid' ||
-          data.entitlement?.billingMode === 'incubating' ||
-          data.entitlement?.billingMode === 'complimentary'
-            ? data.entitlement.billingMode
-            : fallback.entitlement.billingMode,
-        billingStatus:
-          data.entitlement?.billingStatus === 'n/a' ||
-          data.entitlement?.billingStatus === 'trial' ||
-          data.entitlement?.billingStatus === 'active' ||
-          data.entitlement?.billingStatus === 'overdue' ||
-          data.entitlement?.billingStatus === 'canceled'
-            ? data.entitlement.billingStatus
-            : fallback.entitlement.billingStatus
-      }
+      publicContactEmail: String(site.publicContactEmail || ''),
+      privacyPolicyOverride: String(site.privacyPolicyOverride || ''),
+      cookiePolicyOverride: String(site.cookiePolicyOverride || ''),
+      disclaimerOverride: String(site.disclaimerOverride || '')
     };
   } catch {
-    return fallback;
+    return null;
   }
+}
+
+async function fetchSiteSettingsUncached(): Promise<PublicSiteSettings> {
+  const fallback = defaultSettings();
+  const isProd = process.env.NODE_ENV === 'production';
+  let next = fallback;
+
+  if (hasSanityConfig && sanityClient) {
+    try {
+      const data = await sanityClient.fetch<Partial<PublicSiteSettings>>(
+        groq`*[_type == "siteSettings" && siteSlug == $siteSlug][0]{
+          siteSlug,
+          adSlotsEnabled,
+          adsMode,
+          adsPreviewEnabled,
+          adsensePublisherId,
+          adsenseSlotHeader,
+          adsenseSlotInContent,
+          adsenseSlotFooter,
+          fallbackToPlatform,
+          studioUrl,
+          publicContactEmail,
+          privacyPolicyOverride,
+          cookiePolicyOverride,
+          disclaimerOverride,
+          publishing,
+          entitlement
+        }`,
+        { siteSlug: siteConfig.slug },
+        isProd ? { next: { revalidate: 300 } } : { cache: 'no-store' }
+      );
+
+      if (data) {
+        next = {
+          ...fallback,
+          ...data,
+          siteSlug: String(data.siteSlug || fallback.siteSlug),
+          adSlotsEnabled: Boolean(data.adSlotsEnabled ?? fallback.adSlotsEnabled),
+          adsMode:
+            data.adsMode === 'manual' || data.adsMode === 'hybrid' || data.adsMode === 'auto'
+              ? data.adsMode
+              : fallback.adsMode,
+          adsPreviewEnabled: Boolean(data.adsPreviewEnabled ?? fallback.adsPreviewEnabled),
+          adsensePublisherId: String(data.adsensePublisherId || ''),
+          adsenseSlotHeader: String(data.adsenseSlotHeader || ''),
+          adsenseSlotInContent: String(data.adsenseSlotInContent || ''),
+          adsenseSlotFooter: String(data.adsenseSlotFooter || ''),
+          fallbackToPlatform: Boolean(data.fallbackToPlatform ?? fallback.fallbackToPlatform),
+          studioUrl: String(data.studioUrl || fallback.studioUrl),
+          publicContactEmail: String(data.publicContactEmail || ''),
+          privacyPolicyOverride: String(data.privacyPolicyOverride || ''),
+          cookiePolicyOverride: String(data.cookiePolicyOverride || ''),
+          disclaimerOverride: String(data.disclaimerOverride || ''),
+          publishing: {
+            ...fallback.publishing,
+            ...(data.publishing || {}),
+            mode: data.publishing?.mode === 'bulk_direct' ? 'bulk_direct' : 'steady_scheduled',
+            maxPublishesPerRun: Number(data.publishing?.maxPublishesPerRun || fallback.publishing.maxPublishesPerRun),
+            planMonthlyQuota: Number(data.publishing?.planMonthlyQuota || fallback.publishing.planMonthlyQuota),
+            publishedThisMonth: Number(data.publishing?.publishedThisMonth || fallback.publishing.publishedThisMonth),
+            quotaPeriodStart: String(data.publishing?.quotaPeriodStart || fallback.publishing.quotaPeriodStart),
+            quotaPeriodEnd: String(data.publishing?.quotaPeriodEnd || fallback.publishing.quotaPeriodEnd)
+          },
+          entitlement: {
+            ...fallback.entitlement,
+            ...(data.entitlement || {}),
+            plan:
+              data.entitlement?.plan === 'standard' || data.entitlement?.plan === 'pro' || data.entitlement?.plan === 'base'
+                ? data.entitlement.plan
+                : fallback.entitlement.plan,
+            monthlyQuota: Number(data.entitlement?.monthlyQuota || fallback.entitlement.monthlyQuota),
+            publishedThisMonth: Number(data.entitlement?.publishedThisMonth || fallback.entitlement.publishedThisMonth),
+            periodStart: String(data.entitlement?.periodStart || fallback.entitlement.periodStart),
+            periodEnd: String(data.entitlement?.periodEnd || fallback.entitlement.periodEnd),
+            status:
+              data.entitlement?.status === 'paused' || data.entitlement?.status === 'stopped' || data.entitlement?.status === 'active'
+                ? data.entitlement.status
+                : fallback.entitlement.status,
+            billingMode:
+              data.entitlement?.billingMode === 'customer_paid' ||
+              data.entitlement?.billingMode === 'incubating' ||
+              data.entitlement?.billingMode === 'complimentary'
+                ? data.entitlement.billingMode
+                : fallback.entitlement.billingMode,
+            billingStatus:
+              data.entitlement?.billingStatus === 'n/a' ||
+              data.entitlement?.billingStatus === 'trial' ||
+              data.entitlement?.billingStatus === 'active' ||
+              data.entitlement?.billingStatus === 'overdue' ||
+              data.entitlement?.billingStatus === 'canceled'
+                ? data.entitlement.billingStatus
+                : fallback.entitlement.billingStatus
+          }
+        };
+      }
+    } catch {
+      next = fallback;
+    }
+  }
+
+  const portalOverlay = await fetchPublicSitePortalSettingsUncached();
+  if (!portalOverlay) return next;
+
+  return {
+    ...next,
+    publicContactEmail: portalOverlay.publicContactEmail ?? next.publicContactEmail,
+    privacyPolicyOverride: portalOverlay.privacyPolicyOverride ?? next.privacyPolicyOverride,
+    cookiePolicyOverride: portalOverlay.cookiePolicyOverride ?? next.cookiePolicyOverride,
+    disclaimerOverride: portalOverlay.disclaimerOverride ?? next.disclaimerOverride
+  };
 }
 
 const fetchSiteSettingsCached = cache(fetchSiteSettingsUncached);

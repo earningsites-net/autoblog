@@ -1,6 +1,8 @@
 import './load-local-env';
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import { z } from 'zod';
 import { buildDefaultLegalEditableText, generationJobRequestSchema } from '@autoblog/factory-sdk';
@@ -19,6 +21,19 @@ import { isPortalSiteInactiveForOwner, isPortalSiteOperational, type PortalSiteE
 const app = Fastify({ logger: true });
 
 const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '..', '..');
+const engineSourceDir = path.dirname(fileURLToPath(import.meta.url));
+
+function readPortalBrandLogoDataUri() {
+  try {
+    const logoPath = path.resolve(engineSourceDir, 'assets', 'earningsites-logo.png');
+    const logoBuffer = readFileSync(logoPath);
+    return `data:image/png;base64,${logoBuffer.toString('base64')}`;
+  } catch {
+    return '';
+  }
+}
+
+const portalBrandLogoSrc = readPortalBrandLogoDataUri();
 const siteRegistry = new LocalSiteRegistry(workspaceRoot);
 const jobStore = new InMemoryJobStore();
 const engine = new DefaultEngineService(siteRegistry, jobStore, createWorkflowRunner);
@@ -882,8 +897,13 @@ app.get('/portal', async (_req, reply) => {
     a.inline-link:hover { text-decoration:underline; }
 
     .auth-shell { min-height:calc(100vh - 56px); display:grid; place-items:center; }
-    .auth-card {
+    .auth-panel-stack {
       width:min(980px, 100%);
+      display:grid;
+      gap:0;
+    }
+    .auth-card {
+      width:100%;
       display:grid;
       grid-template-columns:1.08fr 0.92fr;
       border:1px solid var(--line);
@@ -899,6 +919,60 @@ app.get('/portal', async (_req, reply) => {
         radial-gradient(420px 240px at -8% -10%, rgba(255,255,255,.24) 0%, rgba(255,255,255,0) 65%),
         radial-gradient(340px 200px at 120% 110%, rgba(255,255,255,.2) 0%, rgba(255,255,255,0) 62%),
         linear-gradient(140deg, #2b66ff 0%, #3551dc 48%, #8b3cf2 100%);
+    }
+    .portal-brand {
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .portal-brand-logo-wrap {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:16px;
+      flex:none;
+      overflow:hidden;
+    }
+    .portal-brand-logo-wrap.on-dark {
+      background:rgba(255,255,255,.94);
+      box-shadow:0 18px 36px -24px rgba(8, 18, 46, .5);
+    }
+    .portal-brand-logo-wrap.on-light {
+      background:#fff;
+      border:1px solid #dbe5fb;
+      box-shadow:0 14px 32px -24px rgba(18, 48, 115, .35);
+    }
+    .portal-brand-logo-wrap.lg { width:88px; height:88px; padding:12px; }
+    .portal-brand-logo-wrap.sm { width:54px; height:54px; padding:8px; border-radius:14px; }
+    .portal-brand-logo {
+      display:block;
+      width:100%;
+      height:100%;
+      object-fit:contain;
+    }
+    .portal-brand-copy {
+      min-width:0;
+    }
+    .portal-brand-name {
+      margin:0;
+      font-size:22px;
+      line-height:1.05;
+      letter-spacing:-0.03em;
+      font-weight:800;
+    }
+    .portal-brand-name.light { color:#16356a; font-size:16px; }
+    .portal-brand-tagline {
+      margin:4px 0 0;
+      font-size:12px;
+      line-height:1.45;
+      color:rgba(245,248,255,.84);
+    }
+    .portal-brand-tagline.light {
+      color:#60759d;
+      margin-top:3px;
+    }
+    .auth-brand-top {
+      margin-bottom:22px;
     }
     .auth-brand h1 { margin:6px 0 8px; font-size:30px; line-height:1.1; letter-spacing:-0.02em; }
     .auth-brand p { margin:0; color:rgba(245,248,255,.9); line-height:1.5; }
@@ -942,6 +1016,11 @@ app.get('/portal', async (_req, reply) => {
       gap:14px;
       align-items:start;
     }
+    .app-sidebar-stack {
+      display:grid;
+      gap:8px;
+      align-content:start;
+    }
     .sidebar {
       position:sticky;
       top:14px;
@@ -953,6 +1032,26 @@ app.get('/portal', async (_req, reply) => {
     }
     .sidebar h3 { margin:0; font-size:16px; }
     .sidebar p { margin:6px 0 12px; color:var(--muted); font-size:12px; line-height:1.4; }
+    .sidebar-intro {
+      padding-bottom:14px;
+      margin-bottom:14px;
+      border-bottom:1px solid #e5ecfb;
+    }
+    .sidebar-hello {
+      margin:0;
+      color:#16356a;
+      font-size:14px;
+      line-height:1.3;
+      font-weight:800;
+      letter-spacing:-0.02em;
+      overflow-wrap:anywhere;
+    }
+    .sidebar-question {
+      margin:8px 0 0;
+      color:#60759d;
+      font-size:13px;
+      line-height:1.45;
+    }
     .side-nav { display:grid; gap:8px; margin-bottom:12px; }
     .side-nav .item {
       display:block;
@@ -1090,6 +1189,50 @@ app.get('/portal', async (_req, reply) => {
       cursor:not-allowed;
       opacity:.72;
     }
+    .portal-support {
+      margin:18px auto 0;
+      text-align:center;
+      font-size:12px;
+      color:#66799f;
+      line-height:1.5;
+    }
+    .portal-support a {
+      color:#2458d1;
+      text-decoration:none;
+      font-weight:700;
+    }
+    .portal-support a:hover {
+      text-decoration:underline;
+    }
+    .powered-by {
+      display:flex;
+      align-items:center;
+      gap:4px;
+      margin-top:5px;
+      color:#6d7ea0;
+      font-size:11px;
+      line-height:1.4;
+    }
+    .powered-by strong {
+      font-weight:700;
+      color:#4c628d;
+    }
+    .powered-by .brand-net {
+      color:#2e62fff2;
+    }
+    .powered-by-logo {
+      width:20px;
+      height:20px;
+      object-fit:contain;
+      flex:none;
+      opacity:.96;
+    }
+    .auth-powered-by {
+      padding-left:16px;
+    }
+    .app-powered-by {
+      margin:0 0 0 8px;
+    }
 
     @media (max-width: 1060px) {
       .auth-card { grid-template-columns:1fr; }
@@ -1108,75 +1251,91 @@ app.get('/portal', async (_req, reply) => {
   <div class="wrap">
     <div id="portalNotice" class="notice hidden" role="status" aria-live="polite"></div>
     <div id="loginShell" class="auth-shell">
-      <div id="loginPanel" class="auth-card">
-        <div class="auth-brand">
-          <p class="eyebrow">Publisher Console</p>
-          <h1>Site Owner Portal</h1>
-          <p>Configure plan, ad slots, and publishing cadence from one panel.</p>
-          <ul class="auth-bullets">
-            <li>Subscription plans: Base, Standard, Pro</li>
-            <li>AdSense setup for immediate monetization</li>
-            <li>Direct link to your Sanity Studio</li>
-          </ul>
+      <div class="auth-panel-stack">
+        <div id="loginPanel" class="auth-card">
+          <div class="auth-brand">
+            <p class="eyebrow">Publisher Console</p>
+            <h1>Site Owner Portal</h1>
+            <p>Configure plan, ad slots, and publishing cadence from one panel.</p>
+            <ul class="auth-bullets">
+              <li>Subscription plans: Base, Standard, Pro</li>
+              <li>AdSense setup for immediate monetization</li>
+              <li>Direct access to content management</li>
+            </ul>
+          </div>
+          <div class="auth-form">
+            <h3>Sign in</h3>
+            <p class="subtitle">Use your owner credentials to access this site workspace.</p>
+            <div id="loginFields" class="stack" style="margin-bottom:12px">
+              <div class="field">
+                <label>Email</label>
+                <input id="email" type="email" placeholder="owner@example.com" />
+              </div>
+              <div class="field">
+                <label>Password</label>
+                <input id="password" type="password" placeholder="••••••••" />
+              </div>
+              <p id="loginFeedback" class="field-feedback hidden" role="status" aria-live="polite"></p>
+            </div>
+            <button id="loginBtn" class="primary">Login</button>
+            <div class="auth-links">
+              <button id="showForgotBtn" type="button" class="link-button">Forgot password?</button>
+              <button id="showLoginBtn" type="button" class="link-button hidden">Back to sign in</button>
+            </div>
+            <div id="forgotPasswordPanel" class="auth-secondary hidden">
+              <p class="subtitle">Enter your account email to receive a password reset link.</p>
+              <div class="field">
+                <label>Recovery email</label>
+                <input id="forgotEmail" type="email" placeholder="owner@example.com" />
+              </div>
+              <button id="forgotBtn" type="button">Send reset link</button>
+              <p id="forgotFeedback" class="field-feedback hidden" role="status" aria-live="polite"></p>
+            </div>
+            <div id="resetPasswordPanel" class="auth-secondary hidden">
+              <p class="subtitle">Set a new password from your reset link.</p>
+              <div class="field">
+                <label>New password</label>
+                <input id="newPassword" type="password" placeholder="At least 8 characters" />
+              </div>
+              <div class="field">
+                <label>Confirm new password</label>
+                <input id="confirmNewPassword" type="password" placeholder="Repeat new password" />
+              </div>
+              <p id="resetFeedback" class="field-feedback hidden" role="status" aria-live="polite"></p>
+              <button id="resetBtn" type="button" class="primary">Reset password</button>
+            </div>
+            <p class="hint" style="margin:10px 0 0">Need help signing in? Use “Forgot password” to request a reset link.</p>
+          </div>
         </div>
-        <div class="auth-form">
-          <h3>Sign in</h3>
-          <p class="subtitle">Use your owner credentials to access this site workspace.</p>
-          <div id="loginFields" class="stack" style="margin-bottom:12px">
-            <div class="field">
-              <label>Email</label>
-              <input id="email" type="email" placeholder="owner@example.com" />
-            </div>
-            <div class="field">
-              <label>Password</label>
-              <input id="password" type="password" placeholder="••••••••" />
-            </div>
-            <p id="loginFeedback" class="field-feedback hidden" role="status" aria-live="polite"></p>
-          </div>
-          <button id="loginBtn" class="primary">Login</button>
-          <div class="auth-links">
-            <button id="showForgotBtn" type="button" class="link-button">Forgot password?</button>
-            <button id="showLoginBtn" type="button" class="link-button hidden">Back to sign in</button>
-          </div>
-          <div id="forgotPasswordPanel" class="auth-secondary hidden">
-            <p class="subtitle">Enter your account email to receive a password reset link.</p>
-            <div class="field">
-              <label>Recovery email</label>
-              <input id="forgotEmail" type="email" placeholder="owner@example.com" />
-            </div>
-            <button id="forgotBtn" type="button">Send reset link</button>
-            <p id="forgotFeedback" class="field-feedback hidden" role="status" aria-live="polite"></p>
-          </div>
-          <div id="resetPasswordPanel" class="auth-secondary hidden">
-            <p class="subtitle">Set a new password from your reset link.</p>
-            <div class="field">
-              <label>New password</label>
-              <input id="newPassword" type="password" placeholder="At least 8 characters" />
-            </div>
-            <div class="field">
-              <label>Confirm new password</label>
-              <input id="confirmNewPassword" type="password" placeholder="Repeat new password" />
-            </div>
-            <p id="resetFeedback" class="field-feedback hidden" role="status" aria-live="polite"></p>
-            <button id="resetBtn" type="button" class="primary">Reset password</button>
-          </div>
-          <p class="hint" style="margin:10px 0 0">Need help signing in? Use “Forgot password” to request a reset link.</p>
-        </div>
+        <p class="powered-by auth-powered-by">
+          <span>Powered by</span>
+          ${portalBrandLogoSrc ? `<img src="${portalBrandLogoSrc}" alt="" class="powered-by-logo" />` : ''}
+          <strong>EarningSites<span class="brand-net">.net</span></strong>
+        </p>
       </div>
     </div>
 
     <div id="appPanel" class="hidden app-shell">
-      <aside class="sidebar">
-        <h3>Owner Workspace</h3>
-        <p id="me"></p>
-        <div class="side-nav">
-          <button type="button" class="item active" data-nav-view="monetization">Monetization</button>
-          <button type="button" class="item" data-nav-view="contacts-legal">Contacts & Legal</button>
-          <a id="publishingStudioLink" class="item" target="_blank" rel="noreferrer">Publishing Controls (Sanity)</a>
-          <button type="button" class="item" data-nav-view="billing">Billing & Plan</button>
-        </div>
-        <button id="logoutBtn" class="warn">Logout</button>
-      </aside>
+      <div class="app-sidebar-stack">
+        <aside class="sidebar">
+          <div class="sidebar-intro">
+            <h3 id="me" class="sidebar-hello">👋 Hello</h3>
+            <p class="sidebar-question">Manage your content and your subscription</p>
+          </div>
+          <div class="side-nav">
+            <button type="button" class="item active" data-nav-view="monetization">Monetization</button>
+            <a id="publishingStudioLink" class="item" target="_blank" rel="noreferrer">Content Management</a>
+            <button type="button" class="item" data-nav-view="billing">Billing & Plan</button>
+            <button type="button" class="item" data-nav-view="contacts-legal">Contacts & Legal</button>
+          </div>
+          <button id="logoutBtn" class="warn">Logout</button>
+        </aside>
+        <p id="appPoweredBy" class="powered-by app-powered-by hidden">
+          <span>Powered by</span>
+          ${portalBrandLogoSrc ? `<img src="${portalBrandLogoSrc}" alt="" class="powered-by-logo" />` : ''}
+          <strong>EarningSites<span class="brand-net">.net</span></strong>
+        </p>
+      </div>
       <section class="main-stack">
         <div class="panel">
           <div>
@@ -1187,6 +1346,8 @@ app.get('/portal', async (_req, reply) => {
         <div id="sites"></div>
       </section>
     </div>
+
+    <p class="portal-support">Support: <a href="mailto:info@earningsites.net">info@earningsites.net</a></p>
 
     <div id="planConfirmModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="planConfirmTitle">
       <div class="modal-card">
@@ -1206,6 +1367,7 @@ app.get('/portal', async (_req, reply) => {
     const loginShell = document.getElementById('loginShell');
     const loginPanel = document.getElementById('loginPanel');
     const appPanel = document.getElementById('appPanel');
+    const appPoweredBy = document.getElementById('appPoweredBy');
     const meEl = document.getElementById('me');
     const sitesEl = document.getElementById('sites');
     const planConfirmModal = document.getElementById('planConfirmModal');
@@ -1566,12 +1728,14 @@ app.get('/portal', async (_req, reply) => {
         loginPanel.classList.add('hidden');
         loginShell.classList.add('hidden');
         appPanel.classList.remove('hidden');
-        meEl.textContent = 'Logged in as ' + (me.user?.email || 'unknown');
+        if (appPoweredBy instanceof HTMLElement) appPoweredBy.classList.remove('hidden');
+        meEl.textContent = '👋 Hello ' + (me.user?.email || 'there');
         await loadSites();
       } catch {
         loginPanel.classList.remove('hidden');
         loginShell.classList.remove('hidden');
         appPanel.classList.add('hidden');
+        if (appPoweredBy instanceof HTMLElement) appPoweredBy.classList.add('hidden');
         setAuthView(authView);
       }
     }

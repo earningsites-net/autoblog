@@ -32,6 +32,10 @@ export type PortalSiteSettings = {
   adsenseSlotFooter: string;
   fallbackToPlatform: boolean;
   studioUrl: string;
+  publicContactEmail: string;
+  privacyPolicyOverride: string;
+  cookiePolicyOverride: string;
+  disclaimerOverride: string;
   updatedAt: string;
 };
 

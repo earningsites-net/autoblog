@@ -4,6 +4,9 @@
 - Correggere il tema `warm_wellness` eliminando CTA inadatte a un blog, riallineando il loader alla palette e rimuovendo incoerenze visive o di copy.
 
 ## Done
+- Verificato il flusso password del portal per supporto operativo:
+  - `users.password_hash` salva un hash non reversibile in formato `scrypt$<salt>$<hash>`
+  - il repo espone già reset via token (`/api/portal/auth/forgot-password`, `/api/portal/auth/reset-password`) e provisioning/reset tramite `createOrUpdateUser` / `site:handoff --temp-password`
 - Impostato il task attivo per il lavoro sul tema `warm_wellness`.
 - Rimossi copy e CTA da sito vetrina/clinic nel recipe `warm_wellness` su header, hero magazine, homepage e category cards.
 - Riallineato il loader del tema a un gradiente rosato coerente con `warm_wellness` e colorato lo spinner con accento rosa.
@@ -28,14 +31,89 @@
   - evita duplicati e l'articolo corrente
 - Verificato `npm --workspace @autoblog/web run typecheck` con esito positivo dopo il fix del sidebar links fallback.
 - Rifinito il copy del blocco sidebar articolo: `Related reading` -> `Read next`.
+- Rifinito anche il label del blocco sidebar articolo: `Internal Links` -> `More to explore`.
+- Aggiunto favicon branding-aware:
+  - usa `logoUrl` se disponibile
+  - altrimenti genera una favicon con lo stesso monogramma condiviso usato come fallback del logo nel sito
+- Centralizzata la logica del monogramma in un helper condiviso, così header e favicon restano coerenti.
+- Sostituite le tre pagine legali placeholder (`privacy-policy`, `cookie-policy`, `disclaimer`) con copy in inglese, generico ma pubblicabile per un MVP editoriale/advertising.
+- Introdotto un builder condiviso per le pagine legali con contenuto uniforme multi-sito e variazione minima runtime in base allo stato advertising.
+- Introdotto un renderer condiviso tema-aware per le pagine legali, così layout, card e CTA verso `/contact` restano coerenti con recipe light/dark del sito.
+- Verificato `npm --workspace @autoblog/web run typecheck` con esito positivo dopo il refresh delle pagine legali.
+- Verificato l'assenza dei placeholder espliciti nelle tre pagine legali aggiornate.
+- Diagnosticato il nuovo `Internal Server Error` locale:
+  - l'istanza web su `localhost:3000` non crashava per le pagine legali
+  - il dev server era entrato in stato corrotto con file `.next` mancanti (`routes-manifest.json`, `_not-found/page.js`)
+- Verificato che le route legali su un dev server pulito rispondono `200`.
+- Riavviato il web locale direttamente su `localhost:3000` e verificato `200` per homepage e `privacy-policy`.
+- Chiarito e documentato in `docs/context.md` il modello contatti MVP per siti ceduti:
+  - i siti sono pensati come `1 sito -> 1 owner finale`
+  - il contatto minimo già noto è l'`ownerEmail` raccolto in handoff
+  - non va derivato automaticamente `info@<dominio>`
+  - il fallback consigliato è form portal-managed o relay alias piattaforma inoltrato all'owner
+- Implementata la gestione owner-facing `Contacts & Legal` nel portal:
+  - nuovo campo `Public contact email`
+  - tre textarea per `Privacy Policy`, `Cookie Policy` e `Disclaimer`
+  - prefill con testi default condivisi per il sito corrente
+- Estesi il portal store Postgres, lo schema Sanity `siteSettings` e il sync runtime per salvare e propagare:
+  - `publicContactEmail`
+  - `privacyPolicyOverride`
+  - `cookiePolicyOverride`
+  - `disclaimerOverride`
+- Aggiunto un endpoint engine pubblico dedicato alle impostazioni contact/legal del sito, separato dallo state entitlement.
+- Aggiornato il web per leggere un overlay pubblico dal portal/engine sopra le `siteSettings`, così email pubblica e override legali non dipendono solo da Sanity.
+- Collegata la pagina `/contact` alla `publicContactEmail` configurata; se assente, il sito evita il placeholder fittizio e usa il fallback risolto dal portal quando disponibile.
+- Collegato il renderer delle policy legali agli override portal-managed:
+  - se c'è testo custom, la pagina usa quello
+  - se l'override è vuoto, resta attivo il testo default condiviso
+- Centralizzato il testo default legale in `packages/factory-sdk`, così portal e web condividono la stessa base per default + prefill editing.
+- Verificato `npm --workspace @autoblog/engine run typecheck` con esito positivo.
+- Verificato `npm --workspace @autoblog/web run typecheck` con esito positivo.
+- Verificato `npm --workspace @autoblog/web run build` con esito positivo; il build Next ora completa anche `Collecting page data` e genera correttamente le route `contact`, `privacy-policy`, `cookie-policy` e `disclaimer`.
+- Rifinita la UI del portal owner-facing:
+  - `Contacts & Legal` spostato in fondo alla nav laterale
+  - `Publishing Controls (Sanity)` rinominato in `Content Management`
+  - branding `EarningSites.net` alleggerito in entrambe le viste:
+    - rimosso il blocco brand grande dalla schermata login
+    - rimossa l'intestazione con logo nel portal loggato
+    - sostituito con righe discrete `Powered by <logo> EarningSites.net`
+  - il portal loggato ora usa un saluto diretto con email owner (`👋 Hello ...`) e una subtitle più editoriale invece di `Logged in as ...`
+  - aggiunta una riga supporto discreta con `info@earningsites.net` nel footer del portal
+- Verificato `npm --workspace @autoblog/engine run typecheck` con esito positivo dopo il refresh branding/navigation del portal.
+- Rifinito il micro-branding del login/portal:
+  - `.auth-panel-stack` senza gap extra
+  - riga `Powered by` più compatta (`gap: 4px`, `margin-top: 5px`)
+  - logo portato a `20x20`
+  - `.net` di `EarningSites.net` evidenziato con `#2e62fff2`
+- Verificato `npm --workspace @autoblog/engine run typecheck` con esito positivo dopo il tuning del blocco `Powered by`.
+- Ritoccato il portal loggato:
+  - riga `Powered by` spostata fuori dalla sidebar/panel ma mantenuta nella colonna sinistra, subito sotto il box
+  - intro semplificata a `Manage your content and your subscription`
+  - saluto `Hello ...` ridotto a `14px`
+- Verificato `npm --workspace @autoblog/engine run typecheck` con esito positivo dopo il ritocco del portal loggato.
 
 ## Decisions
+- Le password portal non vanno mai "decifrate" dal DB: in caso di password persa si deve impostarne una nuova passando dai flussi applicativi o rigenerando un hash compatibile `scrypt`.
 - Normalizzato l'id del task utente in `fix-tema-warm-wellness` per rispettare il formato kebab-case del repo.
 - Corretto il problema di palette in due punti: override CSS del loader per il runtime attuale e preset/blueprint rosati per evitare che il mismatch si ripresenti nei futuri siti `warm_wellness`.
 - Sostituiti i blocchi “indicatori/appointment/visit” con elementi editoriali da blog invece di metriche o CTA da servizio.
 - `site:use` deve essere la fonte unica di verità anche per il frontend locale Next; se `apps/web/.env.local` resta scollegato, il sito mostrato può appartenere a un altro slug anche con `.env` corretto.
 - In locale non conviene cacheare gli articoli con `unstable_cache` durante gli switch sito: il feedback corretto vale più del micro-ottimizzare la dev experience.
 - Per l'MVP il blocco `Internal Links` non deve dipendere solo dal popolamento CMS: se manca il linking editoriale, il frontend deve ripiegare su articoli correlati già disponibili.
+- Il monogramma brand fallback non deve vivere in più punti: favicon e header devono derivare dallo stesso helper per evitare drift visivo tra brand mark e browser tab.
+- Le policy legali MVP devono restare global-generic e provider-agnostic: niente claim di compliance specifica, niente nomi vendor, niente testo “replace before launch”.
+- Il branch dinamico delle policy deve limitarsi allo stato ads enabled/disabled; i `legalTemplates` del blueprint non guidano il rendering in questa passata.
+- Le richieste privacy/cookie devono convergere sempre sulla route `/contact`, senza email placeholder hardcoded dentro le policy.
+- Se il dev server Next locale perde artefatti sotto `.next`, il sintomo può essere un generico `Internal Server Error` o la pagina `missing required error components`; in quel caso serve un restart pulito del web, non un rollback del codice delle route.
+- Per siti destinati alla cessione, la soluzione MVP più semplice e robusta per i contatti non è mostrare direttamente un'email derivata dal dominio del sito, ma usare l'owner email già raccolta in handoff come destinazione effettiva dietro un form o un relay alias piattaforma.
+- Per il modello `1 sito -> 1 owner`, il compromesso MVP più rapido è owner-managed content nel portal:
+  - `publicContactEmail` come recapito pubblico mostrato sul sito
+  - override opzionali delle tre pagine legali
+  - fallback automatico a ownerEmail/default shared text quando i campi non sono ancora stati personalizzati
+- I testi legali custom vengono salvati come plain text con convenzione semplice (`## titoli sezione`, paragrafi, `- bullet`), così il portal evita editor HTML ma il rendering pubblico resta leggibile.
+- Il source of truth operativo per contact/legal resta il portal DB; Sanity continua a ricevere il sync, ma il frontend può fare overlay dal public endpoint engine per evitare drift temporaneo o dati stale.
+- Per asset puramente portal-owned come il logo `EarningSites.net`, `apps/engine/src/assets` è un punto coerente perché il portal è renderizzato direttamente dall'engine; per questa passata il logo viene incorporato nel markup portal come data URI, evitando routing statico dedicato.
+- Per il portal owner-facing conviene tenere il branding principale secondario rispetto all'azione utente: meglio un saluto contestuale + `Powered by` discreto che un header brand prominente dentro sidebar o login card.
 
 ## Next
 - Verificare visualmente `glowlab-daily` in locale o preview con `SITE_SLUG=glowlab-daily` quando l'ambiente può risolvere i font Google.
@@ -43,8 +121,21 @@
 - Chiudere o spostare il processo esterno che occupa `127.0.0.1:3000`, poi riavviare Auto Blog con `npm run dev:up -- --fresh`.
 - Verificare manualmente uno switch completo `glowlab-daily -> ai-blog-news` con restart del web, controllando che tema e articoli restino allineati allo stesso progetto/slug.
 - Valutare se applicare la stessa logica di fallback anche in fase di generazione contenuti, così il CMS riceve `internalLinks` già pronti e il frontend resta solo consumer.
+- Verificare manualmente le tre pagine legali su almeno un sito light e uno dark con dev server attivo, per confermare la resa del renderer condiviso sui recipe più estremi.
+- Valutare se sostituire anche il placeholder `hello@example.com` nella pagina `/contact`, così il percorso suggerito dalle policy non atterra su un recapito fittizio.
+- Verificare manualmente, con portal locale attivo, che la nuova tab `Contacts & Legal` salvi correttamente gli override e li rifletta subito sul sito pubblico.
+- Valutare se distinguere in futuro tra `publicContactEmail` esplicita e fallback operativo `ownerEmail`, nel caso serva consentire un “blank intenzionale” senza fallback pubblico.
+- Se serve, rifinire ulteriormente il blocco branding del portal con una versione logo specifica per sfondi scuri o con dimensioni ottimizzate per mobile.
+- Valutare se evitare `next build` paralleli a `next dev` sullo stesso workspace o isolare meglio gli artefatti locali `.next`, per ridurre il rischio di corruzione del dev server.
+- Se si implementa `/contact`, scegliere tra:
+  - form pubblico che inoltra all'owner email risolta dal portal
+  - alias email per-site su dominio piattaforma che inoltra allo stesso owner email
+  - `publicContactEmail` owner-configurable come override successivo nel portal
 
 ## Risks
 - Il build mirato con `SITE_SLUG=glowlab-daily` fallisce in sandbox per fetch esterno di Google Fonts (`fonts.googleapis.com`), quindi la verifica specifica del sito warm non è completa in questo ambiente offline.
 - Anche con gli env corretti, se `localhost:3000` resta occupata da un altro progetto locale si continua a vedere l'app sbagliata e il test del tema risulta fuorviante.
 - Se il web resta acceso mentre si modifica `.env.local`, serve comunque riavviare il dev server Next per riallineare client Sanity, `siteConfig` e redirect config.
+- La sessione `next dev` attualmente riaperta per il fix è viva in questa thread; se viene terminata, il sito locale va rilanciato con `npm run dev:up -- --fresh` o `npm run dev:web`.
+- Mostrare un indirizzo derivato automaticamente dal dominio pubblico del sito senza provisioning reale di mailbox/forwarding produrrebbe un'esperienza rotta e difficile da correggere dopo la vendita.
+- In questo ambiente sandbox non sono riuscito a fare uno smoke runtime dell'engine su porta alternativa perché `tsx` tenta di aprire un IPC pipe negato dal sandbox (`EPERM` su pipe temporanea); la verifica reale dell'endpoint pubblico contact/legal va quindi fatta con stack locale già attivo fuori sandbox.

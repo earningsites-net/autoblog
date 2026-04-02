@@ -59,6 +59,10 @@ type SiteSettingsRow = {
   adsense_slot_footer: string;
   fallback_to_platform: boolean;
   studio_url: string;
+  public_contact_email: string;
+  privacy_policy_override: string;
+  cookie_policy_override: string;
+  disclaimer_override: string;
   updated_at: string;
 };
 
@@ -97,6 +101,10 @@ function asSiteSettings(row: SiteSettingsRow): PortalSiteSettings {
     adsenseSlotFooter: row.adsense_slot_footer || '',
     fallbackToPlatform: Boolean(row.fallback_to_platform),
     studioUrl: row.studio_url || '',
+    publicContactEmail: row.public_contact_email || '',
+    privacyPolicyOverride: row.privacy_policy_override || '',
+    cookiePolicyOverride: row.cookie_policy_override || '',
+    disclaimerOverride: row.disclaimer_override || '',
     updatedAt: row.updated_at
   };
 }
@@ -205,6 +213,10 @@ export class PostgresPortalStore implements PortalStoreAdapter {
         adsense_slot_footer TEXT NOT NULL DEFAULT '',
         fallback_to_platform BOOLEAN NOT NULL DEFAULT TRUE,
         studio_url TEXT NOT NULL DEFAULT '',
+        public_contact_email TEXT NOT NULL DEFAULT '',
+        privacy_policy_override TEXT NOT NULL DEFAULT '',
+        cookie_policy_override TEXT NOT NULL DEFAULT '',
+        disclaimer_override TEXT NOT NULL DEFAULT '',
         updated_at TEXT NOT NULL
       )`,
       `CREATE TABLE IF NOT EXISTS entitlements (
@@ -239,6 +251,10 @@ export class PostgresPortalStore implements PortalStoreAdapter {
       )`,
       `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ads_mode TEXT NOT NULL DEFAULT 'auto'`,
       `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ads_preview_enabled BOOLEAN NOT NULL DEFAULT TRUE`,
+      `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS public_contact_email TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS privacy_policy_override TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS cookie_policy_override TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS disclaimer_override TEXT NOT NULL DEFAULT ''`,
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_plan TEXT NOT NULL DEFAULT ''`,
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_monthly_quota INTEGER NOT NULL DEFAULT 0`,
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_effective_at TEXT NOT NULL DEFAULT ''`,
@@ -492,8 +508,9 @@ export class PostgresPortalStore implements PortalStoreAdapter {
           site_slug, publishing_enabled, max_publishes_per_run, ad_slots_enabled,
           ads_mode, ads_preview_enabled,
           adsense_publisher_id, adsense_slot_header, adsense_slot_in_content, adsense_slot_footer,
-          fallback_to_platform, studio_url, updated_at
-        ) VALUES ($1, TRUE, 1, FALSE, 'auto', TRUE, '', '', '', '', TRUE, '', $2)
+          fallback_to_platform, studio_url, public_contact_email,
+          privacy_policy_override, cookie_policy_override, disclaimer_override, updated_at
+        ) VALUES ($1, TRUE, 1, FALSE, 'auto', TRUE, '', '', '', '', TRUE, '', '', '', '', '', $2)
         ON CONFLICT(site_slug) DO NOTHING`,
         [normalizedSlug, now]
       );
@@ -515,7 +532,8 @@ export class PostgresPortalStore implements PortalStoreAdapter {
     const rows = await this.sql.unsafe<SiteSettingsRow[]>(
       `SELECT site_slug, publishing_enabled, max_publishes_per_run, ad_slots_enabled,
               ads_mode, ads_preview_enabled, adsense_publisher_id, adsense_slot_header,
-              adsense_slot_in_content, adsense_slot_footer, fallback_to_platform, studio_url, updated_at
+              adsense_slot_in_content, adsense_slot_footer, fallback_to_platform, studio_url,
+              public_contact_email, privacy_policy_override, cookie_policy_override, disclaimer_override, updated_at
        FROM site_settings
        WHERE site_slug = $1
        LIMIT 1`,
@@ -537,6 +555,10 @@ export class PostgresPortalStore implements PortalStoreAdapter {
         adsenseSlotFooter: '',
         fallbackToPlatform: true,
         studioUrl: '',
+        publicContactEmail: '',
+        privacyPolicyOverride: '',
+        cookiePolicyOverride: '',
+        disclaimerOverride: '',
         updatedAt: now
       };
     }
@@ -564,6 +586,10 @@ export class PostgresPortalStore implements PortalStoreAdapter {
       adsenseSlotFooter: patch.adsenseSlotFooter ?? current.adsenseSlotFooter,
       fallbackToPlatform: patch.fallbackToPlatform ?? current.fallbackToPlatform,
       studioUrl: patch.studioUrl ?? current.studioUrl,
+      publicContactEmail: patch.publicContactEmail ?? current.publicContactEmail,
+      privacyPolicyOverride: patch.privacyPolicyOverride ?? current.privacyPolicyOverride,
+      cookiePolicyOverride: patch.cookiePolicyOverride ?? current.cookiePolicyOverride,
+      disclaimerOverride: patch.disclaimerOverride ?? current.disclaimerOverride,
       updatedAt
     };
     await this.sql.unsafe(
@@ -579,8 +605,12 @@ export class PostgresPortalStore implements PortalStoreAdapter {
            adsense_slot_footer = $9,
            fallback_to_platform = $10,
            studio_url = $11,
-           updated_at = $12
-       WHERE site_slug = $13`,
+           public_contact_email = $12,
+           privacy_policy_override = $13,
+           cookie_policy_override = $14,
+           disclaimer_override = $15,
+           updated_at = $16
+       WHERE site_slug = $17`,
       [
         next.publishingEnabled,
         Math.max(1, Number(next.maxPublishesPerRun || 1)),
@@ -593,6 +623,10 @@ export class PostgresPortalStore implements PortalStoreAdapter {
         String(next.adsenseSlotFooter || '').trim(),
         next.fallbackToPlatform,
         String(next.studioUrl || '').trim(),
+        String(next.publicContactEmail || '').trim(),
+        String(next.privacyPolicyOverride || '').trim(),
+        String(next.cookiePolicyOverride || '').trim(),
+        String(next.disclaimerOverride || '').trim(),
         updatedAt,
         normalizedSlug
       ]

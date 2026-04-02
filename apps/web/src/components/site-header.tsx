@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { siteConfig } from '@web/lib/site';
+import { getSiteLogoMonogram, siteConfig } from '@web/lib/site';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 const nav = [
@@ -14,7 +14,7 @@ export function SiteHeader() {
   const recipe = theme.recipe;
   const isNoirSharp = recipe === 'noir_luxury_dark';
   const isArcadeSoft = recipe === 'arcade_play_dark';
-  const logoLetter = siteConfig.name.trim().charAt(0).toUpperCase() || 'A';
+  const logoLetter = getSiteLogoMonogram().letter;
   const logoUrl = siteConfig.brandAssets.logoUrl;
   const logoAlt = siteConfig.brandAssets.logoAlt || `${siteConfig.name} logo`;
 
