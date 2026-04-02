@@ -99,6 +99,12 @@
     - `apps/web/tsconfig.tsbuildinfo`
   - aggiornato `.gitignore` di conseguenza
 - Verificato `npm run typecheck` con esito positivo prima del push complessivo.
+- Pushato `main` fino a `17ec960` e riallineato il VPS production con `git pull --ff-only origin main`.
+- Diagnosticato il falso rollout incompleto su production:
+  - `autoblog-engine` risultava `active` ma non bindava `127.0.0.1:8787`
+  - il blocco reale era una sessione `DBeaver ... idle in transaction` su `autoblog_portal_prod`
+  - quella sessione tratteneva il lock su `entitlements` mentre il bootstrap Postgres dell'engine eseguiva `ALTER TABLE ... IF NOT EXISTS`
+- Terminata la sessione Postgres bloccante, eseguiti `systemctl daemon-reload` e restart engine, poi verificato `GET /healthz -> ok:true` in production.
 
 ## Decisions
 - Le password portal non vanno mai "decifrate" dal DB: in caso di password persa si deve impostarne una nuova passando dai flussi applicativi o rigenerando un hash compatibile `scrypt`.
@@ -123,6 +129,8 @@
 - Per asset puramente portal-owned come il logo `EarningSites.net`, `apps/engine/src/assets` è un punto coerente perché il portal è renderizzato direttamente dall'engine; per questa passata il logo viene incorporato nel markup portal come data URI, evitando routing statico dedicato.
 - Per il portal owner-facing conviene tenere il branding principale secondario rispetto all'azione utente: meglio un saluto contestuale + `Powered by` discreto che un header brand prominente dentro sidebar o login card.
 - In presenza di un worktree condiviso tra thread, i generated files locali (`.pid`, `tsbuildinfo`) non vanno più tenuti tracked: è meglio ripulirli subito per evitare nuovi commit rumorosi.
+- Sul VPS production il `git pull` può risultare "riuscito" anche se l'engine non ha completato il bootstrap: serve sempre verificare che il processo abbia davvero aperto `127.0.0.1:8787`, non solo che `systemctl` dica `active`.
+- Finche' il bootstrap schema Postgres resta nel percorso di startup, una sessione DBeaver production `idle in transaction` può impedire all'engine di arrivare a `app.listen()`.
 
 ## Next
 - Verificare visualmente `glowlab-daily` in locale o preview con `SITE_SLUG=glowlab-daily` quando l'ambiente può risolvere i font Google.
@@ -140,7 +148,8 @@
   - form pubblico che inoltra all'owner email risolta dal portal
   - alias email per-site su dominio piattaforma che inoltra allo stesso owner email
   - `publicContactEmail` owner-configurable come override successivo nel portal
-- Riallineare il VPS production a `2739b25` e verificare che l'engine serva la nuova guida Factory + il collegamento Studio.
+- Verificare da UI `ops/factory` che la nuova sezione `Complete Deploy` mostri correttamente anche il comando `site:studio:prod`.
+- Valutare se spostare il bootstrap schema Postgres fuori dal path di startup dell'engine, così un lock DBeaver non impedisce il restart del servizio.
 
 ## Risks
 - Il build mirato con `SITE_SLUG=glowlab-daily` fallisce in sandbox per fetch esterno di Google Fonts (`fonts.googleapis.com`), quindi la verifica specifica del sito warm non è completa in questo ambiente offline.
@@ -150,3 +159,4 @@
 - Mostrare un indirizzo derivato automaticamente dal dominio pubblico del sito senza provisioning reale di mailbox/forwarding produrrebbe un'esperienza rotta e difficile da correggere dopo la vendita.
 - In questo ambiente sandbox non sono riuscito a fare uno smoke runtime dell'engine su porta alternativa perché `tsx` tenta di aprire un IPC pipe negato dal sandbox (`EPERM` su pipe temporanea); la verifica reale dell'endpoint pubblico contact/legal va quindi fatta con stack locale già attivo fuori sandbox.
 - Il push aggregato include modifiche provenienti da più thread già presenti/staged nel worktree condiviso; il contenuto è stato accettato esplicitamente come sync complessivo, non come commit tematico minimale.
+- Finche' l'engine avvia lo schema bootstrap direttamente all'avvio, la superficie operativa di production resta sensibile a client SQL lasciati in transazione aperta; il runbook DBeaver va considerato parte della sicurezza operativa del VPS.

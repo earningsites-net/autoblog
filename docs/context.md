@@ -77,6 +77,7 @@ This file stores durable project context shared across tasks.
 - Stato attuale Postgres portal:
   - local dev usa il Postgres del compose `infra/n8n` con database dedicato (`autoblog_portal_local`) bootstrapato via `npm run portal:postgres:bootstrap`
   - production IONOS usa Postgres dedicato per il portal (`autoblog_portal_prod`) sullo stesso server Postgres di n8n, con `PORTAL_DATABASE_URL` in `/etc/autoblog/engine.env`
+  - finche' il bootstrap schema del portal continua a eseguire `ALTER TABLE ... IF NOT EXISTS` allo startup dell'engine, una sessione Postgres `idle in transaction` aperta da DBeaver sul DB production puo' bloccare il restart del servizio prima di `app.listen()`; su production usare DBeaver con autocommit attivo ed evitare tab lasciati in transazione aperta
   - i campi dominio del portal su `entitlements` non sono piu' `TEXT` liberi:
     - `status` -> enum `portal_entitlement_status`
     - `billing_mode` -> enum `portal_billing_mode`
