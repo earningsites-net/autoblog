@@ -91,6 +91,14 @@
   - intro semplificata a `Manage your content and your subscription`
   - saluto `Hello ...` ridotto a `14px`
 - Verificato `npm --workspace @autoblog/engine run typecheck` con esito positivo dopo il ritocco del portal loggato.
+- Consolidate e committate anche le modifiche parallele presenti nel worktree condiviso:
+  - commit `3276a6b` per il collegamento Studio (`site:studio`, `site:studio:prod`) e la guida post-launch in `ops/factory`
+  - commit `2739b25` come sync del resto delle modifiche già presenti/staged in altri thread
+  - rimossi dal tracking Git i generated/local artifacts:
+    - `.dev/runtime/*.pid`
+    - `apps/web/tsconfig.tsbuildinfo`
+  - aggiornato `.gitignore` di conseguenza
+- Verificato `npm run typecheck` con esito positivo prima del push complessivo.
 
 ## Decisions
 - Le password portal non vanno mai "decifrate" dal DB: in caso di password persa si deve impostarne una nuova passando dai flussi applicativi o rigenerando un hash compatibile `scrypt`.
@@ -114,6 +122,7 @@
 - Il source of truth operativo per contact/legal resta il portal DB; Sanity continua a ricevere il sync, ma il frontend può fare overlay dal public endpoint engine per evitare drift temporaneo o dati stale.
 - Per asset puramente portal-owned come il logo `EarningSites.net`, `apps/engine/src/assets` è un punto coerente perché il portal è renderizzato direttamente dall'engine; per questa passata il logo viene incorporato nel markup portal come data URI, evitando routing statico dedicato.
 - Per il portal owner-facing conviene tenere il branding principale secondario rispetto all'azione utente: meglio un saluto contestuale + `Powered by` discreto che un header brand prominente dentro sidebar o login card.
+- In presenza di un worktree condiviso tra thread, i generated files locali (`.pid`, `tsbuildinfo`) non vanno più tenuti tracked: è meglio ripulirli subito per evitare nuovi commit rumorosi.
 
 ## Next
 - Verificare visualmente `glowlab-daily` in locale o preview con `SITE_SLUG=glowlab-daily` quando l'ambiente può risolvere i font Google.
@@ -131,6 +140,7 @@
   - form pubblico che inoltra all'owner email risolta dal portal
   - alias email per-site su dominio piattaforma che inoltra allo stesso owner email
   - `publicContactEmail` owner-configurable come override successivo nel portal
+- Riallineare il VPS production a `2739b25` e verificare che l'engine serva la nuova guida Factory + il collegamento Studio.
 
 ## Risks
 - Il build mirato con `SITE_SLUG=glowlab-daily` fallisce in sandbox per fetch esterno di Google Fonts (`fonts.googleapis.com`), quindi la verifica specifica del sito warm non è completa in questo ambiente offline.
@@ -139,3 +149,4 @@
 - La sessione `next dev` attualmente riaperta per il fix è viva in questa thread; se viene terminata, il sito locale va rilanciato con `npm run dev:up -- --fresh` o `npm run dev:web`.
 - Mostrare un indirizzo derivato automaticamente dal dominio pubblico del sito senza provisioning reale di mailbox/forwarding produrrebbe un'esperienza rotta e difficile da correggere dopo la vendita.
 - In questo ambiente sandbox non sono riuscito a fare uno smoke runtime dell'engine su porta alternativa perché `tsx` tenta di aprire un IPC pipe negato dal sandbox (`EPERM` su pipe temporanea); la verifica reale dell'endpoint pubblico contact/legal va quindi fatta con stack locale già attivo fuori sandbox.
+- Il push aggregato include modifiche provenienti da più thread già presenti/staged nel worktree condiviso; il contenuto è stato accettato esplicitamente come sync complessivo, non come commit tematico minimale.
