@@ -1433,6 +1433,27 @@
     - env Vercel gia' compilate
     - comando reale di deploy Sanity Studio
   - `siteStatus()` ora espone anche un payload `deploy` derivato da `.env.generated`, utile per popolare la guida senza reinserire a mano gli stessi valori
+- Diagnosticato il `403 Forbidden` su `https://aiblogs.earningsites.net/ops/factory`:
+  - la richiesta viene bloccata da Nginx prima di arrivare all'engine
+  - allowlist live trovata in `/etc/nginx/sites-enabled/autoblog-ops`:
+    - `127.0.0.1`
+    - `93.56.169.173/32`
+    - `62.101.71.22/32`
+  - il nuovo IP client `2.116.12.46/32` non e' presente li'
+  - la regola firewall IONOS aggiunta su `22/tcp` non influisce su `https/443`: va aggiornata la allowlist Nginx, non il firewall SSH
+- Aggiunto un comando dedicato per collegare uno Studio gia' deployato senza toccare ownership/billing:
+  - locale: `npm run site:studio -- <site-slug> --studio-url https://<site-slug>.sanity.studio`
+  - production: `npm run site:studio:prod -- <site-slug> --studio-url https://<site-slug>.sanity.studio`
+  - il comando aggiorna:
+    - `SANITY_STUDIO_URL` nel site runtime env
+    - `registry.studioUrl`
+    - `site_settings.studio_url` nel portal DB
+- Aggiornata la guida `Factory Ops` post-launch con il passaggio esplicito di attach Studio:
+  - dopo il deploy Sanity, la UI mostra ora anche il comando `site:studio:prod`
+  - la guida spiega che questo collega lo Studio al portal senza riusare `site:handoff`
+- Aggiornate anche le note operative:
+  - `infra/n8n/instructions.md`
+  - `docs/context.md`
 
 ## Decisions
 - Per l'MVP il modello commerciale resta:
@@ -1444,6 +1465,9 @@
   - `/portal` sul sito resta sempre raggiungibile e redirige al portal centrale
 - La pagina `ops/factory` deve guidare il completamento del sito fino al deploy, non limitarsi a mostrare il JSON grezzo della risposta:
   - meglio una checklist operativa con valori reali per Vercel/Studio che costringere l'operatore a recuperare ogni volta env e comandi da thread o note sparse
+- Il collegamento di uno Studio gia' deployato va modellato come comando dedicato:
+  - non va fatto con `site:handoff`, perche' quello altera anche ownership e billing
+  - il source of truth del link Studio per il portal resta runtime/portal DB, non Vercel
 
 ## Next
 - Rifare un test E2E ex novo da Factory su un nuovo slug, verificando:
@@ -1458,6 +1482,12 @@
   - eventuale spostamento del data dir Postgres fuori dal repo clone sul VPS
   - runbook DBeaver/SSH tunnel uso production in sola lettura salvo interventi mirati
 - Valutare se aggiungere nella guida `Factory Ops` anche il passo finale di registrazione `SANITY_STUDIO_URL` nel runtime site env/portal dopo il deploy Studio, evitando l'ultimo passaggio manuale.
+- Testare il nuovo flusso completo su `glowlab-daily`:
+  - deploy Vercel
+  - deploy Studio
+  - `site:studio:prod`
+  - verifica che `Publishing Controls (Sanity)` punti al nuovo Studio nel portal production
+- Aggiornare la allowlist Nginx di `/ops/factory` con l'IP pubblico corrente o con un range/VPN stabile, poi fare `nginx -t && systemctl reload nginx`.
 
 ## Risks
 - La logica `status + billingMode + billingStatus` e' coerente per l'MVP, ma non e' ancora accompagnata da una UI portal per cambiare esplicitamente `billingMode`; oggi il cambio resta CLI/DB-driven.
@@ -1467,3 +1497,5 @@
   - `.dev/`
   - `.vscode/`
 - La guida `Factory Ops` ora espone anche valori sensibili utili al deploy (`SANITY_READ_TOKEN`, `REVALIDATE_SECRET`) per l'operatore interno; questo e' voluto, ma resta corretto solo finche' la pagina rimane protetta da Basic Auth + factory secret.
+- L'accesso a `/ops/factory` dipende oggi da una allowlist Nginx statica per IP pubblico; se l'IP del client cambia spesso, il pannello puo' diventare irraggiungibile anche se Basic Auth e factory secret sono corretti.
+- Il comando `site:studio` aggiorna runtime env, registry e portal DB ma non scrive automaticamente `SANITY_STUDIO_URL` nelle env Vercel; questo resta opzionale e serve solo per fallback owner-facing sul dominio del sito (`/admin/studio`), non per il portal centrale.

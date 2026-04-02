@@ -39,6 +39,7 @@ Usage:
   autoblog release-site <site-slug> [--from-sanity]
   autoblog deploy <site-slug>
   autoblog doctor <site-slug>
+  autoblog set-studio-url <site-slug> --studio-url <url> [--portal-database-url <url>]
   autoblog handoff-site <site-slug> --owner-email <email> [--billing-mode customer_paid|incubating|complimentary] [--temp-password <password>] [--revoke-other-owners] [--portal-database-url <url>]
   autoblog handoff-pack <site-slug>
   autoblog list-blueprints
@@ -165,11 +166,11 @@ const THEME_RECIPES = {
       bodyFont: 'Merriweather'
     },
     palette: {
-      paper: '#F7FBF5',
-      ink: '#23312D',
-      rust: '#D98D74',
-      sage: '#6CA88A',
-      coal: '#22322B'
+      paper: '#FFF4F7',
+      ink: '#2F2328',
+      rust: '#D9777F',
+      sage: '#C8A39C',
+      coal: '#24191F'
     },
     profile: {
       layoutDensity: 'airy',
@@ -1523,6 +1524,18 @@ function normalizeBillingMode(value, fallback = 'customer_paid') {
   return fallback;
 }
 
+function assertHttpUrl(value, label) {
+  try {
+    const parsed = new URL(String(value || '').trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('invalid protocol');
+    }
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    throw new Error(`Invalid ${label}`);
+  }
+}
+
 function generateTempPassword(length = 22) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%&*-_=+';
   const bytes = crypto.randomBytes(length);
@@ -2736,6 +2749,62 @@ async function commandHandoffSite(siteSlug, flags) {
   );
 }
 
+async function commandSetStudioUrl(siteSlug, flags) {
+  const normalizedSlug = sanitizeSiteSlug(siteSlug);
+  if (!normalizedSlug) throw new Error('Missing <site-slug>');
+
+  const studioUrl = assertHttpUrl(flags['studio-url'], '--studio-url');
+  const portalStore = await createPortalStore({
+    postgresUrl: flags['portal-database-url'] || process.env.PORTAL_DATABASE_URL || process.env.DATABASE_URL || ''
+  });
+
+  let settings = null;
+  try {
+    await portalStore.ensureSiteRecords(normalizedSlug);
+    settings = await portalStore.patchSiteSettings(normalizedSlug, { studioUrl });
+  } finally {
+    await portalStore.close();
+  }
+
+  const envPath = resolveSiteEnvPath(normalizedSlug);
+  const env = parseEnvFile(envPath);
+  env.SANITY_STUDIO_URL = studioUrl;
+  fs.writeFileSync(envPath, serializeEnv(env), 'utf8');
+
+  const registry = loadRegistry();
+  const currentSite = Array.isArray(registry.sites)
+    ? registry.sites.find((site) => sanitizeSiteSlug(site.siteSlug) === normalizedSlug)
+    : null;
+  const nextSite = {
+    ...(currentSite || {}),
+    siteSlug: normalizedSlug,
+    studioUrl,
+    updatedAt: new Date().toISOString()
+  };
+  const nextSites = Array.isArray(registry.sites) ? [...registry.sites] : [];
+  const siteIndex = nextSites.findIndex((site) => sanitizeSiteSlug(site.siteSlug) === normalizedSlug);
+  if (siteIndex >= 0) nextSites[siteIndex] = nextSite;
+  else nextSites.push(nextSite);
+  saveRegistry({ ...registry, sites: nextSites });
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        siteSlug: normalizedSlug,
+        studioUrl,
+        runtimeEnvPath: displayPath(WORKSPACE_ROOT, envPath),
+        registryPath: displayPath(WORKSPACE_ROOT, SITE_REGISTRY_PATH),
+        portalSettings: {
+          studioUrl: settings?.studioUrl || studioUrl
+        }
+      },
+      null,
+      2
+    )
+  );
+}
+
 function commandListBlueprints() {
   const items = listBlueprintTemplates();
   console.log(JSON.stringify({ count: items.length, items }, null, 2));
@@ -2783,6 +2852,9 @@ async function main() {
         break;
       case 'doctor':
         commandDoctor(positional[0]);
+        break;
+      case 'set-studio-url':
+        await commandSetStudioUrl(positional[0], flags);
         break;
       case 'handoff-site':
         await commandHandoffSite(positional[0], flags);

@@ -41,6 +41,15 @@ function parseEnvFile(filePath) {
   return env;
 }
 
+function parseJsonFile(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
 function upsertEnvFile(filePath, updates) {
   const exists = fs.existsSync(filePath);
   const originalLines = exists ? fs.readFileSync(filePath, 'utf8').split(/\r?\n/) : [];
@@ -92,19 +101,25 @@ function main() {
 
   const siteDir = path.join(WORKSPACE_ROOT, 'sites', siteSlug);
   const generatedEnvPath = path.join(siteDir, '.env.generated');
+  const blueprintPath = path.join(siteDir, 'site.blueprint.json');
   if (!fs.existsSync(generatedEnvPath)) {
     throw new Error(`Missing site env file: ${generatedEnvPath}`);
   }
 
   const siteEnv = parseEnvFile(generatedEnvPath);
+  const siteBlueprint = parseJsonFile(blueprintPath) || {};
   const projectId = required(siteEnv.SANITY_PROJECT_ID, 'SANITY_PROJECT_ID in .env.generated');
   const dataset = required(siteEnv.SANITY_DATASET || 'production', 'SANITY_DATASET in .env.generated');
   const apiVersion = required(siteEnv.SANITY_API_VERSION || '2025-01-01', 'SANITY_API_VERSION in .env.generated');
   const readToken = required(siteEnv.SANITY_READ_TOKEN, 'SANITY_READ_TOKEN in .env.generated');
   const writeToken = required(siteEnv.SANITY_WRITE_TOKEN, 'SANITY_WRITE_TOKEN in .env.generated');
+  const siteName = String(siteBlueprint.brandName || siteSlug).trim() || siteSlug;
+  const siteDescription = String(siteBlueprint.siteDescription || '').trim();
+  const locale = String(siteBlueprint.locale || 'en-US').trim() || 'en-US';
 
   const rootEnvPath = path.resolve(WORKSPACE_ROOT, String(flags['root-env'] || '.env'));
   const studioEnvPath = path.join(WORKSPACE_ROOT, 'apps', 'studio', '.env');
+  const webEnvPath = path.join(WORKSPACE_ROOT, 'apps', 'web', '.env.local');
   const updates = {
     SITE_BLUEPRINT_PATH: `./sites/${siteSlug}/site.blueprint.json`,
     SITE_SLUG: siteSlug,
@@ -126,6 +141,20 @@ function main() {
     SANITY_STUDIO_PROJECT_ID: projectId,
     SANITY_STUDIO_DATASET: dataset
   });
+  upsertEnvFile(webEnvPath, {
+    NEXT_PUBLIC_SITE_NAME: siteName,
+    NEXT_PUBLIC_DEFAULT_LOCALE: locale,
+    NEXT_PUBLIC_SITE_URL: 'http://localhost:3000',
+    NEXT_PUBLIC_SITE_DESCRIPTION: siteDescription,
+    SITE_BLUEPRINT_PATH: `../../sites/${siteSlug}/site.blueprint.json`,
+    SITE_SLUG: siteSlug,
+    NEXT_PUBLIC_SITE_SLUG: siteSlug,
+    SANITY_PROJECT_ID: projectId,
+    SANITY_DATASET: dataset,
+    SANITY_API_VERSION: apiVersion,
+    SANITY_READ_TOKEN: readToken,
+    SANITY_WRITE_TOKEN: writeToken
+  });
 
   const masked = (token) => (token.length <= 10 ? '***' : `${token.slice(0, 4)}...${token.slice(-4)}`);
   const output = {
@@ -133,6 +162,7 @@ function main() {
     siteSlug,
     updatedEnv: path.relative(WORKSPACE_ROOT, rootEnvPath) || '.env',
     updatedStudioEnv: path.relative(WORKSPACE_ROOT, studioEnvPath),
+    updatedWebEnv: path.relative(WORKSPACE_ROOT, webEnvPath),
     sanity: {
       projectId,
       dataset,

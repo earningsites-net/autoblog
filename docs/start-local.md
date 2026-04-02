@@ -48,7 +48,7 @@ Note utili:
 
 ### Cambio sito locale (web + studio) con un comando
 
-Per passare rapidamente a un altro sito locale e aggiornare in automatico le variabili Sanity/SITE nel `.env` root e in `apps/studio/.env`:
+Per passare rapidamente a un altro sito locale e aggiornare in automatico le variabili Sanity/SITE nel `.env` root, in `apps/studio/.env` e in `apps/web/.env.local`:
 
 ```bash
 cd "/Users/danilociamprone/Documents/Auto blog project"

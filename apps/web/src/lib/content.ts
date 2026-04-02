@@ -1,5 +1,6 @@
 import { unstable_cache } from 'next/cache';
 import { getContentRepository } from './content-repository';
+import { siteConfig } from './site';
 import type { Article, Category } from './types';
 
 const getPublishedArticlesCached = unstable_cache(
@@ -7,11 +8,23 @@ const getPublishedArticlesCached = unstable_cache(
     const repository = getContentRepository();
     return repository.getPublishedArticles();
   },
-  ['published-articles', process.env.CONTENT_REPOSITORY_DRIVER || 'auto'],
+  [
+    'published-articles',
+    process.env.CONTENT_REPOSITORY_DRIVER || 'auto',
+    siteConfig.slug || 'no-site',
+    process.env.SANITY_PROJECT_ID || 'no-project',
+    process.env.SANITY_DATASET || 'no-dataset',
+    process.env.CONTENT_API_BASE_URL || process.env.CONTENT_ENGINE_URL || '',
+    process.env.SITE_BLUEPRINT_PATH || ''
+  ],
   { revalidate: 300 }
 );
 
 export async function getPublishedArticles() {
+  if (process.env.NODE_ENV !== 'production') {
+    const repository = getContentRepository();
+    return repository.getPublishedArticles();
+  }
   return getPublishedArticlesCached();
 }
 

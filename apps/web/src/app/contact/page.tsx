@@ -15,12 +15,16 @@ export default function ContactPage() {
   const isArcadeSoft = recipe === 'arcade_play_dark';
   const cardClass = isDark
     ? `border border-white/15 bg-coal/78 p-6 shadow-[0_22px_56px_-34px_rgba(0,0,0,0.74)] ${isNoirSharp ? '' : isArcadeSoft ? 'rounded-xl' : 'rounded-3xl'}`
-    : 'rounded-3xl border border-black/5 bg-white p-6 shadow-card';
+    : recipe === 'warm_wellness'
+      ? 'rounded-xl border border-rose-200 bg-white p-6 shadow-card'
+      : 'rounded-3xl border border-black/5 bg-white p-6 shadow-card';
   const titleClass = isDark ? 'font-display text-2xl text-paper' : 'font-display text-2xl text-ink';
   const textClass = isDark ? 'mt-3 text-sm leading-6 text-paper/78' : 'mt-3 text-sm leading-6 text-ink/75';
   const emailClass = isDark
     ? `mt-4 border border-white/15 bg-black/25 px-4 py-3 text-sm text-paper/82 ${isNoirSharp ? '' : isArcadeSoft ? 'rounded-lg' : 'rounded-2xl'}`
-    : 'mt-4 rounded-2xl bg-paper px-4 py-3 text-sm text-ink/80';
+    : recipe === 'warm_wellness'
+      ? 'mt-4 rounded-lg border border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-ink/80'
+      : 'mt-4 rounded-2xl bg-paper px-4 py-3 text-sm text-ink/80';
 
   return (
     <div className="space-y-8 py-6">

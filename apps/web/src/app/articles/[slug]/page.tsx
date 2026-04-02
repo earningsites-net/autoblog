@@ -93,6 +93,14 @@ export default async function ArticlePage({ params }: Props) {
   const faqItems = Array.isArray(article.faqItems) ? article.faqItems : [];
 
   const related = await getRelatedArticles(article, 3);
+  const sidebarLinks = Array.from(
+    new Map(
+      [
+        ...internalLinks.map((link) => [link.slug, link] as const),
+        ...related.map((candidate) => [candidate.slug, { slug: candidate.slug, title: candidate.title }] as const)
+      ].filter(([candidateSlug]) => Boolean(candidateSlug) && candidateSlug !== article.slug)
+    ).values()
+  ).slice(0, 4);
   const lightStyles: LightArticleStyles = LIGHT_ARTICLE_STYLES[recipe] || DEFAULT_LIGHT_ARTICLE_STYLE;
   const breadcrumb = breadcrumbJsonLd([
     { name: 'Home', item: absoluteUrl('/') },
@@ -213,16 +221,20 @@ export default async function ArticlePage({ params }: Props) {
 
           <section className={sidebarPanelClass}>
             <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentLabelClass}`}>Internal Links</p>
-            <h2 className="mt-2 font-display text-xl text-ink">Related reading</h2>
-            <ul className="mt-4 space-y-3 text-sm">
-              {internalLinks.map((link) => (
-                <li key={link.slug}>
-                  <Link href={`/articles/${link.slug}`} className={internalLinkClass}>
-                    {link.title}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <h2 className="mt-2 font-display text-xl text-ink">Read next</h2>
+            {sidebarLinks.length > 0 ? (
+              <ul className="mt-4 space-y-3 text-sm">
+                {sidebarLinks.map((link) => (
+                  <li key={link.slug}>
+                    <Link href={`/articles/${link.slug}`} className={internalLinkClass}>
+                      {link.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-4 text-sm leading-6 text-ink/70">More related articles will appear here as soon as the site has a larger published library.</p>
+            )}
           </section>
 
           {tags.length > 0 ? (

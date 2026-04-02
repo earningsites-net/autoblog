@@ -17,6 +17,8 @@
     "site:pull": "node scripts/site-pull.mjs",
     "site:handoff": "node scripts/autoblog.mjs handoff-site",
     "site:handoff:prod": "node scripts/site-handoff-prod.mjs",
+    "site:studio": "node scripts/autoblog.mjs set-studio-url",
+    "site:studio:prod": "node scripts/site-studio-prod.mjs",
     "portal:postgres:bootstrap": "node scripts/portal-postgres-bootstrap.mjs",
     "ops:backup:runtime": "node scripts/ops-backup-runtime.mjs",
     "build:web": "npm --workspace @autoblog/web run build",

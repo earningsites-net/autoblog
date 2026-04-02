@@ -135,3 +135,25 @@ npm run site:handoff -- ai-blog-news \
 npm run site:handoff -- ai-blog-news \
  --owner-email buyer@example.com \
  --revoke-other-owners
+
+# Studio URL
+
+## Collegare uno Studio gia' deployato al portal production
+
+npm run site:studio:prod -- <site-slug> \
+ --studio-url https://<site-slug>.sanity.studio
+
+Questo aggiorna:
+- `/var/lib/autoblog/sites/<site-slug>/.env.generated` con `SANITY_STUDIO_URL`
+- registry runtime production
+- `site_settings.studio_url` nel portal DB
+
+Non tocca:
+- owner
+- billing mode
+- handoff
+
+## Collegare lo Studio al runtime locale
+
+npm run site:studio -- <site-slug> \
+ --studio-url https://<site-slug>.sanity.studio

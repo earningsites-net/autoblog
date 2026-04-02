@@ -146,7 +146,7 @@ function buildDefaultCopy(): SiteCopy {
       technicalDescription:
         `Clear, practical ${niche} guides with structured navigation so you can find what you need quickly.`,
       wellnessDescription:
-        'Gentle, practical beauty and wellness guidance designed for consistent routines and measurable progress.'
+        'Thoughtful beauty and wellness stories with practical routines, ingredient explainers, and calm editorial guidance.'
     },
     category: {
       emptyTitle: 'No guides in this category yet',

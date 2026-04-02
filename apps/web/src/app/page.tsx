@@ -41,14 +41,23 @@ export default async function HomePage() {
   const laneCarouselItems = (articles.length ? articles : featured).slice(0, 12);
   const carouselItems = (articles.length ? articles : featured).slice(0, 8);
   const wellnessFlow = [
-    { label: '01', title: 'Consult & Diagnose', description: 'Understand routines, triggers, and realistic goals before starting.' },
-    { label: '02', title: 'Design Your Ritual', description: 'Build a repeatable rhythm with practical weekly actions and checkpoints.' },
-    { label: '03', title: 'Track & Refine', description: 'Measure consistency, adjust intensity, and keep only what works.' }
+    { label: '01', title: 'Learn the basics', description: 'Start with beginner-friendly reads on routines, ingredients, and everyday care.' },
+    { label: '02', title: 'Build your routine', description: 'Use practical guides to shape morning, evening, and weekly habits that feel sustainable.' },
+    { label: '03', title: 'Go deeper', description: 'Move into advanced explainers, comparisons, and seasonal resets once you know the foundations.' }
   ];
-  const wellnessIndicators = [
-    { label: 'Routine consistency', value: 78 },
-    { label: 'Sleep quality', value: 64 },
-    { label: 'Skin comfort', value: 72 }
+  const wellnessQuickStarts = [
+    {
+      title: 'Skincare basics',
+      description: 'Simple starting points for cleansing, moisturizing, and understanding routine order.'
+    },
+    {
+      title: 'Everyday routines',
+      description: 'Morning, evening, and weekly habits translated into practical reads you can use right away.'
+    },
+    {
+      title: 'Ingredient explainers',
+      description: 'Clear introductions to active ingredients, labels, and product types without the jargon.'
+    }
   ];
   const heroBackgroundImage =
     siteConfig.brandAssets.heroImageUrl || featured[0]?.coverImage || HERO_BANNER_FALLBACK[recipe] || HERO_BANNER_FALLBACK.bold_magazine;
@@ -142,8 +151,8 @@ export default async function HomePage() {
       {recipe === 'warm_wellness' ? (
         <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
           <div className="rounded-xl border border-rose-200 bg-gradient-to-br from-white via-rose-50/55 to-pink-100/30 p-6 shadow-card sm:p-7">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-rose-500">Beauty Process</p>
-            <h2 className="mt-3 font-display text-3xl leading-[1.08] text-ink sm:text-4xl">Health & beauty, simplified into 3 steps</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-rose-500">Reading Flow</p>
+            <h2 className="mt-3 font-display text-3xl leading-[1.08] text-ink sm:text-4xl">Beauty & wellness, organized into 3 easy paths</h2>
             <div className="mt-6 grid gap-4 sm:grid-cols-3">
               {wellnessFlow.map((item) => (
                 <div key={item.label} className="rounded-lg border border-rose-200 bg-white/85 p-4">
@@ -155,23 +164,18 @@ export default async function HomePage() {
             </div>
           </div>
           <aside className="rounded-xl border border-rose-200 bg-white p-6 shadow-card sm:p-7">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-rose-500">Progress Snapshot</p>
-            <h3 className="mt-3 font-display text-2xl leading-[1.15] text-ink">Wellness indicators</h3>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-rose-500">Quick Start</p>
+            <h3 className="mt-3 font-display text-2xl leading-[1.15] text-ink">What to read first</h3>
             <div className="mt-5 space-y-4">
-              {wellnessIndicators.map((indicator) => (
-                <div key={indicator.label}>
-                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.12em] text-rose-900/65">
-                    <span>{indicator.label}</span>
-                    <span>{indicator.value}%</span>
-                  </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-rose-100">
-                    <div className="h-full rounded-full bg-rose-500" style={{ width: `${indicator.value}%` }} />
-                  </div>
+              {wellnessQuickStarts.map((item) => (
+                <div key={item.title} className="rounded-lg border border-rose-200 bg-rose-50/65 p-4">
+                  <h4 className="font-display text-lg leading-[1.2] text-ink">{item.title}</h4>
+                  <p className="mt-2 text-sm leading-6 text-ink/75">{item.description}</p>
                 </div>
               ))}
             </div>
-            <Link href="/contact" className="mt-7 inline-flex rounded-lg border border-rose-300 bg-rose-500 px-5 py-3 text-sm font-semibold text-white hover:bg-rose-600">
-              Make an appointment
+            <Link href="/categories" className="mt-7 inline-flex rounded-lg border border-rose-300 bg-rose-500 px-5 py-3 text-sm font-semibold text-white hover:bg-rose-600">
+              Explore all categories
             </Link>
           </aside>
         </section>

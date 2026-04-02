@@ -31,11 +31,11 @@
   "locale": "en-US",
   "theme": {
     "palette": {
-      "paper": "#ecf7e9",
-      "ink": "#273a33",
-      "rust": "#dc6850",
-      "sage": "#609073",
-      "coal": "#283e36"
+      "paper": "#FFF4F7",
+      "ink": "#2F2328",
+      "rust": "#D9777F",
+      "sage": "#C8A39C",
+      "coal": "#24191F"
     },
     "typography": {
       "headingFont": "Sora",

@@ -114,6 +114,10 @@ export async function ensurePostgresPortalSchema(sql) {
       adsense_slot_footer TEXT NOT NULL DEFAULT '',
       fallback_to_platform BOOLEAN NOT NULL DEFAULT TRUE,
       studio_url TEXT NOT NULL DEFAULT '',
+      public_contact_email TEXT NOT NULL DEFAULT '',
+      privacy_policy_override TEXT NOT NULL DEFAULT '',
+      cookie_policy_override TEXT NOT NULL DEFAULT '',
+      disclaimer_override TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL
     )`,
     `CREATE TABLE IF NOT EXISTS entitlements (
@@ -148,6 +152,10 @@ export async function ensurePostgresPortalSchema(sql) {
     )`,
     `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ads_mode TEXT NOT NULL DEFAULT 'auto'`,
     `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ads_preview_enabled BOOLEAN NOT NULL DEFAULT TRUE`,
+    `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS public_contact_email TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS privacy_policy_override TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS cookie_policy_override TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS disclaimer_override TEXT NOT NULL DEFAULT ''`,
     `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_plan TEXT NOT NULL DEFAULT ''`,
     `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_monthly_quota INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_effective_at TEXT NOT NULL DEFAULT ''`,
@@ -326,6 +334,87 @@ async function createPostgresPortalStore(postgresUrl) {
         ]
       );
       return next;
+    },
+    async getSiteSettings(siteSlug) {
+      const normalizedSlug = normalizeSiteSlug(siteSlug);
+      if (!normalizedSlug) return null;
+      await ensureSiteRecords(normalizedSlug);
+      const rows = await sql.unsafe(
+        `SELECT site_slug AS "siteSlug",
+                publishing_enabled AS "publishingEnabled",
+                max_publishes_per_run AS "maxPublishesPerRun",
+                ad_slots_enabled AS "adSlotsEnabled",
+                ads_mode AS "adsMode",
+                ads_preview_enabled AS "adsPreviewEnabled",
+                adsense_publisher_id AS "adsensePublisherId",
+                adsense_slot_header AS "adsenseSlotHeader",
+                adsense_slot_in_content AS "adsenseSlotInContent",
+                adsense_slot_footer AS "adsenseSlotFooter",
+                fallback_to_platform AS "fallbackToPlatform",
+                studio_url AS "studioUrl",
+                public_contact_email AS "publicContactEmail",
+                privacy_policy_override AS "privacyPolicyOverride",
+                cookie_policy_override AS "cookiePolicyOverride",
+                disclaimer_override AS "disclaimerOverride",
+                updated_at AS "updatedAt"
+         FROM site_settings
+         WHERE site_slug = $1
+         LIMIT 1`,
+        [normalizedSlug]
+      );
+      return rows[0] || null;
+    },
+    async patchSiteSettings(siteSlug, patch = {}) {
+      const normalizedSlug = normalizeSiteSlug(siteSlug);
+      if (!normalizedSlug) return null;
+      await ensureSiteRecords(normalizedSlug);
+      const current = await this.getSiteSettings(normalizedSlug);
+      if (!current) return null;
+      const next = {
+        ...current,
+        ...patch,
+        updatedAt: nowIso()
+      };
+      await sql.unsafe(
+        `UPDATE site_settings
+         SET publishing_enabled = $1,
+             max_publishes_per_run = $2,
+             ad_slots_enabled = $3,
+             ads_mode = $4,
+             ads_preview_enabled = $5,
+             adsense_publisher_id = $6,
+             adsense_slot_header = $7,
+             adsense_slot_in_content = $8,
+             adsense_slot_footer = $9,
+             fallback_to_platform = $10,
+             studio_url = $11,
+             public_contact_email = $12,
+             privacy_policy_override = $13,
+             cookie_policy_override = $14,
+             disclaimer_override = $15,
+             updated_at = $16
+         WHERE site_slug = $17`,
+        [
+          Boolean(next.publishingEnabled),
+          Math.max(1, Number(next.maxPublishesPerRun || 1)),
+          Boolean(next.adSlotsEnabled),
+          String(next.adsMode || 'auto').trim() || 'auto',
+          Boolean(next.adsPreviewEnabled),
+          String(next.adsensePublisherId || '').trim(),
+          String(next.adsenseSlotHeader || '').trim(),
+          String(next.adsenseSlotInContent || '').trim(),
+          String(next.adsenseSlotFooter || '').trim(),
+          Boolean(next.fallbackToPlatform),
+          String(next.studioUrl || '').trim(),
+          String(next.publicContactEmail || '').trim(),
+          String(next.privacyPolicyOverride || '').trim(),
+          String(next.cookiePolicyOverride || '').trim(),
+          String(next.disclaimerOverride || '').trim(),
+          String(next.updatedAt || nowIso()),
+          normalizedSlug
+        ]
+      );
+      return this.getSiteSettings(normalizedSlug);
     },
     async listSiteAccess(siteSlug) {
       const normalizedSlug = normalizeSiteSlug(siteSlug);

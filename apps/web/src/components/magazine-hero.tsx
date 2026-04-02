@@ -120,10 +120,10 @@ export function MagazineHero({ articles }: { articles: Article[] }) {
       <section className="grid gap-6 lg:grid-cols-[1.25fr_1fr]">
         <ArticleCard article={main} featured />
         <aside className="rounded-xl border border-rose-200 bg-gradient-to-br from-white via-rose-50/40 to-pink-100/25 p-6 shadow-card sm:p-7">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-rose-500">Beauty Flow</p>
-          <h3 className="mt-3 font-display text-3xl leading-[1.08] text-ink">What can we do for you?</h3>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-rose-500">Editor's Picks</p>
+          <h3 className="mt-3 font-display text-3xl leading-[1.08] text-ink">Start with these beauty reads</h3>
           <p className="mt-3 text-sm leading-7 text-ink/75">
-            Inspired by beauty clinic editorials: map concerns, personalize your plan, and maintain a calm routine with visible progress.
+            A calm reading path through routines, ingredient basics, and self-care ideas curated for everyday readers.
           </p>
           <div className="mt-6 space-y-4">
             {rest.slice(0, 3).map((article, index) => (
@@ -138,8 +138,8 @@ export function MagazineHero({ articles }: { articles: Article[] }) {
               </Link>
             ))}
           </div>
-          <Link href="/contact" className="mt-6 inline-flex rounded-lg border border-rose-300 bg-rose-500 px-5 py-3 text-sm font-semibold text-white hover:bg-rose-600">
-            Book a visit now
+          <Link href="/categories" className="mt-6 inline-flex rounded-lg border border-rose-300 bg-rose-500 px-5 py-3 text-sm font-semibold text-white hover:bg-rose-600">
+            Browse beauty guides
           </Link>
         </aside>
       </section>

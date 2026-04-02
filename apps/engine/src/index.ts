@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import Fastify from 'fastify';
 import { z } from 'zod';
-import { generationJobRequestSchema } from '@autoblog/factory-sdk';
+import { buildDefaultLegalEditableText, generationJobRequestSchema } from '@autoblog/factory-sdk';
 import { createWorkflowRunner } from './adapters/workflow-runners';
 import { AuthService } from './services/auth-service';
 import { BillingService } from './services/billing-service';
@@ -120,6 +120,20 @@ const publishCountSchema = z.object({
   articleId: z.string().min(1).max(255).optional()
 });
 
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const patchContactLegalSchema = z.object({
+  publicContactEmail: z
+    .string()
+    .trim()
+    .max(320)
+    .refine((value) => value === '' || emailPattern.test(value), 'Enter a valid email address.')
+    .optional(),
+  privacyPolicyOverride: z.string().max(50000).optional(),
+  cookiePolicyOverride: z.string().max(50000).optional(),
+  disclaimerOverride: z.string().max(50000).optional()
+});
+
 function sanitizeSiteSlug(siteSlug: string) {
   return String(siteSlug || '')
     .trim()
@@ -145,6 +159,39 @@ function getPortalBaseUrl() {
 
 function getOperationalSiteStatus(entitlement: PortalSiteEntitlement): PortalSiteEntitlement['status'] {
   return isPortalSiteOperational(entitlement) ? 'active' : 'stopped';
+}
+
+function resolveSitePublicContactEmail(
+  settings: { publicContactEmail?: string },
+  registrySite?: { ownerEmail?: string } | null
+) {
+  return String(settings.publicContactEmail || registrySite?.ownerEmail || '').trim();
+}
+
+function resolveAdsEnabled(settings: {
+  adSlotsEnabled?: boolean;
+  adsensePublisherId?: string;
+  fallbackToPlatform?: boolean;
+}) {
+  const directPublisherId = String(settings.adsensePublisherId || '').trim();
+  const platformPublisherId = String(process.env.PLATFORM_ADSENSE_PUBLISHER_ID || '').trim();
+  return Boolean(settings.adSlotsEnabled && (directPublisherId || (settings.fallbackToPlatform && platformPublisherId)));
+}
+
+function buildSiteLegalDefaults(siteName: string, settings: {
+  adSlotsEnabled?: boolean;
+  adsensePublisherId?: string;
+  fallbackToPlatform?: boolean;
+}) {
+  const context = {
+    siteName,
+    adsEnabled: resolveAdsEnabled(settings)
+  };
+  return {
+    privacyPolicy: buildDefaultLegalEditableText('privacy', context),
+    cookiePolicy: buildDefaultLegalEditableText('cookie', context),
+    disclaimer: buildDefaultLegalEditableText('disclaimer', context)
+  };
 }
 
 async function requireMutablePortalSite(
@@ -679,9 +726,10 @@ app.get('/portal', async (_req, reply) => {
     .field { display:flex; flex-direction:column; gap:6px; }
     .field label { font-size:12px; font-weight:600; color:#334a74; }
     .hint { color:var(--muted); font-size:12px; line-height:1.4; }
-    input,button { width:100%; border-radius:12px; padding:10px 12px; font-size:14px; }
-    input { border:1px solid #dbe3f3; background:#fff; color:var(--text); }
-    input:focus { outline:none; border-color:#8fb2ff; box-shadow:0 0 0 4px rgba(43,102,255,.14); }
+    input,textarea,button { width:100%; border-radius:12px; padding:10px 12px; font-size:14px; }
+    input,textarea { border:1px solid #dbe3f3; background:#fff; color:var(--text); }
+    textarea { resize:vertical; min-height:180px; font:inherit; line-height:1.55; }
+    input:focus,textarea:focus { outline:none; border-color:#8fb2ff; box-shadow:0 0 0 4px rgba(43,102,255,.14); }
     button { cursor:pointer; border:1px solid #d9e2f4; background:#fff; color:var(--text); font-weight:600; }
     button.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
     button.primary:hover { background:var(--primary-dark); border-color:var(--primary-dark); }
@@ -1123,6 +1171,7 @@ app.get('/portal', async (_req, reply) => {
         <p id="me"></p>
         <div class="side-nav">
           <button type="button" class="item active" data-nav-view="monetization">Monetization</button>
+          <button type="button" class="item" data-nav-view="contacts-legal">Contacts & Legal</button>
           <a id="publishingStudioLink" class="item" target="_blank" rel="noreferrer">Publishing Controls (Sanity)</a>
           <button type="button" class="item" data-nav-view="billing">Billing & Plan</button>
         </div>
@@ -1489,7 +1538,10 @@ app.get('/portal', async (_req, reply) => {
 
     function getInputValue(id) {
       const el = document.getElementById(id);
-      return el instanceof HTMLInputElement ? el.value : '';
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        return el.value;
+      }
+      return '';
     }
 
     async function api(path, options = {}) {
@@ -1600,12 +1652,23 @@ app.get('/portal', async (_req, reply) => {
         const monetizationLockHintHtml = inactiveForOwner
           ? '<div class="hint" style="margin-bottom:12px;">Monetization settings are visible, but updates stay locked until the site is reactivated.</div>'
           : '';
+        const contactLegalLockHintHtml = inactiveForOwner
+          ? '<div class="hint" style="margin-bottom:12px;">Contact and legal settings are visible, but updates stay locked until the site is reactivated.</div>'
+          : '';
         const disableMutationsAttr = inactiveForOwner ? 'disabled aria-disabled="true" title="Site inactive"' : '';
         const isCurrentPlanDisabled = (plan) => currentPlan === plan && !inactiveForOwner;
         const planButtonLabel = (plan, label) => {
           if (currentPlan === plan) return inactiveForOwner ? 'Activate ' + label : 'Current plan';
           return 'Choose ' + label;
         };
+        const publicContactEmail =
+          site.settings?.publicContactEmail ||
+          site.publicContactEmailResolved ||
+          data.user?.email ||
+          '';
+        const privacyPolicyValue = site.settings?.privacyPolicyOverride || site.legalDefaults?.privacyPolicy || '';
+        const cookiePolicyValue = site.settings?.cookiePolicyOverride || site.legalDefaults?.cookiePolicy || '';
+        const disclaimerValue = site.settings?.disclaimerOverride || site.legalDefaults?.disclaimer || '';
         const wrapper = document.createElement('div');
         wrapper.className = 'panel';
         wrapper.innerHTML = \`
@@ -1660,6 +1723,37 @@ app.get('/portal', async (_req, reply) => {
               <button class="primary" data-action="save-ads" data-slug="\${escapeHtml(slug)}" \${disableMutationsAttr}>Save Monetization</button>
               <a href="${baseUrl}/api/factory/site/\${encodeURIComponent(slug)}/status" target="_blank" class="inline-link">Site status JSON</a>
               <p id="saveAdsFeedback-\${idSafe}" class="action-feedback c12" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+
+          <div data-view-panel="contacts-legal" class="hidden">
+            <div class="grid">
+              <div class="c6 field">
+                <label>Public contact email</label>
+                <input id="publicContactEmail-\${idSafe}" type="email" placeholder="owner@example.com" value="\${escapeHtml(publicContactEmail)}" />
+                <div class="hint">Shown on the public contact page. If left empty in site settings, the public site can still fall back to the current owner contact known by the portal.</div>
+              </div>
+              <div class="c12 field">
+                <label>Privacy Policy</label>
+                <textarea id="privacyPolicy-\${idSafe}" rows="12" placeholder="## Information we may collect">\${escapeHtml(privacyPolicyValue)}</textarea>
+                <div class="hint">Edit the public policy text for this site. Clear and save to restore the platform default.</div>
+              </div>
+              <div class="c12 field">
+                <label>Cookie Policy</label>
+                <textarea id="cookiePolicy-\${idSafe}" rows="12" placeholder="## What cookies are">\${escapeHtml(cookiePolicyValue)}</textarea>
+                <div class="hint">Use plain text with optional <code>## Section titles</code> and <code>- bullets</code>.</div>
+              </div>
+              <div class="c12 field">
+                <label>Disclaimer</label>
+                <textarea id="disclaimer-\${idSafe}" rows="12" placeholder="## Informational editorial content">\${escapeHtml(disclaimerValue)}</textarea>
+                <div class="hint">The public site uses this text as-is. Clear and save to fall back to the shared default disclaimer.</div>
+              </div>
+            </div>
+
+            \${contactLegalLockHintHtml}
+            <div class="actions">
+              <button class="primary" data-action="save-contact-legal" data-slug="\${escapeHtml(slug)}" \${disableMutationsAttr}>Save Contacts & Legal</button>
+              <p id="saveContactLegalFeedback-\${idSafe}" class="action-feedback c12" role="status" aria-live="polite"></p>
             </div>
           </div>
 
@@ -1945,6 +2039,43 @@ app.get('/portal', async (_req, reply) => {
           return;
         }
 
+        if (action === 'save-contact-legal') {
+          setButtonBusy(target, true, 'Saving...');
+          const saveFeedback = document.getElementById('saveContactLegalFeedback-' + idSafe);
+          setInlineFeedback(saveFeedback, 'Saving public contact and legal settings...', '');
+          const publicContactEmail = getInputValue('publicContactEmail-' + idSafe).trim();
+          if (publicContactEmail && !isValidEmail(publicContactEmail)) {
+            setInlineFeedback(saveFeedback, 'Enter a valid email address.', 'error');
+            setButtonBusy(target, false);
+            return;
+          }
+          const payload = {
+            publicContactEmail,
+            privacyPolicyOverride: getInputValue('privacyPolicy-' + idSafe),
+            cookiePolicyOverride: getInputValue('cookiePolicy-' + idSafe),
+            disclaimerOverride: getInputValue('disclaimer-' + idSafe)
+          };
+          const res = await api('/api/portal/sites/' + encodeURIComponent(slug) + '/contact-legal', {
+            method: 'PATCH',
+            body: JSON.stringify(payload)
+          });
+          setOutput(res);
+          let feedbackType = 'ok';
+          let feedbackMessage = 'Contacts & legal settings saved successfully.';
+          if (res?.sanitySync?.ok === false && res?.sanitySync?.skipped) {
+            feedbackType = 'warn';
+            feedbackMessage = 'Saved locally, but Sanity sync was skipped.';
+          } else if (res?.sanitySync?.ok === false) {
+            feedbackType = 'warn';
+            feedbackMessage = 'Saved locally, but Sanity sync failed.';
+          }
+          setInlineFeedback(saveFeedback, feedbackMessage, feedbackType);
+          showNotice(feedbackMessage, feedbackType);
+          setButtonBusy(target, false);
+          await loadSites();
+          return;
+        }
+
         if (action === 'open-billing') {
           const res = await api('/api/portal/sites/' + encodeURIComponent(slug) + '/billing/portal-session', { method: 'POST', body: '{}' });
           setOutput(res);
@@ -1967,6 +2098,12 @@ app.get('/portal', async (_req, reply) => {
         setOutput(error);
         if (action === 'save-ads') {
           const saveFeedback = document.getElementById('saveAdsFeedback-' + idSafe);
+          const message = readErrorMessage(error);
+          setInlineFeedback(saveFeedback, message, 'error');
+          showNotice(message, 'error', 5600);
+          setButtonBusy(target, false);
+        } else if (action === 'save-contact-legal') {
+          const saveFeedback = document.getElementById('saveContactLegalFeedback-' + idSafe);
           const message = readErrorMessage(error);
           setInlineFeedback(saveFeedback, message, 'error');
           showNotice(message, 'error', 5600);
@@ -2089,6 +2226,7 @@ app.get('/api/portal/sites', async (req, reply) => {
       const blueprint = await siteRegistry.getSite(site.siteSlug);
       const registrySite = await siteRuntime.getRegistrySite(site.siteSlug);
       const siteEnv = await siteRuntime.readSiteEnv(site.siteSlug);
+      const brandName = blueprint?.brandName || site.siteSlug;
       const studioUrlResolved = String(
         site.settings.studioUrl ||
         registrySite?.studioUrl ||
@@ -2098,8 +2236,10 @@ app.get('/api/portal/sites', async (req, reply) => {
       ).trim();
       return {
         ...site,
-        brandName: blueprint?.brandName || site.siteSlug,
+        brandName,
         studioUrlResolved,
+        publicContactEmailResolved: resolveSitePublicContactEmail(site.settings, registrySite),
+        legalDefaults: buildSiteLegalDefaults(brandName, site.settings),
         inactiveForOwner: isPortalSiteInactiveForOwner(site.entitlement),
         operationalStatus: getOperationalSiteStatus(site.entitlement)
       };
@@ -2121,10 +2261,16 @@ app.get('/api/portal/sites/:siteSlug', async (req, reply) => {
 
   const site = await portalStore.getSiteSummaryForUser(auth.user.id, siteSlug);
   if (!site) return reply.code(404).send({ ok: false, error: 'Site not found' });
+  const blueprint = await siteRegistry.getSite(siteSlug);
+  const registrySite = await siteRuntime.getRegistrySite(siteSlug);
+  const brandName = blueprint?.brandName || site.siteSlug;
   return {
     ok: true,
     site: {
       ...site,
+      brandName,
+      publicContactEmailResolved: resolveSitePublicContactEmail(site.settings, registrySite),
+      legalDefaults: buildSiteLegalDefaults(brandName, site.settings),
       inactiveForOwner: isPortalSiteInactiveForOwner(site.entitlement),
       operationalStatus: getOperationalSiteStatus(site.entitlement)
     }
@@ -2161,6 +2307,33 @@ app.get('/api/public/sites/:siteSlug/state', async (req, reply) => {
         billingMode: entitlement.billingMode,
         billingStatus: entitlement.billingStatus
       }
+    }
+  };
+});
+
+app.get('/api/public/sites/:siteSlug/settings', async (req, reply) => {
+  const params = req.params as { siteSlug: string };
+  const siteSlug = sanitizeSiteSlug(params.siteSlug);
+  if (!siteSlug) {
+    return reply.code(400).send({ ok: false, error: 'Invalid site slug' });
+  }
+
+  const blueprint = await siteRegistry.getSite(siteSlug);
+  if (!blueprint) {
+    return reply.code(404).send({ ok: false, error: 'Site not found' });
+  }
+
+  const settings = await portalStore.getSiteSettings(siteSlug);
+  const registrySite = await siteRuntime.getRegistrySite(siteSlug);
+
+  return {
+    ok: true,
+    site: {
+      siteSlug,
+      publicContactEmail: resolveSitePublicContactEmail(settings, registrySite),
+      privacyPolicyOverride: String(settings.privacyPolicyOverride || ''),
+      cookiePolicyOverride: String(settings.cookiePolicyOverride || ''),
+      disclaimerOverride: String(settings.disclaimerOverride || '')
     }
   };
 });
@@ -2213,6 +2386,28 @@ app.patch('/api/portal/sites/:siteSlug/ads', async (req, reply) => {
     },
     studioUrl: settings.studioUrl
   });
+  const sync = await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
+  return {
+    ok: true,
+    siteSlug,
+    settings,
+    entitlement,
+    sanitySync: sync
+  };
+});
+
+app.patch('/api/portal/sites/:siteSlug/contact-legal', async (req, reply) => {
+  const params = req.params as { siteSlug: string };
+  const siteSlug = sanitizeSiteSlug(params.siteSlug);
+  if (!(await requireMutablePortalSite(req, reply, siteSlug))) return;
+
+  const parsed = patchContactLegalSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
+  }
+
+  const settings = await portalStore.patchSiteSettings(siteSlug, parsed.data);
+  const entitlement = await portalStore.getEntitlementEffective(siteSlug);
   const sync = await siteRuntime.syncSiteSettingsToSanity(siteSlug, settings, entitlement);
   return {
     ok: true,
@@ -3498,17 +3693,25 @@ app.get('/ops/factory', async (req, reply) => {
         '  npm --workspace @autoblog/studio run deploy -- --yes'
       ].join('\\n');
 
+      const studioLinkCommand = [
+        'npm run site:studio:prod -- ' + shellEscape(siteSlug) + ' \\\\',
+        '  --studio-url ' + shellEscape(suggestedStudioUrl)
+      ].join('\\n');
+
       const pullCommand = 'npm run site:pull -- ' + shellEscape(siteSlug);
       const vercelDomainHint = 'After the first deploy, set NEXT_PUBLIC_SITE_URL to the stable production domain assigned by Vercel and redeploy.';
       const studioHint = 'After deploy, the expected Studio URL is ' + suggestedStudioUrl + '. If the hostname is unavailable, deploy again with a different SANITY_STUDIO_HOSTNAME.';
+      const studioPortalHint = 'Then register that URL in the production runtime and portal settings with the command below. Optional: mirror it into Vercel as SANITY_STUDIO_URL if you want the site-domain /admin/studio fallback to know the Studio URL too.';
 
       return {
         siteSlug,
         pullCommand,
         vercelEnvText,
         studioCommand,
+        studioLinkCommand,
         vercelDomainHint,
         studioHint,
+        studioPortalHint,
         suggestedStudioUrl
       };
     }
@@ -3530,7 +3733,7 @@ app.get('/ops/factory', async (req, reply) => {
         '      <li>Create a new Vercel project from the monorepo with <strong>Root Directory = apps/web</strong> and paste the env block below.</li>',
         '      <li>After the first Vercel deploy, replace <code>NEXT_PUBLIC_SITE_URL</code> with the stable production domain and redeploy.</li>',
         '      <li>Deploy the Sanity Studio with the command below.</li>',
-        '      <li>When Studio is live, use <code>' + escapeHtml(data.suggestedStudioUrl) + '</code> as the site Studio URL/runtime value.</li>',
+        '      <li>When Studio is live, register <code>' + escapeHtml(data.suggestedStudioUrl) + '</code> in the production runtime so the portal links to it.</li>',
         '    </ol>',
         '    <div class="code">' + escapeHtml(data.pullCommand) + '</div>',
         '  </section>',
@@ -3545,6 +3748,12 @@ app.get('/ops/factory', async (req, reply) => {
         '    <p class="mini">Run this from the repo root on your local machine. Your Sanity CLI login or <code>SANITY_AUTH_TOKEN</code> must already be valid.</p>',
         '    <div class="code">' + escapeHtml(data.studioCommand) + '</div>',
         '    <p class="mini">' + escapeHtml(data.studioHint) + '</p>',
+        '  </section>',
+        '  <section class="guide-card half">',
+        '    <h3>Attach Studio To Portal</h3>',
+        '    <p class="mini">This updates the production site runtime and portal settings without touching owner, billing, or handoff state.</p>',
+        '    <div class="code">' + escapeHtml(data.studioLinkCommand) + '</div>',
+        '    <p class="mini">' + escapeHtml(data.studioPortalHint) + '</p>',
         '  </section>',
         '</div>'
       ].join('');

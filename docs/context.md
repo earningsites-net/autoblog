@@ -24,8 +24,11 @@ This file stores durable project context shared across tasks.
 - Check + import + smoke changed n8n workflows: `npm run n8n:test:flows`
 - Sync source-safe site files into the repo: `npm run site:sync:source -- <site-dir>`
 - Pull a site from the VPS into the local workspace (source-safe + runtime env for Studio): `npm run site:pull -- <site-slug>`
+- Activate a local site context for web + Studio: `npm run site:use -- <site-slug>`; this syncs root `.env`, `apps/studio/.env`, and `apps/web/.env.local`
 - Prepare a buyer handoff for a site runtime: `npm run site:handoff -- <site-slug> --owner-email buyer@example.com`
 - Prepare a buyer handoff directly on the production VPS runtime: `npm run site:handoff:prod -- <site-slug> --owner-email buyer@example.com`
+- Register a deployed Sanity Studio URL in the current runtime: `npm run site:studio -- <site-slug> --studio-url https://<site-slug>.sanity.studio`
+- Register a deployed Sanity Studio URL directly on the production VPS runtime: `npm run site:studio:prod -- <site-slug> --studio-url https://<site-slug>.sanity.studio`
 - Bootstrap a dedicated portal Postgres database/user: `npm run portal:postgres:bootstrap -- --admin-url <postgres-admin-url> --database <db> --user <user> --write-env <env-file>`
 - Backup runtime state outside Git: `npm run ops:backup:runtime -- --out-dir <snapshot-dir> --label <name>`
 - Pilot release checks (`lux-living-01`):
@@ -50,6 +53,7 @@ This file stores durable project context shared across tasks.
 - Portal access model attuale:
   - ruolo applicativo unico lato cliente: `owner`
   - niente `viewer/editor` attivi
+  - il modello commerciale target è `1 sito -> 1 owner finale` dopo handoff/vendita; l'owner email raccolta da `site:handoff --owner-email ...` è il contatto operativo minimo già disponibile lato piattaforma
   - la distinzione commerciale del sito e' site-level tramite `entitlement.billingMode`:
     - `customer_paid`
     - `incubating`
@@ -61,6 +65,14 @@ This file stores durable project context shared across tasks.
     - il frontend pubblico deve mostrare una schermata offline al posto del magazine live
   - il frontend pubblico espone anche un path first-party `/portal` che fa redirect al portal centrale con `siteSlug`, cosi il dominio del sito puo' restare il punto di ingresso owner-facing
   - questo redirect deve vivere nel routing/config di Next (`next.config.ts`), non solo in una page route, altrimenti il layout offline puo' renderizzarsi prima del redirect quando il sito e' inattivo
+  - dopo il deploy di uno Studio Sanity dedicato, il link owner-facing corretto va registrato nel runtime/portal con `site:studio` o `site:studio:prod`; riusare `site:handoff` per questo e' sbagliato perche' toccherebbe anche ownership e billing
+  - contatti pubblici MVP:
+    - non derivare automaticamente indirizzi pubblici tipo `info@<current-host>` dal dominio runtime
+    - il portal espone una sezione owner-facing `Contacts & Legal` con:
+      - `publicContactEmail` mostrata nella pagina pubblica `/contact`
+      - override testuali opzionali per `Privacy Policy`, `Cookie Policy` e `Disclaimer`
+    - se `publicContactEmail` è vuota lato site settings, il frontend pubblico usa come fallback l'`ownerEmail` già noto nel portal/handoff tramite endpoint engine pubblico
+    - se gli override legali sono vuoti, il web continua a usare i testi default condivisi e provider-agnostic del frontend
 - Il vecchio viewer interno `/ops/db` e il relativo endpoint `/api/ops/db/table` sono stati rimossi: l'ispezione del portal DB va fatta via Postgres esterno (es. DBeaver/SSH tunnel) o query SQL, non tramite route admin nell'engine.
 - Stato attuale Postgres portal:
   - local dev usa il Postgres del compose `infra/n8n` con database dedicato (`autoblog_portal_local`) bootstrapato via `npm run portal:postgres:bootstrap`

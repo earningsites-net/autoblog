@@ -83,9 +83,9 @@ export function SiteHeader() {
       <header className={theme.classes.header}>
         <div className="border-b border-rose-200 bg-rose-50/80">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-900/70 sm:px-6 lg:px-8">
-            <p>Wellness & beauty support, every day</p>
-            <Link href="/contact" className="inline-flex rounded-lg border border-rose-300 bg-rose-500 px-4 py-1.5 text-[10px] font-semibold tracking-[0.14em] text-white hover:bg-rose-600">
-              Book a visit now
+            <p>Beauty, skincare, and self-care reads for real routines</p>
+            <Link href="/categories" className="inline-flex rounded-lg border border-rose-300 bg-rose-500 px-4 py-1.5 text-[10px] font-semibold tracking-[0.14em] text-white hover:bg-rose-600">
+              Browse categories
             </Link>
           </div>
         </div>

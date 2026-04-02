@@ -23,11 +23,15 @@ export default async function AboutPage() {
   const isArcadeSoft = recipe === 'arcade_play_dark';
   const cardClass = isDark
     ? `border border-white/15 bg-coal/78 p-6 shadow-[0_22px_56px_-34px_rgba(0,0,0,0.74)] ${isNoirSharp ? '' : isArcadeSoft ? 'rounded-xl' : 'rounded-3xl'}`
-    : 'rounded-3xl border border-black/5 bg-white p-6 shadow-card';
+    : recipe === 'warm_wellness'
+      ? 'rounded-xl border border-rose-200 bg-white p-6 shadow-card'
+      : 'rounded-3xl border border-black/5 bg-white p-6 shadow-card';
   const titleClass = isDark ? 'font-display text-2xl text-paper' : 'font-display text-2xl text-ink';
   const textClass = isDark ? 'mt-3 text-sm leading-6 text-paper/78' : 'mt-3 text-sm leading-6 text-ink/75';
   const spotlightPanelClass = isDark
     ? `border border-white/15 bg-coal/80 p-6 shadow-[0_24px_60px_-34px_rgba(0,0,0,0.76)] ${isNoirSharp ? '' : isArcadeSoft ? 'rounded-xl' : 'rounded-3xl'}`
+    : recipe === 'warm_wellness'
+      ? 'rounded-xl border border-rose-200 bg-gradient-to-br from-white via-rose-50/55 to-pink-100/30 p-6 shadow-card'
     : recipe === 'editorial_luxury'
       ? 'border border-black/10 bg-white p-6 shadow-card'
       : 'rounded-3xl border border-black/5 bg-white p-6 shadow-card';
@@ -35,10 +39,12 @@ export default async function AboutPage() {
     ? isNoirSharp
       ? 'relative aspect-[16/9] overflow-hidden border border-white/15'
       : 'relative aspect-[16/9] overflow-hidden rounded-2xl border border-white/15'
+    : recipe === 'warm_wellness'
+      ? 'relative aspect-[16/9] overflow-hidden rounded-xl border border-rose-200'
     : recipe === 'editorial_luxury'
       ? 'relative aspect-[16/9] overflow-hidden border border-black/10'
       : 'relative aspect-[16/9] overflow-hidden rounded-2xl border border-black/10';
-  const spotlightMetaClass = isDark ? 'text-paper/65' : 'text-ink/55';
+  const spotlightMetaClass = isDark ? 'text-paper/65' : recipe === 'warm_wellness' ? 'text-rose-500' : 'text-ink/55';
   const spotlightTitleClass = isDark ? 'mt-3 font-display text-2xl text-paper' : 'mt-3 font-display text-2xl text-ink';
   const spotlightBodyClass = isDark ? 'mt-3 text-sm leading-7 text-paper/78' : 'mt-3 text-sm leading-7 text-ink/75';
   const spotlightButtonClass = isDark
@@ -47,6 +53,8 @@ export default async function AboutPage() {
       : recipe === 'arcade_play_dark'
         ? 'mt-5 inline-flex rounded-lg border border-white/25 bg-white/10 px-4 py-2 text-sm font-medium text-paper hover:bg-white/18'
         : 'mt-5 inline-flex rounded-full border border-white/25 bg-white/10 px-4 py-2 text-sm font-medium text-paper hover:bg-white/18'
+    : recipe === 'warm_wellness'
+      ? 'mt-5 inline-flex rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-ink hover:border-rose-400 hover:bg-rose-100'
     : recipe === 'editorial_luxury'
       ? 'mt-5 inline-flex border border-black/20 bg-paper px-4 py-2 text-sm font-medium text-ink hover:border-black/35'
       : 'mt-5 inline-flex rounded-full border border-black/15 bg-paper px-4 py-2 text-sm font-medium text-ink hover:border-black/30';

@@ -95,7 +95,7 @@ export function CategoryGrid({ categories }: { categories: Category[] }) {
             <h3 className="mt-4 font-display text-[1.8rem] leading-[1.12] text-ink group-hover:text-rose-500">{category.title}</h3>
             <p className="mt-3 text-sm leading-7 text-ink/75">{category.description}</p>
             <span className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-ink">
-              Start this routine <span aria-hidden className="transition group-hover:translate-x-1">→</span>
+              Explore this topic <span aria-hidden className="transition group-hover:translate-x-1">→</span>
             </span>
           </Link>
         ))}
