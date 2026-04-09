@@ -30,6 +30,8 @@
 - Aligned ignored local deploy env files (`.env.staging`, `infra/n8n/.env.staging`, `infra/n8n/.env.production`) to `IMAGE_MODEL=openai/gpt-image-1.5` and `IMAGE_ASPECT_RATIO=3:2`; confirmed those files are git-ignored, so they do not enter a push by themselves.
 - Verified production drift on the VPS: `/etc/autoblog/n8n.env` still had `IMAGE_MODEL=black-forest-labs/flux-schnell`, and the active production `image_generation_worker` still hardcoded `16:9` with no `IMAGE_ASPECT_RATIO` / GPT fallback support.
 - Applied the production rollout directly on the VPS: updated `/etc/autoblog/n8n.env` to `IMAGE_MODEL=openai/gpt-image-1.5` and `IMAGE_ASPECT_RATIO=3:2`, imported the updated `image_generation_worker` into production n8n with the live workflow id, published it, restarted `autoblog-n8n`, and re-verified the active workflow via API (`hasImageAspectRatioEnv=true`, `hasHardcoded169=false`, `hasGptFallback=true`, `active=true`).
+- Committed the current local source worktree on `main` as `bf6e31a` (`Sync factory updates and GPT image rollout`) and pushed it to `origin/main`.
+- Fast-forwarded the VPS source clone in `/srv/auto-blog-project` to `bf6e31a`; the first pull was blocked by untracked `sites/beauty-lab/{README.md,site.blueprint.json}` in the server checkout, so those two files were backed up to `/var/lib/autoblog/backups/git-prepull-20260409181212/` before retrying the pull successfully.
 - Investigated current production `ops/factory` access flow:
   - the browser auth prompt uses `FACTORY_UI_USERNAME` + `FACTORY_UI_PASSWORD`
   - the in-page `Factory API secret` field uses `FACTORY_API_SECRET`
@@ -99,6 +101,7 @@
 - If queue-only reset is still needed, implement a safer deletion path only after reproducing the failure mode and adding an explicit verification step against the exact mutation payload.
 - For the GPT image rollout on prod, sync `/etc/autoblog/n8n.env` with `IMAGE_MODEL=openai/gpt-image-1.5` and `IMAGE_ASPECT_RATIO=3:2`, restart `autoblog-n8n`, and import/publish the updated `image_generation_worker` from repo instead of pushing the whole dirty worktree.
 - Monitor the next production image-generation run to confirm Replicate now uses `openai/gpt-image-1.5` successfully on live content, and only then consider cleaning up any temporary workflow import artifacts on the VPS.
+- If needed later, reconcile the backed-up VPS `sites/beauty-lab/*` copies under `/var/lib/autoblog/backups/git-prepull-20260409181212/` with the newly pulled tracked files, then remove the backup only after confirming they are not needed.
 - If Factory Ops continues to feel opaque, simplify the operator flow by either:
   - reusing `FACTORY_API_SECRET` as the UI password
   - or adding explicit copy/help text that explains `Basic Auth != Factory API secret`
@@ -117,6 +120,7 @@
 - Local n8n still contains legacy duplicate workflows by name, so name-based inspections in the UI can look misleading; the canonical active workflows should be tracked by ID.
 - The current git worktree contains unrelated changes plus site-creation side effects (`sites/beauty-lab/`, deletion of `sites/glowlab-daily/*`), so a broad commit/push would mix the Replicate/GPT rollout with unrelated work.
 - The production n8n import/update was executed from a root shell without sourcing the compose env into the host shell, which produced noisy docker-compose warnings even though the import/publish succeeded; future remote n8n maintenance should source `/etc/autoblog/n8n.env` before invoking `docker compose` to avoid ambiguous diagnostics.
+- The VPS source clone had pre-existing untracked `sites/beauty-lab/*` files, so future pulls can hit the same conflict pattern again if source-safe site files are created directly in the checkout instead of entering via Git.
 - The current Factory Ops production UX depends on remembering two distinct credentials; this is easy to misapply and looks like a broken login even when the server is behaving correctly.
 - Local browser auth debugging is opaque: stale exported env vars, a non-restarted engine, or cached browser Basic Auth credentials all surface as the same repeated login modal.
 - The Factory page is rendered as one large inline script; a single malformed helper string can silently disable the whole UI while leaving the HTML apparently intact.
