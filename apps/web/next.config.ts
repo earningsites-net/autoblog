@@ -1,9 +1,12 @@
+import path from 'node:path';
 import type { NextConfig } from 'next';
 
 const portalBaseUrl = String(process.env.NEXT_PUBLIC_PORTAL_BASE_URL || process.env.PORTAL_BASE_URL || '').replace(/\/$/, '');
 const siteSlug = String(process.env.NEXT_PUBLIC_SITE_SLUG || process.env.SITE_SLUG || '').trim();
 
 const nextConfig: NextConfig = {
+  transpilePackages: ['@autoblog/factory-sdk'],
+  outputFileTracingRoot: path.join(process.cwd(), '../..'),
   async redirects() {
     if (!portalBaseUrl || !siteSlug) {
       return [];
