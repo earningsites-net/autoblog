@@ -2,14 +2,15 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { AdSlot } from '@web/components/ad-slot';
 import { ArticleCard } from '@web/components/article-card';
 import { FAQList } from '@web/components/faq-list';
 import { JsonLd } from '@web/components/json-ld';
+import { MonetizationSlot } from '@web/components/monetization-html';
 import { PortableContent } from '@web/components/portable-content';
 import { getAllArticleSlugs, getArticleBySlug, getRelatedArticles } from '@web/lib/content';
 import { absoluteUrl, formatDate } from '@web/lib/site';
 import { articleJsonLd, articleMetadata, breadcrumbJsonLd, faqJsonLd } from '@web/lib/seo';
+import { getMonetizationPlacementHtml, getPublicSiteSettings, hasConfiguredMonetization } from '@web/lib/site-settings';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 type Props = {
@@ -88,6 +89,8 @@ export default async function ArticlePage({ params }: Props) {
   const { slug } = await params;
   const article = await getArticleBySlug(slug);
   if (!article) notFound();
+  const siteSettings = await getPublicSiteSettings();
+  const monetizationEnabled = hasConfiguredMonetization(siteSettings);
   const tags = Array.isArray(article.tags) ? article.tags : [];
   const internalLinks = Array.isArray(article.internalLinks) ? article.internalLinks : [];
   const faqItems = Array.isArray(article.faqItems) ? article.faqItems : [];
@@ -173,6 +176,13 @@ export default async function ArticlePage({ params }: Props) {
       <JsonLd data={breadcrumb} />
       <JsonLd data={faqLd} />
 
+      <MonetizationSlot
+        label="Article top monetization"
+        enabled={monetizationEnabled}
+        html={getMonetizationPlacementHtml(siteSettings, 'articleTop')}
+        minHeight={180}
+      />
+
       <article className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
           <header className={headerClass}>
@@ -217,7 +227,12 @@ export default async function ArticlePage({ params }: Props) {
         </div>
 
         <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
-          <AdSlot name="Article Sidebar Top" minHeight={280} slotKey="header" />
+          <MonetizationSlot
+            label="Article sidebar monetization"
+            enabled={monetizationEnabled}
+            html={getMonetizationPlacementHtml(siteSettings, 'articleSidebar')}
+            minHeight={280}
+          />
 
           <section className={sidebarPanelClass}>
             <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${accentLabelClass}`}>More to explore</p>
@@ -252,7 +267,12 @@ export default async function ArticlePage({ params }: Props) {
         </aside>
       </article>
 
-      <AdSlot name="Article In-feed Bottom" minHeight={180} slotKey="footer" />
+      <MonetizationSlot
+        label="Article bottom monetization"
+        enabled={monetizationEnabled}
+        html={getMonetizationPlacementHtml(siteSettings, 'articleBottom')}
+        minHeight={180}
+      />
 
       {related.length > 0 ? (
         <section className="space-y-5">

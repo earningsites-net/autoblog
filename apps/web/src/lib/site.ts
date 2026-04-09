@@ -42,13 +42,6 @@ export type SiteLogoMonogram = {
   radius: number;
 };
 
-export const featureFlags = {
-  adSlots:
-    process.env.ENABLE_AD_SLOTS !== undefined
-      ? process.env.ENABLE_AD_SLOTS === 'true'
-      : true
-};
-
 export function absoluteUrl(path = '/') {
   const base = siteConfig.url.replace(/\/$/, '');
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;

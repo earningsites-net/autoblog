@@ -3,16 +3,27 @@ import groq from 'groq';
 import { hasSanityConfig, sanityClient } from './sanity';
 import { siteConfig } from './site';
 
+export type MonetizationPlacementTarget =
+  | 'homeLead'
+  | 'homeMid'
+  | 'categoryTop'
+  | 'articleTop'
+  | 'articleSidebar'
+  | 'articleBottom';
+
+export type SiteMonetizationSettings = {
+  enabled: boolean;
+  providerName: string;
+  headHtml: string;
+  placements: Array<{
+    target: MonetizationPlacementTarget;
+    html: string;
+  }>;
+};
+
 export type PublicSiteSettings = {
   siteSlug: string;
-  adSlotsEnabled: boolean;
-  adsMode: 'auto' | 'manual' | 'hybrid';
-  adsPreviewEnabled: boolean;
-  adsensePublisherId: string;
-  adsenseSlotHeader: string;
-  adsenseSlotInContent: string;
-  adsenseSlotFooter: string;
-  fallbackToPlatform: boolean;
+  monetization: SiteMonetizationSettings;
   studioUrl: string;
   publicContactEmail: string;
   privacyPolicyOverride: string;
@@ -67,14 +78,12 @@ function defaultSettings(): PublicSiteSettings {
   const month = currentMonthWindow();
   return {
     siteSlug: siteConfig.slug,
-    adSlotsEnabled: false,
-    adsMode: 'auto',
-    adsPreviewEnabled: true,
-    adsensePublisherId: '',
-    adsenseSlotHeader: '',
-    adsenseSlotInContent: '',
-    adsenseSlotFooter: '',
-    fallbackToPlatform: true,
+    monetization: {
+      enabled: false,
+      providerName: '',
+      headHtml: '',
+      placements: []
+    },
     studioUrl: process.env.SANITY_STUDIO_URL || '',
     publicContactEmail: '',
     privacyPolicyOverride: '',
@@ -98,6 +107,41 @@ function defaultSettings(): PublicSiteSettings {
       billingMode: 'incubating',
       billingStatus: 'n/a'
     }
+  };
+}
+
+function normalizeMonetization(settings: Partial<SiteMonetizationSettings> | null | undefined): SiteMonetizationSettings {
+  const placements = Array.isArray(settings?.placements)
+    ? settings.placements
+        .map((placement) => {
+          const target = String(placement?.target || '').trim();
+          const html = String(placement?.html || '').trim();
+          if (
+            !html ||
+            !(
+              target === 'homeLead' ||
+              target === 'homeMid' ||
+              target === 'categoryTop' ||
+              target === 'articleTop' ||
+              target === 'articleSidebar' ||
+              target === 'articleBottom'
+            )
+          ) {
+            return null;
+          }
+          return {
+            target: target as MonetizationPlacementTarget,
+            html
+          };
+        })
+        .filter((placement): placement is SiteMonetizationSettings['placements'][number] => Boolean(placement))
+    : [];
+
+  return {
+    enabled: Boolean(settings?.enabled),
+    providerName: String(settings?.providerName || '').trim(),
+    headHtml: String(settings?.headHtml || '').trim(),
+    placements
   };
 }
 
@@ -149,14 +193,7 @@ async function fetchSiteSettingsUncached(): Promise<PublicSiteSettings> {
       const data = await sanityClient.fetch<Partial<PublicSiteSettings>>(
         groq`*[_type == "siteSettings" && siteSlug == $siteSlug][0]{
           siteSlug,
-          adSlotsEnabled,
-          adsMode,
-          adsPreviewEnabled,
-          adsensePublisherId,
-          adsenseSlotHeader,
-          adsenseSlotInContent,
-          adsenseSlotFooter,
-          fallbackToPlatform,
+          monetization,
           studioUrl,
           publicContactEmail,
           privacyPolicyOverride,
@@ -174,17 +211,7 @@ async function fetchSiteSettingsUncached(): Promise<PublicSiteSettings> {
           ...fallback,
           ...data,
           siteSlug: String(data.siteSlug || fallback.siteSlug),
-          adSlotsEnabled: Boolean(data.adSlotsEnabled ?? fallback.adSlotsEnabled),
-          adsMode:
-            data.adsMode === 'manual' || data.adsMode === 'hybrid' || data.adsMode === 'auto'
-              ? data.adsMode
-              : fallback.adsMode,
-          adsPreviewEnabled: Boolean(data.adsPreviewEnabled ?? fallback.adsPreviewEnabled),
-          adsensePublisherId: String(data.adsensePublisherId || ''),
-          adsenseSlotHeader: String(data.adsenseSlotHeader || ''),
-          adsenseSlotInContent: String(data.adsenseSlotInContent || ''),
-          adsenseSlotFooter: String(data.adsenseSlotFooter || ''),
-          fallbackToPlatform: Boolean(data.fallbackToPlatform ?? fallback.fallbackToPlatform),
+          monetization: normalizeMonetization(data.monetization),
           studioUrl: String(data.studioUrl || fallback.studioUrl),
           publicContactEmail: String(data.publicContactEmail || ''),
           privacyPolicyOverride: String(data.privacyPolicyOverride || ''),
@@ -258,12 +285,15 @@ export async function getPublicSiteSettings() {
   return fetchSiteSettingsCached();
 }
 
-export function resolveAdPublisherId(settings: PublicSiteSettings) {
-  if (settings.adsensePublisherId) return settings.adsensePublisherId;
-  if (settings.fallbackToPlatform) {
-    return String(process.env.PLATFORM_ADSENSE_PUBLISHER_ID || '').trim();
-  }
-  return '';
+export function hasConfiguredMonetization(settings: PublicSiteSettings) {
+  if (!settings.monetization.enabled) return false;
+  if (settings.monetization.headHtml) return true;
+  return settings.monetization.placements.some((placement) => Boolean(placement.html));
+}
+
+export function getMonetizationPlacementHtml(settings: PublicSiteSettings, target: MonetizationPlacementTarget) {
+  const placement = settings.monetization.placements.find((candidate) => candidate.target === target);
+  return String(placement?.html || '').trim();
 }
 
 export function resolvePortalBaseUrl() {
@@ -299,8 +329,9 @@ async function fetchPublicSiteRuntimeStateUncached(): Promise<PublicSiteRuntimeS
   if (!baseUrl || !siteConfig.slug) return fallback;
 
   try {
+    const isProd = process.env.NODE_ENV === 'production';
     const response = await fetch(`${baseUrl}/api/public/sites/${encodeURIComponent(siteConfig.slug)}/state`, {
-      cache: 'no-store'
+      ...(isProd ? { next: { revalidate: 60 } } : { cache: 'no-store' })
     });
     if (!response.ok) return fallback;
     const payload = (await response.json()) as {

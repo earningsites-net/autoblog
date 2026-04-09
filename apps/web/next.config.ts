@@ -5,7 +5,6 @@ const portalBaseUrl = String(process.env.NEXT_PUBLIC_PORTAL_BASE_URL || process.
 const siteSlug = String(process.env.NEXT_PUBLIC_SITE_SLUG || process.env.SITE_SLUG || '').trim();
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['@autoblog/factory-sdk'],
   outputFileTracingRoot: path.join(process.cwd(), '../..'),
   async redirects() {
     if (!portalBaseUrl || !siteSlug) {

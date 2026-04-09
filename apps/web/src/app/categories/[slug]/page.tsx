@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArticleCard } from '@web/components/article-card';
 import { PageHero } from '@web/components/page-hero';
-import { AdSlot } from '@web/components/ad-slot';
+import { MonetizationSlot } from '@web/components/monetization-html';
 import {
   getAllCategorySlugs,
   getCategoryArticles,
@@ -12,6 +12,7 @@ import {
 } from '@web/lib/content';
 import { absoluteUrl } from '@web/lib/site';
 import { getSiteCopy } from '@web/lib/site-copy';
+import { getMonetizationPlacementHtml, getPublicSiteSettings, hasConfiguredMonetization } from '@web/lib/site-settings';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 type Props = {
@@ -46,6 +47,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const resolvedSearchParams = (await searchParams) || {};
   const category = await getCategoryBySlug(slug);
   if (!category) notFound();
+  const siteSettings = await getPublicSiteSettings();
+  const monetizationEnabled = hasConfiguredMonetization(siteSettings);
 
   const allArticles = await getCategoryArticles(slug);
   const pagination = paginateArticles(
@@ -70,7 +73,12 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     <div className="space-y-8 py-6">
       <PageHero eyebrow="Category" title={category.title} description={category.description} />
 
-      <AdSlot name={`Category Top - ${category.title}`} minHeight={160} slotKey="header" />
+      <MonetizationSlot
+        label={`Category top monetization for ${category.title}`}
+        enabled={monetizationEnabled}
+        html={getMonetizationPlacementHtml(siteSettings, 'categoryTop')}
+        minHeight={160}
+      />
 
       {pagination.items.length === 0 ? (
         <div className={emptyStateClass}>

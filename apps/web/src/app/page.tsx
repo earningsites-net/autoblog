@@ -4,12 +4,13 @@ import { ArticleCard } from '@web/components/article-card';
 import { ArticleCarouselColumns } from '@web/components/article-carousel-columns';
 import { LatestDuoSection } from '@web/components/latest-duo-section';
 import { CategoryGrid } from '@web/components/category-grid';
-import { AdSlot } from '@web/components/ad-slot';
+import { MonetizationSlot } from '@web/components/monetization-html';
 import { PageHero } from '@web/components/page-hero';
 import { SpotlightCarousel } from '@web/components/spotlight-carousel';
 import { getAllCategories, getFeaturedArticles, getPublishedArticles } from '@web/lib/content';
 import { siteConfig } from '@web/lib/site';
 import { getSiteCopy } from '@web/lib/site-copy';
+import { getMonetizationPlacementHtml, getPublicSiteSettings, hasConfiguredMonetization } from '@web/lib/site-settings';
 import { getActiveSiteTheme } from '@web/lib/theme';
 
 const HERO_BANNER_FALLBACK: Record<string, string> = {
@@ -35,6 +36,8 @@ export default async function HomePage() {
     getPublishedArticles(),
     getAllCategories()
   ]);
+  const siteSettings = await getPublicSiteSettings();
+  const monetizationEnabled = hasConfiguredMonetization(siteSettings);
 
   const latest = articles.slice(0, 6);
   const latestGrid = articles.slice(2, 8);
@@ -198,7 +201,12 @@ export default async function HomePage() {
         </section>
       ) : null}
 
-      <AdSlot name="Home Hero In-feed" minHeight={180} slotKey="header" />
+      <MonetizationSlot
+        label="Home lead monetization"
+        enabled={monetizationEnabled}
+        html={getMonetizationPlacementHtml(siteSettings, 'homeLead')}
+        minHeight={180}
+      />
 
       <ArticleCarouselColumns
         articles={laneCarouselItems}
@@ -221,7 +229,12 @@ export default async function HomePage() {
 
       <LatestDuoSection articles={latest} />
 
-      <AdSlot name="Home Mid In-feed" minHeight={220} slotKey="inContent" />
+      <MonetizationSlot
+        label="Home mid monetization"
+        enabled={monetizationEnabled}
+        html={getMonetizationPlacementHtml(siteSettings, 'homeMid')}
+        minHeight={220}
+      />
 
       <section className="space-y-5">
         <div>

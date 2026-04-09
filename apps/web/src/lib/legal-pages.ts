@@ -4,8 +4,8 @@ import {
   type SharedLegalContent,
   type SharedLegalPageKind,
   type SharedLegalSection
-} from '@autoblog/factory-sdk';
-import { getPublicSiteSettings, resolveAdPublisherId } from './site-settings';
+} from './legal-content';
+import { getPublicSiteSettings, hasConfiguredMonetization } from './site-settings';
 import { siteConfig } from './site';
 
 export type LegalPageKind = SharedLegalPageKind;
@@ -45,7 +45,7 @@ export function getLegalPageMetadata(kind: LegalPageKind): LegalPageMetadata {
 
 export async function getLegalPageContent(kind: LegalPageKind): Promise<LegalPageContent> {
   const settings = await getPublicSiteSettings();
-  const adsEnabled = Boolean(settings.adSlotsEnabled && resolveAdPublisherId(settings));
+  const adsEnabled = hasConfiguredMonetization(settings);
   const defaultContent = buildBaseLegalPageContent(kind, adsEnabled);
   const overrideText = getOverrideRawText(kind, settings);
 
