@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import type { MonetizationPlacementTarget, SiteRegistryMonetizationSummary } from '@autoblog/factory-sdk';
 import type { PortalSiteEntitlement, PortalSiteSettings } from './portal-store-types';
 import {
   normalizeSiteSlug,
@@ -30,17 +31,7 @@ type RegistrySiteEntry = {
   billingStatus?: 'n/a' | 'trial' | 'active' | 'overdue' | 'canceled';
   ownerEmail?: string;
   studioUrl?: string;
-  adConfig?: {
-    provider: 'adsense';
-    mode?: 'auto' | 'manual' | 'hybrid';
-    fallbackToPlatform?: boolean;
-    publisherId?: string;
-    slots?: {
-      header?: string;
-      inContent?: string;
-      footer?: string;
-    };
-  };
+  monetization?: SiteRegistryMonetizationSummary;
   updatedAt?: string;
 };
 
@@ -81,6 +72,25 @@ function serializeEnv(envMap: Record<string, string>) {
 
 function sanitizeSlugForDocId(siteSlug: string) {
   return normalizeSiteSlug(siteSlug) || 'default';
+}
+
+function normalizePlacementTargets(value: unknown): MonetizationPlacementTarget[] {
+  const raw = Array.isArray(value) ? value : [];
+  const allowed = new Set<MonetizationPlacementTarget>([
+    'homeLead',
+    'homeMid',
+    'categoryTop',
+    'articleTop',
+    'articleSidebar',
+    'articleBottom'
+  ]);
+  return Array.from(
+    new Set(
+      raw
+        .map((item) => String(item || '').trim())
+        .filter((item): item is MonetizationPlacementTarget => allowed.has(item as MonetizationPlacementTarget))
+    )
+  );
 }
 
 export class SiteRuntimeService {
@@ -190,16 +200,13 @@ export class SiteRuntimeService {
       billingStatus: patch.billingStatus || current?.billingStatus || 'trial',
       ownerEmail: patch.ownerEmail || current?.ownerEmail || '',
       studioUrl: patch.studioUrl || current?.studioUrl || '',
-      adConfig: {
-        provider: 'adsense',
-        mode: patch.adConfig?.mode ?? current?.adConfig?.mode ?? 'auto',
-        fallbackToPlatform: patch.adConfig?.fallbackToPlatform ?? current?.adConfig?.fallbackToPlatform ?? true,
-        publisherId: patch.adConfig?.publisherId ?? current?.adConfig?.publisherId ?? '',
-        slots: {
-          header: patch.adConfig?.slots?.header ?? current?.adConfig?.slots?.header ?? '',
-          inContent: patch.adConfig?.slots?.inContent ?? current?.adConfig?.slots?.inContent ?? '',
-          footer: patch.adConfig?.slots?.footer ?? current?.adConfig?.slots?.footer ?? ''
-        }
+      monetization: {
+        enabled: patch.monetization?.enabled ?? current?.monetization?.enabled ?? false,
+        providerName: String(patch.monetization?.providerName ?? current?.monetization?.providerName ?? '').trim(),
+        hasHeadHtml: patch.monetization?.hasHeadHtml ?? current?.monetization?.hasHeadHtml ?? false,
+        placementTargets: Array.isArray(patch.monetization?.placementTargets)
+          ? normalizePlacementTargets(patch.monetization?.placementTargets)
+          : normalizePlacementTargets(current?.monetization?.placementTargets)
       },
       updatedAt: nowIso()
     };
@@ -263,14 +270,16 @@ export class SiteRuntimeService {
             id: siteSettingsId,
             set: {
               siteSlug: normalizedSlug,
-              adSlotsEnabled: settings.adSlotsEnabled,
-              adsMode: settings.adsMode,
-              adsPreviewEnabled: settings.adsPreviewEnabled,
-              adsensePublisherId: settings.adsensePublisherId,
-              adsenseSlotHeader: settings.adsenseSlotHeader,
-              adsenseSlotInContent: settings.adsenseSlotInContent,
-              adsenseSlotFooter: settings.adsenseSlotFooter,
-              fallbackToPlatform: settings.fallbackToPlatform,
+              monetization: {
+                enabled: settings.monetization.enabled,
+                providerName: settings.monetization.providerName,
+                headHtml: settings.monetization.headHtml,
+                placements: settings.monetization.placements.map((placement, index) => ({
+                  _key: `${placement.target}-${index}`,
+                  target: placement.target,
+                  html: placement.html
+                }))
+              },
               ...(settings.studioUrl ? { studioUrl: settings.studioUrl } : {}),
               publicContactEmail: settings.publicContactEmail,
               privacyPolicyOverride: settings.privacyPolicyOverride,

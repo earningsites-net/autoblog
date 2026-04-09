@@ -48,6 +48,8 @@ This file stores durable project context shared across tasks.
   - single-site mode is legacy/compatibility only and should not be used for normal ops.
   - per-site isolation boundary is `sites/<slug>/.env.generated` + registry metadata, not root env.
 - Frontend supports pluggable content repository via `CONTENT_REPOSITORY_DRIVER`.
+- `apps/web` importa package interni del monorepo (per esempio `@autoblog/factory-sdk`): per build affidabili su Vercel con `Root Directory = apps/web`, dichiarare il package sia in `apps/web/package.json` sia in `apps/web/next.config.ts` tramite `transpilePackages`, e fissare `outputFileTracingRoot` al repo root.
+- `apps/web` deployato come progetto Vercel standalone con `Root Directory = apps/web` deve restare autosufficiente per il runtime/build: evitare import diretti da package monorepo `packages/*` quando l'helper puo' vivere localmente nel web, altrimenti si rischiano regressioni di risoluzione/modulo anche con `Include files outside the Root Directory` attivo.
 - n8n workflows are template-based and require configured credentials/endpoint ids.
 - Portal/admin store is Postgres-only; configure it with `PORTAL_DATABASE_URL` (fallback `DATABASE_URL`).
 - Portal access model attuale:
@@ -73,11 +75,22 @@ This file stores durable project context shared across tasks.
       - override testuali opzionali per `Privacy Policy`, `Cookie Policy` e `Disclaimer`
     - se `publicContactEmail` è vuota lato site settings, il frontend pubblico usa come fallback l'`ownerEmail` già noto nel portal/handoff tramite endpoint engine pubblico
     - se gli override legali sono vuoti, il web continua a usare i testi default condivisi e provider-agnostic del frontend
+- Monetization model:
+  - il source of truth è un unico oggetto `siteSettings.monetization` provider-agnostic condiviso tra portal, engine, web, runtime e Sanity
+  - shape attuale:
+    - `enabled`
+    - `providerName`
+    - `headHtml`
+    - `placements[]` con target iniziali `homeLead`, `homeMid`, `categoryTop`, `articleTop`, `articleSidebar`, `articleBottom`
+  - il legacy AdSense-specifico (`adsensePublisherId`, `adsMode`, `adsenseSlot*`, `fallbackToPlatform`) è rimosso e le colonne Postgres legacy vengono droppate allo startup dell'engine/portal store
+  - il registry runtime non deve salvare codice raw monetization: solo un riepilogo non sensibile (`enabled`, `providerName`, presenza head code, target configurati)
+  - il frontend pubblico considera `adsEnabled` vero solo se il sito non è offline e `monetization` contiene codice effettivo; `headHtml` va iniettato una sola volta lato client e i placement HTML devono rieseguire eventuali `<script>` anche dopo navigazione client-side
 - Il vecchio viewer interno `/ops/db` e il relativo endpoint `/api/ops/db/table` sono stati rimossi: l'ispezione del portal DB va fatta via Postgres esterno (es. DBeaver/SSH tunnel) o query SQL, non tramite route admin nell'engine.
 - Stato attuale Postgres portal:
   - local dev usa il Postgres del compose `infra/n8n` con database dedicato (`autoblog_portal_local`) bootstrapato via `npm run portal:postgres:bootstrap`
   - production IONOS usa Postgres dedicato per il portal (`autoblog_portal_prod`) sullo stesso server Postgres di n8n, con `PORTAL_DATABASE_URL` in `/etc/autoblog/engine.env`
   - finche' il bootstrap schema del portal continua a eseguire `ALTER TABLE ... IF NOT EXISTS` allo startup dell'engine, una sessione Postgres `idle in transaction` aperta da DBeaver sul DB production puo' bloccare il restart del servizio prima di `app.listen()`; su production usare DBeaver con autocommit attivo ed evitare tab lasciati in transazione aperta
+  - il portal store Postgres auto-bootstrap-a i record mancanti per un sito noto: letture come `getSiteSettings()` / `getEntitlement()` chiamano `ensureSiteRecords()`, che ricrea `site_settings` e `entitlements` con `INSERT ... ON CONFLICT DO NOTHING`; cancellare solo la riga `entitlements` non e' quindi duraturo se il sito resta referenziato da `site_access`, dal bootstrap admin dell'engine, o da endpoint pubblici/interni che leggono lo stato del sito
   - i campi dominio del portal su `entitlements` non sono piu' `TEXT` liberi:
     - `status` -> enum `portal_entitlement_status`
     - `billing_mode` -> enum `portal_billing_mode`
@@ -119,6 +132,8 @@ This file stores durable project context shared across tasks.
 - Refill topic automatico:
   - quando i `topicCandidate` `brief_ready` sono vuoti, scheduler chiama `POST /api/factory/site/discover-topics`
   - parametri di default refill: `source=suggest`, `status=brief_ready`, `replace=true`, `apply=true`
+  - la logica autorevole di topic mix / category balancing / near-dedup del refill vive nel path engine `POST /api/factory/site/discover-topics` -> `FactoryOpsService.discoverTopics()` -> `scripts/autoblog.mjs discover-topics`
+  - `infra/n8n/workflows/topic_discovery_daily.json` resta un template legacy/minimale e non e' il source of truth operativo per la varieta' dei topic in refill
 - Variabili runtime rilevanti scheduler:
   - `PLAN_SCHEDULER_TEST_MODE`
   - `PLAN_TEST_INTERVAL_MINUTES_BASE|STANDARD|PRO`
@@ -188,9 +203,11 @@ This file stores durable project context shared across tasks.
   - `scripts/autoblog.mjs` e i workflow n8n principali (`brief_generation_worker`, `article_generation_worker`, `image_generation_worker`, `topic_discovery_daily`) non devono più assumere `Home & DIY` come nicchia di default
 - Qualità editoriale runtime:
   - il brief deve fornire guidance strutturale, non headings rigide ripetute articolo dopo articolo
+  - `brief_generation_worker` e `article_generation_worker` devono sempre produrre output in inglese; se topic/keyword citano un'altra lingua o cultura (es. `in Hindi`), quel riferimento va trattato come contesto da spiegare in inglese, non come lingua di output
   - `article_generation_worker` può inserire al massimo `0-2` riferimenti esterni inline nel body, solo se pertinenti e non inventati; niente sezione finale `sources`
   - ogni sito può avere `authorProfile` seedati automaticamente; i workflow possono assegnare un autore reale agli articoli via reference Sanity
   - `image_generation_worker` non deve imporre scene verticali preclassificate (es. `modern workspace scene`) come default; il prompt immagini deve derivare soprattutto da titolo + excerpt articolo con guardrail generici
+  - `image_generation_worker` supporta `IMAGE_ASPECT_RATIO` da env (default `16:9`); per `openai/gpt-image-1.5` il workflow fa fallback automatico a `3:2` se il valore configurato non è tra quelli supportati dal modello
   - `apps/engine/src/adapters/workflow-runners.ts` è solo uno stub/fallback engine e non deve contenere esempi hardcoded di nicchia che possano falsare test o debugging
 - Provider VPS baseline per il pilot ops: `IONOS VPS`; runbook step-by-step su `docs/deploy/ionos-vps-ops.md`.
 - `Hetzner Cloud` resta documentato come fallback tecnico.

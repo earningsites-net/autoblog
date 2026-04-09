@@ -159,15 +159,13 @@ export const siteRegistryEntrySchema = z.object({
     write: z.string().optional()
   }).optional(),
   studioUrl: z.string().url().optional(),
-  adConfig: z.object({
-    provider: z.literal('adsense'),
-    fallbackToPlatform: z.boolean().optional(),
-    publisherId: z.string().optional(),
-    slots: z.object({
-      header: z.string().optional(),
-      inContent: z.string().optional(),
-      footer: z.string().optional()
-    }).optional()
+  monetization: z.object({
+    enabled: z.boolean().optional(),
+    providerName: z.string().optional(),
+    hasHeadHtml: z.boolean().optional(),
+    placementTargets: z.array(
+      z.enum(['homeLead', 'homeMid', 'categoryTop', 'articleTop', 'articleSidebar', 'articleBottom'])
+    ).optional()
   }).optional(),
   webBaseUrl: z.string().optional(),
   domainStatus: z.enum(['pending', 'active', 'transferred']),

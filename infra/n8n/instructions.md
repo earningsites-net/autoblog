@@ -56,9 +56,11 @@ ls -la /
 ## Directory importanti
 
 ### Source code
+
 /srv/auto-blog-project
 
 ### Runtime live
+
 /var/lib/autoblog
 
 Contenuto tipico:
@@ -67,6 +69,7 @@ Contenuto tipico:
 /var/lib/autoblog/backups
 
 ### Env production
+
 /etc/autoblog
 
 Contenuto tipico:
@@ -74,19 +77,24 @@ Contenuto tipico:
 /etc/autoblog/n8n.env
 
 ### n8n + docker compose
+
 /srv/auto-blog-project/infra/n8n
 
 ### Dati n8n
+
 /srv/auto-blog-project/infra/n8n/data
 
 ### Dati Postgres attuali
+
 /srv/auto-blog-project/infra/n8n/postgres
 
 ### systemd
+
 /etc/systemd/system/autoblog-engine.service
 /etc/systemd/system/autoblog-n8n.service
 
 ### nginx
+
 /etc/nginx
 /var/log/nginx
 
@@ -144,11 +152,13 @@ npm run site:studio:prod -- <site-slug> \
  --studio-url https://<site-slug>.sanity.studio
 
 Questo aggiorna:
+
 - `/var/lib/autoblog/sites/<site-slug>/.env.generated` con `SANITY_STUDIO_URL`
 - registry runtime production
 - `site_settings.studio_url` nel portal DB
 
 Non tocca:
+
 - owner
 - billing mode
 - handoff
@@ -157,3 +167,18 @@ Non tocca:
 
 npm run site:studio -- <site-slug> \
  --studio-url https://<site-slug>.sanity.studio
+
+## Cancellare un sito in prod
+
+cleanup Sanity: npm run sanity:cleanup -- --site-slug <id-blog> --include-topics
+rimuovere il sito dal runtime VPS:
+
+- /var/lib/autoblog/sites/<id-blog>
+- entry in /var/lib/autoblog/sites/registry.json
+
+opzionale: cleanup portal DB se esiste accesso/setting associato
+
+solo alla fine rimuovere dal repo:
+
+- sites/<id-blog>/site.blueprint.json
+- eventuale sites/<id-blog>/README.md

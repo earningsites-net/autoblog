@@ -1,3 +1,5 @@
+import type { MonetizationPlacementTarget, SiteMonetizationSettings } from '@autoblog/factory-sdk';
+
 export type PortalUser = {
   id: number;
   email: string;
@@ -23,14 +25,7 @@ export type PortalSiteSettings = {
   siteSlug: string;
   publishingEnabled: boolean;
   maxPublishesPerRun: number;
-  adSlotsEnabled: boolean;
-  adsMode: 'auto' | 'manual' | 'hybrid';
-  adsPreviewEnabled: boolean;
-  adsensePublisherId: string;
-  adsenseSlotHeader: string;
-  adsenseSlotInContent: string;
-  adsenseSlotFooter: string;
-  fallbackToPlatform: boolean;
+  monetization: SiteMonetizationSettings;
   studioUrl: string;
   publicContactEmail: string;
   privacyPolicyOverride: string;
@@ -65,6 +60,63 @@ export type PortalSiteSummary = {
   settings: PortalSiteSettings;
   entitlement: PortalSiteEntitlement;
 };
+
+export function emptyMonetizationSettings(): SiteMonetizationSettings {
+  return {
+    enabled: false,
+    providerName: '',
+    headHtml: '',
+    placements: []
+  };
+}
+
+export function normalizeMonetizationPlacementTarget(value: unknown): MonetizationPlacementTarget | null {
+  const raw = String(value || '').trim();
+  if (
+    raw === 'homeLead' ||
+    raw === 'homeMid' ||
+    raw === 'categoryTop' ||
+    raw === 'articleTop' ||
+    raw === 'articleSidebar' ||
+    raw === 'articleBottom'
+  ) {
+    return raw;
+  }
+  return null;
+}
+
+export function normalizeSiteMonetization(value: unknown): SiteMonetizationSettings {
+  const fallback = emptyMonetizationSettings();
+  if (!value || typeof value !== 'object') return fallback;
+
+  const raw = value as Partial<SiteMonetizationSettings> & {
+    placements?: Array<{ target?: unknown; html?: unknown }>;
+  };
+
+  const placements = Array.isArray(raw.placements)
+    ? raw.placements
+        .map((placement) => {
+          const target = normalizeMonetizationPlacementTarget(placement?.target);
+          const html = String(placement?.html || '').trim();
+          if (!target || !html) return null;
+          return { target, html };
+        })
+        .filter((placement): placement is SiteMonetizationSettings['placements'][number] => Boolean(placement))
+    : [];
+
+  return {
+    enabled: Boolean(raw.enabled),
+    providerName: String(raw.providerName || '').trim(),
+    headHtml: String(raw.headHtml || '').trim(),
+    placements
+  };
+}
+
+export function hasMonetizationContent(monetization: SiteMonetizationSettings | null | undefined) {
+  if (!monetization) return false;
+  if (String(monetization.headHtml || '').trim()) return true;
+  return monetization.placements.some((placement) => String(placement.html || '').trim());
+}
 
 export function normalizePortalSiteBillingMode(value: unknown): PortalSiteBillingMode {
   const raw = String(value || '').trim().toLowerCase();

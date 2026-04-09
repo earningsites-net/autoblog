@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "siteSlug": "glowlab-daily",
-  "brandName": "GlowLab Daily",
+  "siteSlug": "beauty-lab",
+  "brandName": "Beauty Lab",
   "siteDescription": "The site focuses on modern beauty, skincare, and self-care routines for everyday users. Content includes practical guides, beginner-friendly routines, product-agnostic tips, and educational articles about ingredients and",
   "businessMode": "transfer_first",
   "delivery": {
@@ -31,11 +31,11 @@
   "locale": "en-US",
   "theme": {
     "palette": {
-      "paper": "#FFF4F7",
-      "ink": "#2F2328",
-      "rust": "#D9777F",
-      "sage": "#C8A39C",
-      "coal": "#24191F"
+      "paper": "#fff0f3",
+      "ink": "#2f2328",
+      "rust": "#d79289",
+      "sage": "#d6a4a5",
+      "coal": "#181114"
     },
     "typography": {
       "headingFont": "Sora",
@@ -54,16 +54,16 @@
   "niche": {
     "primaryNiche": "Beauty & Self-Care",
     "allowedSubtopics": [
-      "Skincare Basics",
-      "Hair Care & Styling",
-      "Self-Care Routines",
-      "Beauty Tips & Hacks",
-      "Ingredients Explained",
-      "Daily Beauty Habits",
-      "skincare routines",
-      "beauty habits and daily routines",
-      "hair care tips and techniques",
-      "self-care ideas and practices"
+      "Skincare",
+      "Makeup",
+      "Haircare",
+      "Beauty & Self-Care",
+      "Healthy Aging",
+      "Natural Supplements",
+      "skincare routines and tips",
+      "makeup techniques and tutorials",
+      "haircare routines and treatments",
+      "daily beauty habits and rituals"
     ],
     "excludedSubtopics": [
       "Medical advice",
@@ -86,53 +86,55 @@
   },
   "categories": [
     {
-      "slug": "skincare-basics",
-      "title": "Skincare Basics",
-      "description": "Editorial coverage of skincare basics within beauty & self-care.",
+      "slug": "skincare",
+      "title": "Skincare",
+      "description": "Editorial coverage of skincare within beauty & self-care.",
       "accent": "rust"
     },
     {
-      "slug": "hair-care-styling",
-      "title": "Hair Care & Styling",
-      "description": "Editorial coverage of hair care & styling within beauty & self-care.",
+      "slug": "makeup",
+      "title": "Makeup",
+      "description": "Editorial coverage of makeup within beauty & self-care.",
       "accent": "sage"
     },
     {
-      "slug": "self-care-routines",
-      "title": "Self-Care Routines",
-      "description": "Editorial coverage of self-care routines within beauty & self-care.",
+      "slug": "haircare",
+      "title": "Haircare",
+      "description": "Editorial coverage of haircare within beauty & self-care.",
       "accent": "rust"
     },
     {
-      "slug": "beauty-tips-hacks",
-      "title": "Beauty Tips & Hacks",
-      "description": "Editorial coverage of beauty tips & hacks within beauty & self-care.",
+      "slug": "beauty-self-care",
+      "title": "Beauty & Self-Care",
+      "description": "Editorial coverage of beauty & self-care within beauty & self-care.",
       "accent": "sage"
     },
     {
-      "slug": "ingredients-explained",
-      "title": "Ingredients Explained",
-      "description": "Editorial coverage of ingredients explained within beauty & self-care.",
+      "slug": "healthy-aging",
+      "title": "Healthy Aging",
+      "description": "Editorial coverage of healthy aging within beauty & self-care.",
       "accent": "rust"
     },
     {
-      "slug": "daily-beauty-habits",
-      "title": "Daily Beauty Habits",
-      "description": "Editorial coverage of daily beauty habits within beauty & self-care.",
+      "slug": "natural-supplements",
+      "title": "Natural Supplements",
+      "description": "Editorial coverage of natural supplements within beauty & self-care.",
       "accent": "sage"
     }
   ],
   "seedTopics": [
-    "skincare routines",
-    "beauty habits and daily routines",
-    "hair care tips and techniques",
-    "self-care ideas and practices",
-    "beauty mistakes to avoid",
-    "skincare ingredients explained",
-    "natural beauty tips",
-    "beginner beauty guides",
-    "personal care routines",
-    "healthy skin habits"
+    "skincare routines and tips",
+    "makeup techniques and tutorials",
+    "haircare routines and treatments",
+    "daily beauty habits and rituals",
+    "anti-aging skincare and habits",
+    "natural supplements for beauty and wellness",
+    "common beauty mistakes to avoid",
+    "beauty and skincare guides",
+    "ingredients in skincare and cosmetics",
+    "self-care routines for body and mind",
+    "healthy lifestyle habits for better skin and hair",
+    "beauty routines for different skin and hair types"
   ],
   "budgetPolicy": {
     "monthlyCapUsd": 100,

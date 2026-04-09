@@ -9,19 +9,46 @@ export const siteSettingsType = defineType({
     defineField({ name: 'siteName', type: 'string', initialValue: 'Hammer & Hearth' }),
     defineField({ name: 'siteDescription', type: 'text', rows: 3 }),
     defineField({ name: 'defaultLocale', type: 'string', initialValue: 'en-US' }),
-    defineField({ name: 'adSlotsEnabled', type: 'boolean', initialValue: false }),
     defineField({
-      name: 'adsMode',
-      type: 'string',
-      initialValue: 'auto',
-      options: { list: ['auto', 'manual', 'hybrid'] }
+      name: 'monetization',
+      type: 'object',
+      fields: [
+        defineField({ name: 'enabled', type: 'boolean', initialValue: false }),
+        defineField({ name: 'providerName', type: 'string' }),
+        defineField({ name: 'headHtml', type: 'text', rows: 10 }),
+        defineField({
+          name: 'placements',
+          type: 'array',
+          initialValue: [],
+          of: [
+            defineArrayMember({
+              type: 'object',
+              fields: [
+                defineField({
+                  name: 'target',
+                  type: 'string',
+                  validation: (Rule) => Rule.required(),
+                  options: {
+                    list: ['homeLead', 'homeMid', 'categoryTop', 'articleTop', 'articleSidebar', 'articleBottom']
+                  }
+                }),
+                defineField({ name: 'html', type: 'text', rows: 8, validation: (Rule) => Rule.required() })
+              ],
+              preview: {
+                select: {
+                  title: 'target',
+                  subtitle: 'html'
+                },
+                prepare: ({ title, subtitle }) => ({
+                  title: title || 'Placement',
+                  subtitle: subtitle ? String(subtitle).slice(0, 80) : 'No embed configured'
+                })
+              }
+            })
+          ]
+        })
+      ]
     }),
-    defineField({ name: 'adsPreviewEnabled', type: 'boolean', initialValue: true }),
-    defineField({ name: 'adsensePublisherId', type: 'string' }),
-    defineField({ name: 'adsenseSlotHeader', type: 'string' }),
-    defineField({ name: 'adsenseSlotInContent', type: 'string' }),
-    defineField({ name: 'adsenseSlotFooter', type: 'string' }),
-    defineField({ name: 'fallbackToPlatform', type: 'boolean', initialValue: true }),
     defineField({ name: 'studioUrl', type: 'url' }),
     defineField({ name: 'publicContactEmail', type: 'string' }),
     defineField({ name: 'privacyPolicyOverride', type: 'text', rows: 18 }),

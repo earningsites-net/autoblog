@@ -5,7 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import { z } from 'zod';
-import { buildDefaultLegalEditableText, generationJobRequestSchema } from '@autoblog/factory-sdk';
+import {
+  buildDefaultLegalEditableText,
+  generationJobRequestSchema,
+  type SiteMonetizationSettings
+} from '@autoblog/factory-sdk';
 import { createWorkflowRunner } from './adapters/workflow-runners';
 import { AuthService } from './services/auth-service';
 import { BillingService } from './services/billing-service';
@@ -114,16 +118,25 @@ const patchPublishingSchema = z.object({
   maxPublishesPerRun: z.number().int().min(1).max(50).optional()
 });
 
-const patchAdsSchema = z.object({
-  adSlotsEnabled: z.boolean().optional(),
-  adsMode: z.enum(['auto', 'manual', 'hybrid']).optional(),
-  adsPreviewEnabled: z.boolean().optional(),
-  adsensePublisherId: z.string().max(120).optional(),
-  adsenseSlotHeader: z.string().max(120).optional(),
-  adsenseSlotInContent: z.string().max(120).optional(),
-  adsenseSlotFooter: z.string().max(120).optional(),
-  fallbackToPlatform: z.boolean().optional(),
-  studioUrl: z.string().url().max(500).or(z.literal('')).optional()
+const monetizationPlacementTargetSchema = z.enum([
+  'homeLead',
+  'homeMid',
+  'categoryTop',
+  'articleTop',
+  'articleSidebar',
+  'articleBottom'
+]);
+
+const patchMonetizationSchema = z.object({
+  enabled: z.boolean(),
+  providerName: z.string().max(120),
+  headHtml: z.string().max(50000),
+  placements: z.array(
+    z.object({
+      target: monetizationPlacementTargetSchema,
+      html: z.string().max(50000)
+    })
+  ).max(12)
 });
 
 const createCheckoutSessionSchema = z.object({
@@ -183,24 +196,22 @@ function resolveSitePublicContactEmail(
   return String(settings.publicContactEmail || registrySite?.ownerEmail || '').trim();
 }
 
-function resolveAdsEnabled(settings: {
-  adSlotsEnabled?: boolean;
-  adsensePublisherId?: string;
-  fallbackToPlatform?: boolean;
+function resolveMonetizationEnabled(settings: {
+  monetization?: Pick<SiteMonetizationSettings, 'enabled' | 'headHtml' | 'placements'> | null;
 }) {
-  const directPublisherId = String(settings.adsensePublisherId || '').trim();
-  const platformPublisherId = String(process.env.PLATFORM_ADSENSE_PUBLISHER_ID || '').trim();
-  return Boolean(settings.adSlotsEnabled && (directPublisherId || (settings.fallbackToPlatform && platformPublisherId)));
+  const monetization = settings.monetization;
+  if (!monetization?.enabled) return false;
+  if (String(monetization.headHtml || '').trim()) return true;
+  return Array.isArray(monetization.placements)
+    && monetization.placements.some((placement) => String(placement?.html || '').trim());
 }
 
 function buildSiteLegalDefaults(siteName: string, settings: {
-  adSlotsEnabled?: boolean;
-  adsensePublisherId?: string;
-  fallbackToPlatform?: boolean;
+  monetization?: Pick<SiteMonetizationSettings, 'enabled' | 'headHtml' | 'placements'> | null;
 }) {
   const context = {
     siteName,
-    adsEnabled: resolveAdsEnabled(settings)
+    adsEnabled: resolveMonetizationEnabled(settings)
   };
   return {
     privacyPolicy: buildDefaultLegalEditableText('privacy', context),
@@ -697,6 +708,7 @@ app.get('/portal', async (_req, reply) => {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Site Owner Portal</title>
+  ${portalBrandLogoSrc ? `<link rel="icon" type="image/png" href="${portalBrandLogoSrc}" />` : ''}
   <style>
     :root {
       --surface:#ffffff;
@@ -740,6 +752,17 @@ app.get('/portal', async (_req, reply) => {
     .stack { display:grid; gap:12px; }
     .field { display:flex; flex-direction:column; gap:6px; }
     .field label { font-size:12px; font-weight:600; color:#334a74; }
+    .toggle-inline {
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      width:auto;
+    }
+    .toggle-inline input {
+      width:auto;
+      padding:0;
+      flex:none;
+    }
     .hint { color:var(--muted); font-size:12px; line-height:1.4; }
     input,textarea,button { width:100%; border-radius:12px; padding:10px 12px; font-size:14px; }
     input,textarea { border:1px solid #dbe3f3; background:#fff; color:var(--text); }
@@ -867,30 +890,6 @@ app.get('/portal', async (_req, reply) => {
       font-size:12px;
       line-height:1.45;
       color:inherit;
-    }
-    .ads-mode-tabs {
-      display:inline-flex;
-      gap:6px;
-      padding:4px;
-      border:1px solid #d9e2f4;
-      border-radius:999px;
-      background:#f5f8ff;
-      margin-bottom:12px;
-    }
-    .ads-mode-tab {
-      border:0;
-      background:transparent;
-      color:#35537f;
-      border-radius:999px;
-      padding:7px 12px;
-      font-size:12px;
-      font-weight:700;
-      width:auto;
-    }
-    .ads-mode-tab.active {
-      background:#2b66ff;
-      color:#fff;
-      box-shadow:0 8px 18px -12px rgba(43, 102, 255, .7);
     }
     .sep { height:1px; background:#e7ecf8; margin:12px 0; }
     a.inline-link { color:#295bd1; text-decoration:none; font-size:12px; font-weight:600; }
@@ -1256,10 +1255,10 @@ app.get('/portal', async (_req, reply) => {
           <div class="auth-brand">
             <p class="eyebrow">Publisher Console</p>
             <h1>Site Owner Portal</h1>
-            <p>Configure plan, ad slots, and publishing cadence from one panel.</p>
+            <p>Configure plan, monetization code, and publishing cadence from one panel.</p>
             <ul class="auth-bullets">
               <li>Subscription plans: Base, Standard, Pro</li>
-              <li>AdSense setup for immediate monetization</li>
+              <li>Provider-agnostic monetization controls</li>
               <li>Direct access to content management</li>
             </ul>
           </div>
@@ -1679,31 +1678,17 @@ app.get('/portal', async (_req, reply) => {
       }
     }
 
-    function setAdsModeUI(slug, mode) {
-      const idSafe = String(slug || '').replace(/[^a-z0-9]/gi, '-');
-      const nextMode = mode === 'manual' ? 'manual' : 'auto';
-      const hiddenInput = document.getElementById('adsMode-' + idSafe);
-      if (hiddenInput instanceof HTMLInputElement) hiddenInput.value = nextMode;
-
-      const autoPanel = document.getElementById('adsAutoPanel-' + idSafe);
-      const manualPanel = document.getElementById('adsManualPanel-' + idSafe);
-      if (autoPanel instanceof HTMLElement) autoPanel.classList.toggle('hidden', nextMode !== 'auto');
-      if (manualPanel instanceof HTMLElement) manualPanel.classList.toggle('hidden', nextMode !== 'manual');
-
-      const tabButtons = document.querySelectorAll('[data-action="set-ads-mode"][data-slug="' + slug + '"]');
-      for (const button of tabButtons) {
-        if (!(button instanceof HTMLElement)) continue;
-        const btnMode = button.getAttribute('data-mode') || 'auto';
-        button.classList.toggle('active', btnMode === nextMode);
-      }
-    }
-
     function getInputValue(id) {
       const el = document.getElementById(id);
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
         return el.value;
       }
       return '';
+    }
+
+    function getCheckboxValue(id) {
+      const el = document.getElementById(id);
+      return el instanceof HTMLInputElement && el.type === 'checkbox' ? el.checked : false;
     }
 
     async function api(path, options = {}) {
@@ -1797,7 +1782,6 @@ app.get('/portal', async (_req, reply) => {
             escapeHtml(pendingEffectiveAtLabel || 'next cycle') +
             '</strong>. Current quota remains active until then.</div>'
           : '';
-        const currentAdsMode = site.settings?.adsMode === 'manual' ? 'manual' : 'auto';
         const inactiveReason =
           site.entitlement?.billingStatus === 'overdue'
             ? 'Payment is overdue. Reactivate the subscription to resume publishing and site management.'
@@ -1830,6 +1814,27 @@ app.get('/portal', async (_req, reply) => {
           site.publicContactEmailResolved ||
           data.user?.email ||
           '';
+        const monetization = site.settings?.monetization || {
+          enabled: false,
+          providerName: '',
+          headHtml: '',
+          placements: []
+        };
+        const placementHtmlByTarget = {};
+        for (const placement of Array.isArray(monetization.placements) ? monetization.placements : []) {
+          const targetKey = String(placement?.target || '').trim();
+          if (!targetKey) continue;
+          placementHtmlByTarget[targetKey] = String(placement?.html || '');
+        }
+        const monetizationPlacementFields = [
+          { target: 'homeLead', label: 'Home lead', hint: 'Rendered after the homepage lead modules.' },
+          { target: 'homeMid', label: 'Home mid', hint: 'Rendered later in the homepage feed.' },
+          { target: 'categoryTop', label: 'Category top', hint: 'Rendered below the category hero.' },
+          { target: 'articleTop', label: 'Article top', hint: 'Rendered above the article content layout.' },
+          { target: 'articleSidebar', label: 'Article sidebar', hint: 'Rendered in the article sidebar rail.' },
+          { target: 'articleBottom', label: 'Article bottom', hint: 'Rendered below the article content.' }
+        ];
+        const advancedPlacementsOpen = monetizationPlacementFields.some((field) => placementHtmlByTarget[field.target]) ? 'open' : '';
         const privacyPolicyValue = site.settings?.privacyPolicyOverride || site.legalDefaults?.privacyPolicy || '';
         const cookiePolicyValue = site.settings?.cookiePolicyOverride || site.legalDefaults?.cookiePolicy || '';
         const disclaimerValue = site.settings?.disclaimerOverride || site.legalDefaults?.disclaimer || '';
@@ -1847,44 +1852,52 @@ app.get('/portal', async (_req, reply) => {
           \${inactiveBannerHtml}
 
           <div data-view-panel="monetization">
-            <input type="hidden" id="adsMode-\${idSafe}" value="\${escapeHtml(currentAdsMode)}" />
-            <div class="ads-mode-tabs" role="tablist" aria-label="Ads mode">
-              <button type="button" class="ads-mode-tab \${currentAdsMode === 'auto' ? 'active' : ''}" data-action="set-ads-mode" data-slug="\${escapeHtml(slug)}" data-mode="auto">Auto Ads</button>
-              <button type="button" class="ads-mode-tab \${currentAdsMode === 'manual' ? 'active' : ''}" data-action="set-ads-mode" data-slug="\${escapeHtml(slug)}" data-mode="manual">Manual Slots</button>
-            </div>
             <div class="grid">
               <div class="c6 field">
-                <label>AdSense Publisher ID</label>
-                <input id="publisher-\${idSafe}" placeholder="ca-pub-xxxxxxxxxxxxxxxx" value="\${escapeHtml(site.settings?.adsensePublisherId || '')}" />
-                <div class="hint">Required for both modes.</div>
+                <label class="toggle-inline">
+                  <input id="monetizationEnabled-\${idSafe}" type="checkbox" \${monetization.enabled ? 'checked' : ''} />
+                  <span>Enable monetization</span>
+                </label>
+                <div class="hint">Disable this if you want to keep snippets saved without injecting them on the public site.</div>
+              </div>
+              <div class="c6 field">
+                <label>Provider / network name</label>
+                <input id="monetizationProvider-\${idSafe}" placeholder="AdSense, Nitro, Journey, Raptive..." value="\${escapeHtml(monetization.providerName || '')}" />
+                <div class="hint">Optional name to help you recognize the provider.</div>
+              </div>
+              <div class="c12 field">
+                <label>Head code</label>
+                <textarea id="monetizationHead-\${idSafe}" rows="10" placeholder="&lt;script async src=&quot;...&quot;&gt;&lt;/script&gt;">\${escapeHtml(monetization.headHtml || '')}</textarea>
+                <div class="hint">Use this for provider scripts that must load in the document head.</div>
               </div>
             </div>
 
-            <div id="adsAutoPanel-\${idSafe}" class="\${currentAdsMode === 'auto' ? '' : 'hidden'}">
-              <p class="hint">Google will inject ads automatically in the best page positions. Manual placeholders are disabled in this mode.</p>
-            </div>
-
-            <div id="adsManualPanel-\${idSafe}" class="\${currentAdsMode === 'manual' ? '' : 'hidden'}">
-              <p class="hint">Manual mode uses fixed ad containers in template positions (header / in-content / footer).</p>
-              <div class="grid">
-                <div class="c4 field">
-                  <label>Header Slot ID</label>
-                  <input id="slotHeader-\${idSafe}" placeholder="1234567890" value="\${escapeHtml(site.settings?.adsenseSlotHeader || '')}" />
-                </div>
-                <div class="c4 field">
-                  <label>In-content Slot ID</label>
-                  <input id="slotContent-\${idSafe}" placeholder="2345678901" value="\${escapeHtml(site.settings?.adsenseSlotInContent || '')}" />
-                </div>
-                <div class="c4 field">
-                  <label>Footer Slot ID</label>
-                  <input id="slotFooter-\${idSafe}" placeholder="3456789012" value="\${escapeHtml(site.settings?.adsenseSlotFooter || '')}" />
-                </div>
+            <details class="billing-note" \${advancedPlacementsOpen}>
+              <summary><strong>Advanced placements</strong> <span class="hint">Add body embeds only where the provider requires a page placeholder.</span></summary>
+              <div class="grid" style="margin-top:12px;">
+                \${monetizationPlacementFields.map((field) => \`
+                  <div class="c12 field">
+                    <label>\${escapeHtml(field.label)}</label>
+                    <textarea id="placement-\${field.target}-\${idSafe}" rows="6" placeholder="&lt;div&gt;Provider embed&lt;/div&gt;&lt;script&gt;...&lt;/script&gt;">\${escapeHtml(placementHtmlByTarget[field.target] || '')}</textarea>
+                    <div class="hint">\${escapeHtml(field.hint)}</div>
+                  </div>
+                \`).join('')}
               </div>
+            </details>
+
+            <div class="billing-note warn" style="margin-top:14px;">
+              <h4>Before enabling monetization</h4>
+              <ul>
+                <li>Confirm the provider approves the site and traffic profile you expect.</li>
+                <li>Handle any required <code>ads.txt</code>, CMP / consent, or privacy setup outside this panel.</li>
+                <li>Some premium networks require exclusivity or minimum traffic before activation.</li>
+                <li>Custom snippets execute third-party code on the public site, so broken HTML or scripts can affect layout and performance.</li>
+              </ul>
             </div>
 
             \${monetizationLockHintHtml}
             <div class="actions">
-              <button class="primary" data-action="save-ads" data-slug="\${escapeHtml(slug)}" \${disableMutationsAttr}>Save Monetization</button>
+              <button class="primary" data-action="save-monetization" data-slug="\${escapeHtml(slug)}" \${disableMutationsAttr}>Save Monetization</button>
               <a href="${baseUrl}/api/factory/site/\${encodeURIComponent(slug)}/status" target="_blank" class="inline-link">Site status JSON</a>
               <p id="saveAdsFeedback-\${idSafe}" class="action-feedback c12" role="status" aria-live="polite"></p>
             </div>
@@ -1929,7 +1942,7 @@ app.get('/portal', async (_req, reply) => {
                 <div class="quota">3 articles / month</div>
                 <ul>
                   <li>Basic publishing cadence</li>
-                  <li>Core ad slot controls</li>
+                  <li>Flexible monetization controls</li>
                   <li>Email support (standard SLA)</li>
                 </ul>
                 <div class="spacer"></div>
@@ -2159,33 +2172,25 @@ app.get('/portal', async (_req, reply) => {
       if (!action || !slug) return;
       const idSafe = slug.replace(/[^a-z0-9]/gi, '-');
 
-      if (action === 'set-ads-mode') {
-        const mode = target.getAttribute('data-mode') || 'auto';
-        setAdsModeUI(slug, mode);
-        return;
-      }
-
       try {
-        if (action === 'save-ads') {
+        if (action === 'save-monetization') {
           setButtonBusy(target, true, 'Saving...');
           const saveFeedback = document.getElementById('saveAdsFeedback-' + idSafe);
           setInlineFeedback(saveFeedback, 'Saving monetization settings...', '');
-          const selectedAdsModeEl = document.getElementById('adsMode-' + idSafe);
-          const selectedAdsMode =
-            selectedAdsModeEl instanceof HTMLInputElement && selectedAdsModeEl.value === 'manual'
-              ? 'manual'
-              : 'auto';
+          const placementTargets = ['homeLead', 'homeMid', 'categoryTop', 'articleTop', 'articleSidebar', 'articleBottom'];
+          const placements = placementTargets
+            .map((placementTarget) => ({
+              target: placementTarget,
+              html: getInputValue('placement-' + placementTarget + '-' + idSafe).trim()
+            }))
+            .filter((placement) => placement.html);
           const payload = {
-            adSlotsEnabled: true,
-            adsMode: selectedAdsMode,
-            adsPreviewEnabled: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1',
-            adsensePublisherId: getInputValue('publisher-' + idSafe),
-            adsenseSlotHeader: getInputValue('slotHeader-' + idSafe),
-            adsenseSlotInContent: getInputValue('slotContent-' + idSafe),
-            adsenseSlotFooter: getInputValue('slotFooter-' + idSafe),
-            fallbackToPlatform: true
+            enabled: getCheckboxValue('monetizationEnabled-' + idSafe),
+            providerName: getInputValue('monetizationProvider-' + idSafe).trim(),
+            headHtml: getInputValue('monetizationHead-' + idSafe),
+            placements
           };
-          const res = await api('/api/portal/sites/' + encodeURIComponent(slug) + '/ads', { method: 'PATCH', body: JSON.stringify(payload) });
+          const res = await api('/api/portal/sites/' + encodeURIComponent(slug) + '/monetization', { method: 'PATCH', body: JSON.stringify(payload) });
           setOutput(res);
           let feedbackType = 'ok';
           let feedbackMessage = 'Monetization saved successfully.';
@@ -2524,29 +2529,24 @@ app.patch('/api/portal/sites/:siteSlug/publishing', async (req, reply) => {
   };
 });
 
-app.patch('/api/portal/sites/:siteSlug/ads', async (req, reply) => {
+app.patch('/api/portal/sites/:siteSlug/monetization', async (req, reply) => {
   const params = req.params as { siteSlug: string };
   const siteSlug = sanitizeSiteSlug(params.siteSlug);
   if (!(await requireMutablePortalSite(req, reply, siteSlug))) return;
 
-  const parsed = patchAdsSchema.safeParse(req.body || {});
+  const parsed = patchMonetizationSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
   }
 
-  const settings = await portalStore.patchSiteSettings(siteSlug, parsed.data);
+  const settings = await portalStore.patchSiteSettings(siteSlug, { monetization: parsed.data });
   const entitlement = await portalStore.getEntitlementEffective(siteSlug);
   await siteRuntime.upsertRegistrySite(siteSlug, {
-    adConfig: {
-      provider: 'adsense',
-      mode: settings.adsMode,
-      fallbackToPlatform: settings.fallbackToPlatform,
-      publisherId: settings.adsensePublisherId,
-      slots: {
-        header: settings.adsenseSlotHeader,
-        inContent: settings.adsenseSlotInContent,
-        footer: settings.adsenseSlotFooter
-      }
+    monetization: {
+      enabled: settings.monetization.enabled,
+      providerName: settings.monetization.providerName,
+      hasHeadHtml: Boolean(String(settings.monetization.headHtml || '').trim()),
+      placementTargets: settings.monetization.placements.map((placement) => placement.target)
     },
     studioUrl: settings.studioUrl
   });
@@ -3530,6 +3530,7 @@ app.get('/ops/factory', async (req, reply) => {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Factory Ops</title>
+  ${portalBrandLogoSrc ? `<link rel="icon" type="image/png" href="${portalBrandLogoSrc}" />` : ''}
   <style>
     :root { --bg:#0f1115; --panel:#171b22; --line:#283140; --text:#e8edf7; --muted:#9ea8b8; --accent:#6cb5ff; --ok:#44d19a; --warn:#ffcc66; --err:#ff6b6b; }
     body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);max-width:1100px;margin:16px auto;padding:0 16px;}
@@ -3822,7 +3823,6 @@ app.get('/ops/factory', async (req, reply) => {
       const revalidateSecret = String(vercelEnv.REVALIDATE_SECRET || '').trim();
       const portalBaseUrl = String(vercelEnv.NEXT_PUBLIC_PORTAL_BASE_URL || 'https://aiblogs.earningsites.net').trim();
       const blueprintPath = String(vercelEnv.SITE_BLUEPRINT_PATH || ('../../sites/' + siteSlug + '/site.blueprint.json')).trim();
-      const enableAds = String(vercelEnv.ENABLE_AD_SLOTS || 'false').trim() || 'false';
       const contentDriver = String(vercelEnv.CONTENT_REPOSITORY_DRIVER || 'sanity').trim() || 'sanity';
       const suggestedStudioUrl = String(studioDeploy.suggestedUrl || ('https://' + siteSlug + '.sanity.studio')).trim();
       const studioHostname = String(studioDeploy.hostname || siteSlug).trim() || siteSlug;
@@ -3834,8 +3834,6 @@ app.get('/ops/factory', async (req, reply) => {
         'SITE_BLUEPRINT_PATH=' + blueprintPath,
         '',
         'CONTENT_REPOSITORY_DRIVER=' + contentDriver,
-        'ENABLE_AD_SLOTS=' + enableAds,
-        '',
         'SANITY_PROJECT_ID=' + projectId,
         'SANITY_DATASET=' + dataset,
         'SANITY_API_VERSION=' + apiVersion,

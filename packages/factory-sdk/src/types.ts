@@ -180,6 +180,33 @@ export type SiteBlueprint = {
   };
 };
 
+export type MonetizationPlacementTarget =
+  | 'homeLead'
+  | 'homeMid'
+  | 'categoryTop'
+  | 'articleTop'
+  | 'articleSidebar'
+  | 'articleBottom';
+
+export type MonetizationPlacement = {
+  target: MonetizationPlacementTarget;
+  html: string;
+};
+
+export type SiteMonetizationSettings = {
+  enabled: boolean;
+  providerName: string;
+  headHtml: string;
+  placements: MonetizationPlacement[];
+};
+
+export type SiteRegistryMonetizationSummary = {
+  enabled?: boolean;
+  providerName?: string;
+  hasHeadHtml?: boolean;
+  placementTargets?: MonetizationPlacementTarget[];
+};
+
 export type SiteRegistryEntry = {
   siteSlug: string;
   ownerType: 'internal' | 'client';
@@ -193,16 +220,7 @@ export type SiteRegistryEntry = {
     write?: string;
   };
   studioUrl?: string;
-  adConfig?: {
-    provider: 'adsense';
-    fallbackToPlatform?: boolean;
-    publisherId?: string;
-    slots?: {
-      header?: string;
-      inContent?: string;
-      footer?: string;
-    };
-  };
+  monetization?: SiteRegistryMonetizationSummary;
   webBaseUrl?: string;
   domainStatus: 'pending' | 'active' | 'transferred';
   automationStatus: 'inactive' | 'active' | 'paused';

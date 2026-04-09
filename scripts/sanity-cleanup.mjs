@@ -60,6 +60,9 @@ Optional:
 `);
       process.exit(0);
     }
+
+    console.error(`Unknown argument: ${token}`);
+    process.exit(1);
   }
 
   return out;

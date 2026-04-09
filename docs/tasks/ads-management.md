@@ -4,6 +4,12 @@
 - Replace the AdSense-specific monetization model with a provider-agnostic monetization system based on head code plus targeted placement embeds.
 
 ## Done
+- Investigated why deleting the production `entitlements` row for `glow-lab` via DBeaver is not durable:
+  - `PortalPostgresStore.ensureSiteRecords()` recreates missing `site_settings` and `entitlements` rows with `INSERT ... ON CONFLICT DO NOTHING`
+  - `getSiteSettings()` and `getEntitlement()` both call that bootstrap helper before reading
+  - opening the portal with a user that still has `site_access` to `glow-lab` is sufficient to recreate the row because `/api/portal/sites` -> `listSitesForUser()` -> `getSiteSettings()` / `getEntitlementEffective()`
+  - a service restart can also recreate the row if engine bootstrap reassigns admin access for known sites, because `assignSiteAccess()` also calls `ensureSiteRecords()`
+  - the same recreation can also happen from public/internal reads such as `/api/public/sites/:siteSlug/state` and `/api/internal/sites/:siteSlug/entitlement`
 - Active task switched to `ads-management`.
 - Replaced the AdSense-specific settings model with a shared provider-agnostic `monetization` object across factory SDK, portal store, engine API, web frontend, runtime registry, and Sanity schema.
 - Replaced `PATCH /api/portal/sites/:siteSlug/ads` with `PATCH /api/portal/sites/:siteSlug/monetization` and updated the portal Monetization tab to use `enabled`, `providerName`, `headHtml`, and advanced target-based placements.
@@ -20,6 +26,10 @@
 - Confirmed that `npm run sanity:cleanup -- --site-slug <slug> --include-topics` is not topic-only: it also deletes `article`, `qaLog`, and `generationRun`, so it must not be used for queue-only resets.
 - Reverted the temporary `--topics-only` flag and related docs after the reported bad outcome; the repo no longer advertises or supports that cleanup path.
 - Hardened `scripts/sanity-cleanup.mjs` to fail on unknown arguments, so removed flags like `--topics-only` cannot be silently ignored and fall back to destructive default behavior.
+- Audited the current worktree for image-model relevance: the tracked files tied to the Replicate/GPT image switch are `infra/n8n/workflows/image_generation_worker.json`, `.env.example`, `infra/n8n/.env.example`, `docs/start-local.md`, and `docs/context.md`; current changes in portal/store/site files are unrelated.
+- Aligned ignored local deploy env files (`.env.staging`, `infra/n8n/.env.staging`, `infra/n8n/.env.production`) to `IMAGE_MODEL=openai/gpt-image-1.5` and `IMAGE_ASPECT_RATIO=3:2`; confirmed those files are git-ignored, so they do not enter a push by themselves.
+- Verified production drift on the VPS: `/etc/autoblog/n8n.env` still had `IMAGE_MODEL=black-forest-labs/flux-schnell`, and the active production `image_generation_worker` still hardcoded `16:9` with no `IMAGE_ASPECT_RATIO` / GPT fallback support.
+- Applied the production rollout directly on the VPS: updated `/etc/autoblog/n8n.env` to `IMAGE_MODEL=openai/gpt-image-1.5` and `IMAGE_ASPECT_RATIO=3:2`, imported the updated `image_generation_worker` into production n8n with the live workflow id, published it, restarted `autoblog-n8n`, and re-verified the active workflow via API (`hasImageAspectRatioEnv=true`, `hasHardcoded169=false`, `hasGptFallback=true`, `active=true`).
 - Investigated current production `ops/factory` access flow:
   - the browser auth prompt uses `FACTORY_UI_USERNAME` + `FACTORY_UI_PASSWORD`
   - the in-page `Factory API secret` field uses `FACTORY_API_SECRET`
@@ -51,8 +61,19 @@
     - `apps/web/src/lib/site-settings.ts`
   - removed the last monorepo-coupling residues from `apps/web/next.config.ts` and app-level package resolution so the web app no longer relies on `@autoblog/factory-sdk` at build/runtime
   - re-ran `cd apps/web && npm run build` successfully
+- Investigated the post-deploy “site online but no articles” report:
+  - the current local workspace is switched to `glow-lab`, not `glowlab-daily` (`apps/web/.env.local`, `sites/glow-lab/site.blueprint.json`)
+  - production engine content API confirms `glowlab-daily` is currently unknown server-side, while `glow-lab` exists
+  - production category API for `glow-lab` returns blueprint-backed categories correctly, but the production articles API returns `items: []`
+  - this points to a content/config alignment issue (slug, Sanity project/token, or missing published articles), not to a newly introduced frontend rendering regression
+  - direct Sanity query with the `glow-lab` site credentials confirmed the root cause:
+    - `count(*[_type == "article" && siteSlug == "glow-lab" && status == "published"]) == 0`
+    - article documents do exist, but sampled documents are all `status: "draft"` with `publishedAt: null`
+  - the public web app is behaving as coded: it only reads published articles from Sanity
+  - the likely upstream gap is in the content pipeline, not the web deploy: `article_generation_worker` creates draft articles, and the expected publish transition should happen later in `qa_scoring_and_publish_worker`
 
 ## Decisions
+- Treat manual deletion of a single `entitlements` row as non-durable while the site still exists in runtime/registry and is referenced by `site_access`, engine bootstrap admin assignment, or any endpoint that reads portal site state.
 - Remove the AdSense legacy model instead of keeping a compatibility layer.
 - Use a generic `monetization` object with `enabled`, `providerName`, `headHtml`, and target-based placement embeds.
 - Keep the initial placement target set fixed to `homeLead`, `homeMid`, `categoryTop`, `articleTop`, `articleSidebar`, and `articleBottom`.
@@ -60,6 +81,8 @@
 - When a workspace app imports another internal package at runtime, that dependency must also be declared in the app-local `package.json`; local hoisting is not enough for Vercel/isolated workspace builds.
 - Treat non-English mentions inside topics/keywords as subject matter to explain in English, not as a signal to switch article/brief output language.
 - Treat n8n workflow instance-added settings metadata (`executionOrder`, `binaryMode`, `callerPolicy`, `availableInMCP`) as non-blocking local drift; workflow nodes/connections remain aligned with repo source.
+- A repo push alone is not sufficient to change the live production image model: production reads `/etc/autoblog/n8n.env`, and the tracked repo change that matters for runtime behavior is the workflow template `infra/n8n/workflows/image_generation_worker.json`.
+- For the GPT image rollout, env-only was unsafe because production still had the old workflow template active; the runtime change had to include both the VPS env and the active n8n workflow.
 - For Factory Ops support, distinguish clearly between UI auth credentials and API secret; they are separate in production when `FACTORY_UI_PASSWORD` is explicitly set.
 - For local debugging, treat a repeated browser Basic Auth prompt as a process/config mismatch first: the engine reads `.env` only at startup, and `apps/engine/src/load-local-env.ts` does not override already-exported environment variables in the running shell/process.
 - For Factory Ops command previews, shell quoting does not need to be shell-perfect POSIX; it must first be valid browser JavaScript and copyable by the operator.
@@ -68,11 +91,14 @@
 - For the current Vercel setup, the safest fix is full web self-containment, not additional monorepo resolution workarounds.
 
 ## Next
+- If `glow-lab` must disappear from the portal/runtime, clean up the owning references (`site_access`, bootstrap site assignment, and any intended runtime/site presence) or mark the entitlement/settings to the desired inactive state instead of deleting only `entitlements`.
 - If needed, add product-level guidance or tooling for provider prerequisites outside the current scope: `ads.txt`, CMP/consent mode, exclusivity checks, and onboarding validation.
 - Consider adding targeted smoke fixtures with sample monetization snippets so head injection and placement rendering can be asserted automatically in CI.
 - If topic clustering still feels too repetitive after the engine env sync, tune `scripts/autoblog.mjs` selector/category-balancing heuristics or expose the selector mode explicitly in the factory API/UI instead of relying only on env defaults.
 - After topic queue cleanup, re-run `discover-topics` and then `prepopulate` with a higher total target if more published articles are desired.
 - If queue-only reset is still needed, implement a safer deletion path only after reproducing the failure mode and adding an explicit verification step against the exact mutation payload.
+- For the GPT image rollout on prod, sync `/etc/autoblog/n8n.env` with `IMAGE_MODEL=openai/gpt-image-1.5` and `IMAGE_ASPECT_RATIO=3:2`, restart `autoblog-n8n`, and import/publish the updated `image_generation_worker` from repo instead of pushing the whole dirty worktree.
+- Monitor the next production image-generation run to confirm Replicate now uses `openai/gpt-image-1.5` successfully on live content, and only then consider cleaning up any temporary workflow import artifacts on the VPS.
 - If Factory Ops continues to feel opaque, simplify the operator flow by either:
   - reusing `FACTORY_API_SECRET` as the UI password
   - or adding explicit copy/help text that explains `Basic Auth != Factory API secret`
@@ -81,14 +107,21 @@
 - After restart, verify the Factory page by checking that clicking `Check Status` changes the in-page `Status` line before testing full `Launch Site`.
 - Push the web self-containment fix and redeploy the Vercel project.
 - After redeploy, verify that legal pages and category pages still build correctly on Vercel without any direct `packages/*` runtime imports.
+- Reconcile the active site slug used by Vercel with the real site/runtime (`glowlab-daily` vs `glow-lab`) and verify that the matching Sanity dataset contains published `article` documents for that slug.
+- Investigate why the `glow-lab` prepopulate/publish pipeline stopped at draft creation and did not transition articles to `published`.
 
 ## Risks
+- Manual DB cleanup on only one portal table can look successful in DBeaver but self-heal on the next portal/public/internal read or engine restart because the store auto-bootstraps missing site records.
 - `apps/engine/src/index.ts` already has unrelated local modifications in the worktree, so future edits in the portal UI layer still need care.
 - The platform now intentionally executes owner-provided third-party monetization code on the public site; misconfigured snippets can still break layout or violate provider requirements even though the integration surface is generic.
 - Local n8n still contains legacy duplicate workflows by name, so name-based inspections in the UI can look misleading; the canonical active workflows should be tracked by ID.
+- The current git worktree contains unrelated changes plus site-creation side effects (`sites/beauty-lab/`, deletion of `sites/glowlab-daily/*`), so a broad commit/push would mix the Replicate/GPT rollout with unrelated work.
+- The production n8n import/update was executed from a root shell without sourcing the compose env into the host shell, which produced noisy docker-compose warnings even though the import/publish succeeded; future remote n8n maintenance should source `/etc/autoblog/n8n.env` before invoking `docker compose` to avoid ambiguous diagnostics.
 - The current Factory Ops production UX depends on remembering two distinct credentials; this is easy to misapply and looks like a broken login even when the server is behaving correctly.
 - Local browser auth debugging is opaque: stale exported env vars, a non-restarted engine, or cached browser Basic Auth credentials all surface as the same repeated login modal.
 - The Factory page is rendered as one large inline script; a single malformed helper string can silently disable the whole UI while leaving the HTML apparently intact.
 - Local `npm --workspace @autoblog/web run typecheck` can still fail on stale `.next/types/*` references even when `next build` is healthy; for this issue the build result is the relevant verification signal.
 - Vercel Root Directory isolation can override otherwise-correct monorepo code/config and present as a plain `Module not found` error during webpack compile.
 - If the web app reintroduces direct runtime imports from `packages/*`, the same Vercel regression can recur even when local `next build` stays green.
+- Categories can still render even when articles are missing because category fallbacks come from blueprint/static configuration while published articles depend on Sanity/API data; this can mask slug/token/content mismatches after deploy.
+- A site can appear structurally healthy after deploy while still showing zero content if Sanity contains only `draft` articles; this is expected with the current web query (`status == "published"`).

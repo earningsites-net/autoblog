@@ -10,6 +10,8 @@ import type {
   PortalUser
 } from './portal-store-types';
 import {
+  emptyMonetizationSettings,
+  normalizeSiteMonetization,
   normalizePortalSiteBillingMode,
   normalizePortalSiteBillingStatus,
   normalizePortalSiteEntitlementStatus
@@ -50,14 +52,10 @@ type SiteSettingsRow = {
   site_slug: string;
   publishing_enabled: boolean;
   max_publishes_per_run: number;
-  ad_slots_enabled: boolean;
-  ads_mode: string;
-  ads_preview_enabled: boolean;
-  adsense_publisher_id: string;
-  adsense_slot_header: string;
-  adsense_slot_in_content: string;
-  adsense_slot_footer: string;
-  fallback_to_platform: boolean;
+  monetization_enabled: boolean;
+  monetization_provider_name: string;
+  monetization_head_html: string;
+  monetization_placements_json: string;
   studio_url: string;
   public_contact_email: string;
   privacy_policy_override: string;
@@ -91,15 +89,18 @@ function asSiteSettings(row: SiteSettingsRow): PortalSiteSettings {
     siteSlug: row.site_slug,
     publishingEnabled: Boolean(row.publishing_enabled),
     maxPublishesPerRun: Number(row.max_publishes_per_run || 1),
-    adSlotsEnabled: Boolean(row.ad_slots_enabled),
-    adsMode:
-      (row.ads_mode === 'manual' || row.ads_mode === 'hybrid' || row.ads_mode === 'auto' ? row.ads_mode : 'auto') as PortalSiteSettings['adsMode'],
-    adsPreviewEnabled: Boolean(row.ads_preview_enabled),
-    adsensePublisherId: row.adsense_publisher_id || '',
-    adsenseSlotHeader: row.adsense_slot_header || '',
-    adsenseSlotInContent: row.adsense_slot_in_content || '',
-    adsenseSlotFooter: row.adsense_slot_footer || '',
-    fallbackToPlatform: Boolean(row.fallback_to_platform),
+    monetization: normalizeSiteMonetization({
+      enabled: row.monetization_enabled,
+      providerName: row.monetization_provider_name,
+      headHtml: row.monetization_head_html,
+      placements: (() => {
+        try {
+          return JSON.parse(String(row.monetization_placements_json || '[]'));
+        } catch {
+          return [];
+        }
+      })()
+    }),
     studioUrl: row.studio_url || '',
     publicContactEmail: row.public_contact_email || '',
     privacyPolicyOverride: row.privacy_policy_override || '',
@@ -204,14 +205,10 @@ export class PostgresPortalStore implements PortalStoreAdapter {
         site_slug TEXT PRIMARY KEY,
         publishing_enabled BOOLEAN NOT NULL DEFAULT TRUE,
         max_publishes_per_run INTEGER NOT NULL DEFAULT 1,
-        ad_slots_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-        ads_mode TEXT NOT NULL DEFAULT 'auto',
-        ads_preview_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-        adsense_publisher_id TEXT NOT NULL DEFAULT '',
-        adsense_slot_header TEXT NOT NULL DEFAULT '',
-        adsense_slot_in_content TEXT NOT NULL DEFAULT '',
-        adsense_slot_footer TEXT NOT NULL DEFAULT '',
-        fallback_to_platform BOOLEAN NOT NULL DEFAULT TRUE,
+        monetization_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        monetization_provider_name TEXT NOT NULL DEFAULT '',
+        monetization_head_html TEXT NOT NULL DEFAULT '',
+        monetization_placements_json TEXT NOT NULL DEFAULT '[]',
         studio_url TEXT NOT NULL DEFAULT '',
         public_contact_email TEXT NOT NULL DEFAULT '',
         privacy_policy_override TEXT NOT NULL DEFAULT '',
@@ -249,12 +246,22 @@ export class PostgresPortalStore implements PortalStoreAdapter {
         counted_at TEXT NOT NULL,
         PRIMARY KEY (site_slug, article_id)
       )`,
-      `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ads_mode TEXT NOT NULL DEFAULT 'auto'`,
-      `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ads_preview_enabled BOOLEAN NOT NULL DEFAULT TRUE`,
+      `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS monetization_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS monetization_provider_name TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS monetization_head_html TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS monetization_placements_json TEXT NOT NULL DEFAULT '[]'`,
       `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS public_contact_email TEXT NOT NULL DEFAULT ''`,
       `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS privacy_policy_override TEXT NOT NULL DEFAULT ''`,
       `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS cookie_policy_override TEXT NOT NULL DEFAULT ''`,
       `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS disclaimer_override TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE site_settings DROP COLUMN IF EXISTS ad_slots_enabled`,
+      `ALTER TABLE site_settings DROP COLUMN IF EXISTS ads_mode`,
+      `ALTER TABLE site_settings DROP COLUMN IF EXISTS ads_preview_enabled`,
+      `ALTER TABLE site_settings DROP COLUMN IF EXISTS adsense_publisher_id`,
+      `ALTER TABLE site_settings DROP COLUMN IF EXISTS adsense_slot_header`,
+      `ALTER TABLE site_settings DROP COLUMN IF EXISTS adsense_slot_in_content`,
+      `ALTER TABLE site_settings DROP COLUMN IF EXISTS adsense_slot_footer`,
+      `ALTER TABLE site_settings DROP COLUMN IF EXISTS fallback_to_platform`,
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_plan TEXT NOT NULL DEFAULT ''`,
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_monthly_quota INTEGER NOT NULL DEFAULT 0`,
       `ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS pending_effective_at TEXT NOT NULL DEFAULT ''`,
@@ -505,12 +512,11 @@ export class PostgresPortalStore implements PortalStoreAdapter {
     await this.sql.begin(async (tx) => {
       await tx.unsafe(
         `INSERT INTO site_settings (
-          site_slug, publishing_enabled, max_publishes_per_run, ad_slots_enabled,
-          ads_mode, ads_preview_enabled,
-          adsense_publisher_id, adsense_slot_header, adsense_slot_in_content, adsense_slot_footer,
-          fallback_to_platform, studio_url, public_contact_email,
+          site_slug, publishing_enabled, max_publishes_per_run,
+          monetization_enabled, monetization_provider_name, monetization_head_html, monetization_placements_json,
+          studio_url, public_contact_email,
           privacy_policy_override, cookie_policy_override, disclaimer_override, updated_at
-        ) VALUES ($1, TRUE, 1, FALSE, 'auto', TRUE, '', '', '', '', TRUE, '', '', '', '', '', $2)
+        ) VALUES ($1, TRUE, 1, FALSE, '', '', '[]', '', '', '', '', '', $2)
         ON CONFLICT(site_slug) DO NOTHING`,
         [normalizedSlug, now]
       );
@@ -530,9 +536,8 @@ export class PostgresPortalStore implements PortalStoreAdapter {
     const normalizedSlug = normalizeSiteSlug(siteSlug);
     await this.ensureSiteRecords(normalizedSlug);
     const rows = await this.sql.unsafe<SiteSettingsRow[]>(
-      `SELECT site_slug, publishing_enabled, max_publishes_per_run, ad_slots_enabled,
-              ads_mode, ads_preview_enabled, adsense_publisher_id, adsense_slot_header,
-              adsense_slot_in_content, adsense_slot_footer, fallback_to_platform, studio_url,
+      `SELECT site_slug, publishing_enabled, max_publishes_per_run,
+              monetization_enabled, monetization_provider_name, monetization_head_html, monetization_placements_json, studio_url,
               public_contact_email, privacy_policy_override, cookie_policy_override, disclaimer_override, updated_at
        FROM site_settings
        WHERE site_slug = $1
@@ -546,14 +551,7 @@ export class PostgresPortalStore implements PortalStoreAdapter {
         siteSlug: normalizedSlug,
         publishingEnabled: true,
         maxPublishesPerRun: 1,
-        adSlotsEnabled: false,
-        adsMode: 'auto',
-        adsPreviewEnabled: true,
-        adsensePublisherId: '',
-        adsenseSlotHeader: '',
-        adsenseSlotInContent: '',
-        adsenseSlotFooter: '',
-        fallbackToPlatform: true,
+        monetization: emptyMonetizationSettings(),
         studioUrl: '',
         publicContactEmail: '',
         privacyPolicyOverride: '',
@@ -577,14 +575,15 @@ export class PostgresPortalStore implements PortalStoreAdapter {
       ...current,
       publishingEnabled: patch.publishingEnabled ?? current.publishingEnabled,
       maxPublishesPerRun: patch.maxPublishesPerRun ?? current.maxPublishesPerRun,
-      adSlotsEnabled: patch.adSlotsEnabled ?? current.adSlotsEnabled,
-      adsMode: patch.adsMode ?? current.adsMode,
-      adsPreviewEnabled: patch.adsPreviewEnabled ?? current.adsPreviewEnabled,
-      adsensePublisherId: patch.adsensePublisherId ?? current.adsensePublisherId,
-      adsenseSlotHeader: patch.adsenseSlotHeader ?? current.adsenseSlotHeader,
-      adsenseSlotInContent: patch.adsenseSlotInContent ?? current.adsenseSlotInContent,
-      adsenseSlotFooter: patch.adsenseSlotFooter ?? current.adsenseSlotFooter,
-      fallbackToPlatform: patch.fallbackToPlatform ?? current.fallbackToPlatform,
+      monetization: patch.monetization
+        ? normalizeSiteMonetization({
+            ...current.monetization,
+            ...patch.monetization,
+            placements: Array.isArray(patch.monetization.placements)
+              ? patch.monetization.placements
+              : current.monetization.placements
+          })
+        : current.monetization,
       studioUrl: patch.studioUrl ?? current.studioUrl,
       publicContactEmail: patch.publicContactEmail ?? current.publicContactEmail,
       privacyPolicyOverride: patch.privacyPolicyOverride ?? current.privacyPolicyOverride,
@@ -596,32 +595,24 @@ export class PostgresPortalStore implements PortalStoreAdapter {
       `UPDATE site_settings
        SET publishing_enabled = $1,
            max_publishes_per_run = $2,
-           ad_slots_enabled = $3,
-           ads_mode = $4,
-           ads_preview_enabled = $5,
-           adsense_publisher_id = $6,
-           adsense_slot_header = $7,
-           adsense_slot_in_content = $8,
-           adsense_slot_footer = $9,
-           fallback_to_platform = $10,
-           studio_url = $11,
-           public_contact_email = $12,
-           privacy_policy_override = $13,
-           cookie_policy_override = $14,
-           disclaimer_override = $15,
-           updated_at = $16
-       WHERE site_slug = $17`,
+           monetization_enabled = $3,
+           monetization_provider_name = $4,
+           monetization_head_html = $5,
+           monetization_placements_json = $6,
+           studio_url = $7,
+           public_contact_email = $8,
+           privacy_policy_override = $9,
+           cookie_policy_override = $10,
+           disclaimer_override = $11,
+           updated_at = $12
+       WHERE site_slug = $13`,
       [
         next.publishingEnabled,
         Math.max(1, Number(next.maxPublishesPerRun || 1)),
-        next.adSlotsEnabled,
-        next.adsMode === 'manual' || next.adsMode === 'hybrid' ? next.adsMode : 'auto',
-        next.adsPreviewEnabled,
-        String(next.adsensePublisherId || '').trim(),
-        String(next.adsenseSlotHeader || '').trim(),
-        String(next.adsenseSlotInContent || '').trim(),
-        String(next.adsenseSlotFooter || '').trim(),
-        next.fallbackToPlatform,
+        next.monetization.enabled,
+        String(next.monetization.providerName || '').trim(),
+        String(next.monetization.headHtml || '').trim(),
+        JSON.stringify(next.monetization.placements),
         String(next.studioUrl || '').trim(),
         String(next.publicContactEmail || '').trim(),
         String(next.privacyPolicyOverride || '').trim(),

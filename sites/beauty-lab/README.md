@@ -1,4 +1,4 @@
-# GlowLab Daily
+# Beauty Lab
 
 Generated from blueprint: generic-editorial-magazine
 

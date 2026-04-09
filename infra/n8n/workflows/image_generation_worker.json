@@ -53,7 +53,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const title = String($json.title || '').replace(/\\s+/g, ' ').trim().slice(0, 180);\nconst excerpt = String($json.excerpt || '').replace(/\\s+/g, ' ').trim().slice(0, 260);\nconst keyword = String($json.aiMeta?.targetKeyword || $json.aiMeta?.sourceTopicQuery || '').replace(/\\s+/g, ' ').trim().slice(0, 140);\nconst subject = keyword || title || 'editorial feature';\n\nconst prompt = [\n  'Photorealistic editorial hero image for a professional digital magazine article.',\n  'Use a scene, subject, or setting that is specifically grounded in the article title and context.',\n  'Primary subject: ' + subject + '.',\n  title ? ('Article title: ' + title + '.') : '',\n  excerpt ? ('Article context: ' + excerpt + '.') : '',\n  'Choose a single coherent visual concept with realistic details, natural lighting, and strong magazine composition.',\n  'Avoid generic office scenes unless the article itself clearly calls for them.',\n  'No text overlay, no logos, no brand names, no watermark.',\n  'Aspect ratio 16:9.'\n].filter(Boolean).join(' ');\n\nreturn { json: { ...$json, imagePrompt: prompt } };",
+        "jsCode": "const title = String($json.title || '').replace(/\\s+/g, ' ').trim().slice(0, 180);\nconst excerpt = String($json.excerpt || '').replace(/\\s+/g, ' ').trim().slice(0, 260);\nconst keyword = String($json.aiMeta?.targetKeyword || $json.aiMeta?.sourceTopicQuery || '').replace(/\\s+/g, ' ').trim().slice(0, 140);\nconst subject = keyword || title || 'editorial feature';\nconst imageModel = String($env.IMAGE_MODEL || 'black-forest-labs/flux-schnell').trim();\nconst requestedAspectRatio = String($env.IMAGE_ASPECT_RATIO || '16:9').trim() || '16:9';\nconst supportedGptImageAspectRatios = new Set(['1:1', '3:2', '2:3']);\nconst isGptImage = imageModel.startsWith('openai/gpt-image-1.5');\nconst effectiveAspectRatio = isGptImage && !supportedGptImageAspectRatios.has(requestedAspectRatio)\n  ? '3:2'\n  : requestedAspectRatio;\n\nconst prompt = [\n  'Photorealistic editorial hero image for a professional digital magazine article.',\n  'Use a scene, subject, or setting that is specifically grounded in the article title and context.',\n  'Primary subject: ' + subject + '.',\n  title ? ('Article title: ' + title + '.') : '',\n  excerpt ? ('Article context: ' + excerpt + '.') : '',\n  'Choose a single coherent visual concept with realistic details, natural lighting, and strong magazine composition.',\n  'Avoid generic office scenes unless the article itself clearly calls for them.',\n  'No text overlay, no logos, no brand names, no watermark.',\n  'Aspect ratio ' + effectiveAspectRatio + '.'\n].filter(Boolean).join(' ');\n\nreturn { json: { ...$json, imagePrompt: prompt, imageAspectRatio: effectiveAspectRatio } };",
         "language": "javaScript"
       },
       "id": "839d424b-fda2-46dc-9274-8bf325a4ba92",
@@ -84,7 +84,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  input: {\n    prompt: $json.imagePrompt,\n    aspect_ratio: '16:9'\n  }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  input: {\n    prompt: $json.imagePrompt,\n    aspect_ratio: $json.imageAspectRatio || String($env.IMAGE_ASPECT_RATIO || '16:9').trim() || '16:9'\n  }\n}) }}",
         "options": {}
       },
       "id": "ddedffe1-bd63-4c12-bdf8-423c1ce10780",

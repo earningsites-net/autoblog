@@ -990,7 +990,6 @@ export class FactoryOpsService {
             SANITY_STUDIO_SITE_SLUG: normalizedSlug,
             SITE_BLUEPRINT_PATH: `../../sites/${normalizedSlug}/site.blueprint.json`,
             CONTENT_REPOSITORY_DRIVER: String(env.CONTENT_REPOSITORY_DRIVER || 'sanity').trim() || 'sanity',
-            ENABLE_AD_SLOTS: String(env.ENABLE_AD_SLOTS || 'false').trim() || 'false',
             SANITY_PROJECT_ID: projectId,
             SANITY_DATASET: dataset,
             SANITY_API_VERSION: apiVersion,

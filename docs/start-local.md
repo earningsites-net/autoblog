@@ -27,7 +27,7 @@ cp infra/n8n/.env.example infra/n8n/.env
 Compila almeno questi valori:
 
 - In `.env`: `SITE_SLUG`, `SANITY_STUDIO_SITE_SLUG`, `SANITY_PROJECT_ID`, `SANITY_DATASET`, `SANITY_API_VERSION`, `SANITY_READ_TOKEN`, `SANITY_WRITE_TOKEN`, `REVALIDATE_SECRET`, `OPENAI_API_KEY`, `REPLICATE_API_TOKEN`, `INTERNAL_API_TOKEN`, `FACTORY_API_SECRET`, `FACTORY_UI_USERNAME`, `FACTORY_UI_PASSWORD` (opzionale)
-- In `infra/n8n/.env`: `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`, `POSTGRES_PORT`, `POSTGRES_PASSWORD`, `WEB_APP_URL`, `WEB_REVALIDATE_SECRET`, `CONTENT_ENGINE_URL`, provider keys AI, `INTERNAL_API_TOKEN` (`SITE_SLUG` opzionale solo fallback legacy)
+- In `infra/n8n/.env`: `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`, `POSTGRES_PORT`, `POSTGRES_PASSWORD`, `WEB_APP_URL`, `WEB_REVALIDATE_SECRET`, `CONTENT_ENGINE_URL`, provider keys AI, `INTERNAL_API_TOKEN`, `IMAGE_MODEL`, `IMAGE_ASPECT_RATIO` (`SITE_SLUG` opzionale solo fallback legacy)
 - In `infra/n8n/.env` per scheduler piano-based: `PLAN_SCHEDULER_TEST_MODE`, `PLAN_SCHEDULER_TICK_MINUTES`, `PLAN_TEST_INTERVAL_MINUTES_BASE`, `PLAN_TEST_INTERVAL_MINUTES_STANDARD`, `PLAN_TEST_INTERVAL_MINUTES_PRO`, `PLAN_TOPIC_REFILL_INTERVAL_MINUTES`, `PLAN_TOPIC_REFILL_COUNT`, `ARTICLE_BATCH_SIZE`, `IMAGE_BATCH_SIZE`, `QA_BATCH_SIZE`
 
 Note utili:
@@ -41,6 +41,7 @@ Note utili:
 - In strict per-site mode, n8n non usa più `SANITY_*` globali: le credenziali sono risolte via engine da `sites/<slug>/.env.generated`.
 - Lo scheduler piano-based usa `siteSlug` e quota dal backend engine; se `brief_ready` è vuoto attiva auto-refill topic via API factory.
 - `INTERNAL_API_TOKEN` deve avere lo stesso valore in `.env` e `infra/n8n/.env` (usato per endpoint interni engine e webhook n8n sensibili).
+- La discovery topic reale del refill passa dall'engine (`/api/factory/site/discover-topics` -> `scripts/autoblog.mjs`), quindi `OPENAI_API_KEY` e gli eventuali `TOPIC_DISCOVERY_SELECTOR*` che vuoi applicare a quel path devono stare nel root `.env`, non solo in `infra/n8n/.env`.
 - `FACTORY_API_SECRET` protegge le route factory (`/api/factory/*`, `/v1/factory/*` e la UI `/ops/factory` lato chiamate API).
 - `/ops/factory` è protetta da HTTP Basic Auth:
   - username: `FACTORY_UI_USERNAME` (default `admin`)

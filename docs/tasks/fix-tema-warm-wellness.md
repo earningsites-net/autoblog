@@ -91,6 +91,11 @@
   - intro semplificata a `Manage your content and your subscription`
   - saluto `Hello ...` ridotto a `14px`
 - Verificato `npm --workspace @autoblog/engine run typecheck` con esito positivo dopo il ritocco del portal loggato.
+- Aggiunta la favicon `EarningSites` anche ai shell HTML serviti dall'engine:
+  - `/portal`
+  - `/ops/factory`
+  usando lo stesso asset/logo già incorporato nel branding del portal.
+- Verificato `npm --workspace @autoblog/engine run typecheck` con esito positivo dopo il wiring favicon per portal e factory ops.
 - Consolidate e committate anche le modifiche parallele presenti nel worktree condiviso:
   - commit `3276a6b` per il collegamento Studio (`site:studio`, `site:studio:prod`) e la guida post-launch in `ops/factory`
   - commit `2739b25` come sync del resto delle modifiche già presenti/staged in altri thread
