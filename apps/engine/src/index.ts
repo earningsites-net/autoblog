@@ -3796,7 +3796,7 @@ app.get('/ops/factory', async (req, reply) => {
     }
 
     function shellEscape(value) {
-      return "'" + String(value || '').replace(/'/g, "'\"'\"'") + "'";
+      return JSON.stringify(String(value || ''));
     }
 
     function escapeHtml(value) {
