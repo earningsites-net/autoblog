@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "siteSlug": "beauty-lab",
-  "brandName": "Beauty Lab",
+  "siteSlug": "daily-beauty-lab",
+  "brandName": "Daily Beauty Lab",
   "siteDescription": "The site focuses on modern beauty, skincare, and self-care routines for everyday users. Content includes practical guides, beginner-friendly routines, product-agnostic tips, and educational articles about ingredients and",
   "businessMode": "transfer_first",
   "delivery": {
@@ -31,11 +31,11 @@
   "locale": "en-US",
   "theme": {
     "palette": {
-      "paper": "#fff0f3",
-      "ink": "#2f2328",
-      "rust": "#d79289",
-      "sage": "#d6a4a5",
-      "coal": "#181114"
+      "paper": "#ffffff",
+      "ink": "#39282f",
+      "rust": "#e78d9b",
+      "sage": "#c08982",
+      "coal": "#25181f"
     },
     "typography": {
       "headingFont": "Sora",

@@ -73,6 +73,14 @@
     - article documents do exist, but sampled documents are all `status: "draft"` with `publishedAt: null`
   - the public web app is behaving as coded: it only reads published articles from Sanity
   - the likely upstream gap is in the content pipeline, not the web deploy: `article_generation_worker` creates draft articles, and the expected publish transition should happen later in `qa_scoring_and_publish_worker`
+- Investigated the new theme mismatch report for `daily-beauty-lab`:
+  - local workspace is aligned to `daily-beauty-lab` (`apps/web/.env.local`, root `.env`, `sites/daily-beauty-lab/site.blueprint.json`)
+  - however, `sites/daily-beauty-lab/` is still untracked in Git, while tracked `sites/beauty-lab/*` is pending deletion in the worktree
+  - `HEAD` on `main` still contains `sites/beauty-lab/site.blueprint.json` and does not contain `sites/daily-beauty-lab/site.blueprint.json`
+  - since Vercel builds from GitHub `main`, production cannot read the local-only `daily-beauty-lab` blueprint and therefore cannot apply its theme profile/palette
+  - this explains the split behavior:
+    - local reads the local blueprint and shows the correct `warm_wellness` theme
+    - Vercel builds without that blueprint file and falls back to default theme resolution
 
 ## Decisions
 - Treat manual deletion of a single `entitlements` row as non-durable while the site still exists in runtime/registry and is referenced by `site_access`, engine bootstrap admin assignment, or any endpoint that reads portal site state.
@@ -112,6 +120,7 @@
 - After redeploy, verify that legal pages and category pages still build correctly on Vercel without any direct `packages/*` runtime imports.
 - Reconcile the active site slug used by Vercel with the real site/runtime (`glowlab-daily` vs `glow-lab`) and verify that the matching Sanity dataset contains published `article` documents for that slug.
 - Investigate why the `glow-lab` prepopulate/publish pipeline stopped at draft creation and did not transition articles to `published`.
+- Commit/push `sites/daily-beauty-lab/*` (and remove stale `sites/beauty-lab/*` if intended) before trusting Vercel output for `daily-beauty-lab`.
 
 ## Risks
 - Manual DB cleanup on only one portal table can look successful in DBeaver but self-heal on the next portal/public/internal read or engine restart because the store auto-bootstraps missing site records.
@@ -129,3 +138,4 @@
 - If the web app reintroduces direct runtime imports from `packages/*`, the same Vercel regression can recur even when local `next build` stays green.
 - Categories can still render even when articles are missing because category fallbacks come from blueprint/static configuration while published articles depend on Sanity/API data; this can mask slug/token/content mismatches after deploy.
 - A site can appear structurally healthy after deploy while still showing zero content if Sanity contains only `draft` articles; this is expected with the current web query (`status == "published"`).
+- A local `site:use` switch can make theme/content look correct in dev while Vercel still serves an older or fallback site if the matching `sites/<slug>/site.blueprint.json` has not been committed to `main`.
