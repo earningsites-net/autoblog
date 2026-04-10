@@ -3892,6 +3892,7 @@ app.get('/ops/factory', async (req, reply) => {
         '    <span class="pill">' + escapeHtml(data.siteSlug) + '</span>',
         '    <ol>',
         '      <li>Pull the site locally and inspect it in Studio before public deploy.</li>',
+        '      <li>Commit new blueprint on <code>main</code> before Vercel deploy.</li>',
         '      <li>Create a new Vercel project from the monorepo with <strong>Root Directory = apps/web</strong> and paste the env block below.</li>',
         '      <li>After the first Vercel deploy, replace <code>NEXT_PUBLIC_SITE_URL</code> with the stable production domain and redeploy.</li>',
         '      <li>Deploy the Sanity Studio with the command below.</li>',

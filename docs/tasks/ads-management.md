@@ -81,6 +81,8 @@
   - this explains the split behavior:
     - local reads the local blueprint and shows the correct `warm_wellness` theme
     - Vercel builds without that blueprint file and falls back to default theme resolution
+- Updated the `ops/factory` post-launch checklist UI to include the missing deployment step:
+  - `Commit new blueprint on main before Vercel deploy.`
 
 ## Decisions
 - Treat manual deletion of a single `entitlements` row as non-durable while the site still exists in runtime/registry and is referenced by `site_access`, engine bootstrap admin assignment, or any endpoint that reads portal site state.
