@@ -10,6 +10,8 @@ export const aiMetaType = defineType({
     defineField({ name: 'imageModel', type: 'string' }),
     defineField({ name: 'costEstimateUsd', type: 'number', initialValue: 0 }),
     defineField({ name: 'workflowRunId', type: 'string' }),
+    defineField({ name: 'schedulerRunId', type: 'string' }),
+    defineField({ name: 'schedulerRunIndex', type: 'number' }),
     defineField({ name: 'qualityTier', type: 'string', options: { list: ['normal', 'economy', 'throttle'] } }),
     defineField({ name: 'budgetMode', type: 'string', options: { list: ['normal', 'economy', 'throttle', 'stop'] } }),
     defineField({ name: 'imagePromptVersion', type: 'string' }),

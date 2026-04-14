@@ -23,6 +23,17 @@ import { SiteRuntimeService } from './services/site-runtime-service';
 import { isPortalSiteInactiveForOwner, isPortalSiteOperational, type PortalSiteEntitlement } from './services/portal-store-types';
 
 const app = Fastify({ logger: true });
+type RawBodyRequest = { rawBody?: string };
+
+app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+  try {
+    const raw = typeof body === 'string' ? body : body.toString('utf8');
+    (req as typeof req & RawBodyRequest).rawBody = raw;
+    done(null, raw ? JSON.parse(raw) : {});
+  } catch (error) {
+    done(error as Error);
+  }
+});
 
 const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '..', '..');
 const engineSourceDir = path.dirname(fileURLToPath(import.meta.url));
@@ -542,6 +553,11 @@ function parseStripeWebhookPayload(body: unknown) {
   if (typeof body === 'string') return body;
   if (body && typeof body === 'object') return JSON.stringify(body);
   return '';
+}
+
+function normalizeStripeSubscriptionId(value: unknown) {
+  const normalized = String(value || '').trim();
+  return normalized.startsWith('sub_') ? normalized : '';
 }
 
 async function triggerPlanAutomationNow(siteSlug: string, reason: string) {
@@ -1766,7 +1782,6 @@ app.get('/portal', async (_req, reply) => {
           ? currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)
           : 'Base';
         const inactiveForOwner = Boolean(site.inactiveForOwner);
-        const billingMode = String(site.entitlement?.billingMode || 'incubating');
         const pendingPlan = String(site.entitlement?.pendingPlan || '').trim();
         const pendingPlanLabel = pendingPlan
           ? pendingPlan.charAt(0).toUpperCase() + pendingPlan.slice(1)
@@ -1784,15 +1799,14 @@ app.get('/portal', async (_req, reply) => {
           : '';
         const inactiveReason =
           site.entitlement?.billingStatus === 'overdue'
-            ? 'Payment is overdue. Reactivate the subscription to resume publishing and site management.'
-            : 'No active subscription is attached to this site. Choose a plan in Billing & Plan or open the billing portal to reactivate it.';
+            ? 'Payment is overdue. Open Billing & Plan to reactivate the subscription and resume publishing and site management.'
+            : 'No active subscription is attached to this site. Choose a plan in Billing & Plan to reactivate it.';
         const inactiveBannerHtml = inactiveForOwner
           ? \`
             <div class="billing-note warn" style="margin-bottom:16px;">
               <strong>Site inactive.</strong> \${escapeHtml(inactiveReason)}
-              <div class="hint" style="margin-top:8px;">Billing mode: <strong>\${escapeHtml(billingMode)}</strong> • Current plan: <strong>\${escapeHtml(currentPlanLabel)}</strong></div>
               <div class="actions" style="margin-top:12px;">
-                <button class="ghost" data-action="open-billing" data-slug="\${escapeHtml(slug)}">Open Billing Portal</button>
+                <button class="ghost" data-action="show-billing-tab">Open Billing &amp; Plan</button>
               </div>
             </div>
           \`
@@ -1805,9 +1819,9 @@ app.get('/portal', async (_req, reply) => {
           : '';
         const disableMutationsAttr = inactiveForOwner ? 'disabled aria-disabled="true" title="Site inactive"' : '';
         const isCurrentPlanDisabled = (plan) => currentPlan === plan && !inactiveForOwner;
-        const planButtonLabel = (plan, label) => {
-          if (currentPlan === plan) return inactiveForOwner ? 'Activate ' + label : 'Current plan';
-          return 'Choose ' + label;
+        const planButtonLabel = (plan) => {
+          if (currentPlan === plan && !inactiveForOwner) return 'Current plan';
+          return 'Choose';
         };
         const publicContactEmail =
           site.settings?.publicContactEmail ||
@@ -1948,7 +1962,7 @@ app.get('/portal', async (_req, reply) => {
                 <div class="spacer"></div>
                 <div class="price">4,99 USD<small>/month</small></div>
                 <p class="meta">Starter plan for small traffic sites.</p>
-                <button class="plan-btn \${currentPlan === 'base' ? 'active' : ''}" data-action="start-plan" data-plan="base" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${isCurrentPlanDisabled('base') ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${planButtonLabel('base', 'Base')}</button>
+                <button class="plan-btn \${currentPlan === 'base' ? 'active' : ''}" data-action="start-plan" data-plan="base" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${isCurrentPlanDisabled('base') ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${planButtonLabel('base')}</button>
               </div>
               <div class="plan popular">
                 <span class="badge">Most Popular</span>
@@ -1963,7 +1977,7 @@ app.get('/portal', async (_req, reply) => {
                 <div class="spacer"></div>
                 <div class="price">19,90 USD<small>/month</small></div>
                 <p class="meta">Recommended for growing editorial sites.</p>
-                <button class="plan-btn \${currentPlan === 'standard' ? 'active' : ''}" data-action="start-plan" data-plan="standard" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${isCurrentPlanDisabled('standard') ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${planButtonLabel('standard', 'Standard')}</button>
+                <button class="plan-btn \${currentPlan === 'standard' ? 'active' : ''}" data-action="start-plan" data-plan="standard" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${isCurrentPlanDisabled('standard') ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${planButtonLabel('standard')}</button>
               </div>
               <div class="plan">
                 <h5>Pro</h5>
@@ -1977,7 +1991,7 @@ app.get('/portal', async (_req, reply) => {
                 <div class="spacer"></div>
                 <div class="price">49,90 USD<small>/month</small></div>
                 <p class="meta">For aggressive growth and scale.</p>
-                <button class="plan-btn \${currentPlan === 'pro' ? 'active' : ''}" data-action="start-plan" data-plan="pro" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${isCurrentPlanDisabled('pro') ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${planButtonLabel('pro', 'Pro')}</button>
+                <button class="plan-btn \${currentPlan === 'pro' ? 'active' : ''}" data-action="start-plan" data-plan="pro" data-current-plan="\${escapeHtml(currentPlan)}" data-slug="\${escapeHtml(slug)}" \${isCurrentPlanDisabled('pro') ? 'disabled aria-disabled="true" title="Current plan"' : ''}>\${planButtonLabel('pro')}</button>
               </div>
             </div>
             <div class="hint">Current plan: <strong>\${escapeHtml(currentPlanLabel)}</strong> • Monthly quota: <strong>\${escapeHtml(site.entitlement?.monthlyQuota || 0)}</strong> • Published this month: <strong>\${escapeHtml(site.entitlement?.publishedThisMonth || 0)}</strong></div>
@@ -2242,6 +2256,12 @@ app.get('/portal', async (_req, reply) => {
           showNotice(feedbackMessage, feedbackType);
           setButtonBusy(target, false);
           await loadSites();
+          return;
+        }
+
+        if (action === 'show-billing-tab') {
+          activeView = 'billing';
+          applyActiveView();
           return;
         }
 
@@ -2653,7 +2673,14 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
     return reply.code(400).send({ ok: false, error: 'Stripe customer not available for this site' });
   }
 
-  if (!entitlement.stripeSubscriptionId && entitlement.stripeCustomerId) {
+  const sanitizedSubscriptionId = normalizeStripeSubscriptionId(entitlement.stripeSubscriptionId);
+  if (entitlement.stripeSubscriptionId && sanitizedSubscriptionId !== entitlement.stripeSubscriptionId) {
+    entitlement = await portalStore.patchEntitlement(siteSlug, {
+      stripeSubscriptionId: sanitizedSubscriptionId
+    });
+  }
+
+  if (!sanitizedSubscriptionId && entitlement.stripeCustomerId) {
     try {
       const recovered = await billingService.findUpdatableSubscriptionForCustomer(entitlement.stripeCustomerId);
       if (recovered?.subscriptionId) {
@@ -2683,7 +2710,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
   if (
     entitlement.pendingPlan &&
     entitlement.pendingPlan === parsed.data.plan &&
-    entitlement.stripeSubscriptionId
+    normalizeStripeSubscriptionId(entitlement.stripeSubscriptionId)
   ) {
     return {
       ok: true,
@@ -2699,7 +2726,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
   if (
     entitlement.plan === parsed.data.plan &&
     !entitlement.pendingPlan &&
-    entitlement.stripeSubscriptionId
+    normalizeStripeSubscriptionId(entitlement.stripeSubscriptionId)
   ) {
     return {
       ok: true,
@@ -2711,7 +2738,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
   }
 
   if (
-    entitlement.stripeSubscriptionId &&
+    normalizeStripeSubscriptionId(entitlement.stripeSubscriptionId) &&
     entitlement.status !== 'stopped' &&
     entitlement.billingStatus !== 'canceled'
   ) {
@@ -2721,7 +2748,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
     try {
       const updated = await billingService.updateExistingSubscriptionPlan({
         siteSlug,
-        subscriptionId: entitlement.stripeSubscriptionId,
+        subscriptionId: normalizeStripeSubscriptionId(entitlement.stripeSubscriptionId),
         plan: parsed.data.plan,
         changeMode
       });
@@ -2847,7 +2874,7 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
 
 app.post('/api/billing/webhooks/stripe', async (req, reply) => {
   const signature = String(req.headers['stripe-signature'] || '');
-  const rawBody = parseStripeWebhookPayload(req.body);
+  const rawBody = (req as typeof req & RawBodyRequest).rawBody ?? parseStripeWebhookPayload(req.body);
 
   try {
     const result = await billingService.processWebhook(rawBody, signature);

@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "url": "={{ 'https://' + $('Resolve Site Context').item.json.sanity.projectId + '.api.sanity.io/v' + ($('Resolve Site Context').item.json.sanity.apiVersion || '2025-01-01') + '/data/query/' + ($('Resolve Site Context').item.json.sanity.dataset || 'production') + '?query=' + encodeURIComponent('*[_type==\\\"article\\\" && siteSlug==\\\"' + ($json.siteSlug || $env.SITE_SLUG || '') + '\\\" && status==\\\"draft\\\" && defined(coverImage)]|order(_updatedAt asc)[0...' + Number($env.QA_BATCH_SIZE || 100) + ']') }}",
+        "url": "={{ (() => { const siteSlug = ($json.siteSlug || $env.SITE_SLUG || ''); const schedulerRunId = String($json.schedulerRunId || '').trim(); const limit = schedulerRunId ? 1 : Number($env.QA_BATCH_SIZE || 100); const filters = ['_type==\\\"article\\\"', 'siteSlug==\\\"' + siteSlug + '\\\"', 'status==\\\"draft\\\"', 'defined(coverImage)']; if (schedulerRunId) filters.push('aiMeta.schedulerRunId==\\\"' + schedulerRunId + '\\\"'); const query = '*[' + filters.join(' && ') + ']|order(_updatedAt asc)[0...' + limit + ']'; return 'https://' + $('Resolve Site Context').item.json.sanity.projectId + '.api.sanity.io/v' + ($('Resolve Site Context').item.json.sanity.apiVersion || '2025-01-01') + '/data/query/' + ($('Resolve Site Context').item.json.sanity.dataset || 'production') + '?query=' + encodeURIComponent(query); })() }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
