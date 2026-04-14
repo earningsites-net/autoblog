@@ -14,6 +14,8 @@
 - Su production il `git pull --ff-only origin main` è stato bloccato dal clone sporco; eseguito rollout mirato del solo `apps/engine/src/index.ts` da `origin/main`, aggiornati in `/etc/autoblog/engine.env` i valori `PORTAL_PASSWORD_RESET_FROM` e `PORTAL_PASSWORD_RESET_REPLY_TO`, poi riavviato `autoblog-engine`.
 - Verificato su VPS production che `apps/engine/src/index.ts` matcha il blob `origin/main` (`worktree=origin_main=6ab5529ae9d3c0ab0bfd456b0c894e26ac07df18`) e che l'engine è tornato in ascolto su `127.0.0.1:8787`.
 - Eseguito smoke test production `forgot-password` verso `info@earningsites.net`; l'engine ha risposto `ok:true`, ma Resend ha rifiutato l'invio con `403 validation_error` perché `earningsites.net` non risulta verificato per la API key attuale del VPS.
+- Analizzato il failure Vercel su `/categories/[slug]`: i commit del task email non toccano `apps/web`; il build passa invece da `apps/web/src/lib/sanity.ts` / `apps/web/src/lib/content-repository.ts` e il `401 Session not found` indica un problema separato di autenticazione Sanity nel build environment.
+- Migliorata la compatibilità del blocco hero dell'email: il gradiente del portal ora vive sul `td` header con `bgcolor` e `background-color` di fallback, così il testo bianco resta leggibile anche nei client che ignorano `background: linear-gradient(...)`.
 
 ## Decisions
 - La mail di reset usa il branding del portal engine, non quello del sito pubblico `apps/web`.
@@ -22,11 +24,14 @@
 - Il blocco attuale dell'invio locale non è nel codice portal ma nella configurazione Resend del dominio mittente.
 - Per questo rollout production non è stato sicuro forzare un fast-forward dell'intero clone VPS; il deploy corretto è stato un update mirato del file engine e dell'env live, preservando il resto della worktree sporca.
 - Il blocco reale attuale è la configurazione Resend associata alla `RESEND_API_KEY` presente in `/etc/autoblog/engine.env`, non il codice del template email.
+- Il failure Vercel osservato dopo il push non è attribuibile ai commit email (`b483e74`, `be5b9d9`), perché in quel range non ci sono modifiche a `apps/web`.
+- Nel template email il problema di leggibilità non era il copy, ma il fallback CSS dell'header: alcuni client ignorano il `background` shorthand con gradient e lasciavano trasparente il blocco hero.
 
 ## Next
 - Allineare su production una `RESEND_API_KEY` appartenente all'account dove `earningsites.net` è realmente verificato, oppure verificare il dominio proprio su quell'account.
 - Ripetere subito dopo lo smoke test E2E del reset password contro `https://aiblogs.earningsites.net/portal`.
-- Se serve, rifinire copy o spacing del template dopo la prima verifica visuale.
+- Per il deploy Vercel, verificare/correggere la `SANITY_READ_TOKEN` del progetto `apps/web` su Vercel: il build sta fallendo su un problema separato di autenticazione Sanity.
+- Se serve, rifinire ulteriormente copy o spacing del template dopo un nuovo invio di prova.
 
 ## Risks
 - Alcuni client email possono comunque bloccare immagini remote finché l'utente non consente il caricamento.

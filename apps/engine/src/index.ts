@@ -353,9 +353,9 @@ function buildPasswordResetEmail(input: { email: string; resetUrl: string; expir
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;">
           <tr>
             <td style="padding:0;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:linear-gradient(140deg, #2b66ff 0%, #3551dc 48%, #8b3cf2 100%);border-radius:24px 24px 0 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-radius:24px 24px 0 0;">
                 <tr>
-                  <td style="padding:24px 28px;">
+                  <td bgcolor="#3551dc" style="padding:24px 28px;background-color:#3551dc;background-image:radial-gradient(420px 240px at -8% -10%, rgba(255,255,255,.24) 0%, rgba(255,255,255,0) 65%),radial-gradient(340px 200px at 120% 110%, rgba(255,255,255,.2) 0%, rgba(255,255,255,0) 62%),linear-gradient(140deg, #2b66ff 0%, #3551dc 48%, #8b3cf2 100%);border-radius:24px 24px 0 0;">
                     <table role="presentation" cellspacing="0" cellpadding="0">
                       <tr>
                         <td style="padding-right:14px;vertical-align:middle;">
