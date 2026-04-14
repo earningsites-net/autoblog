@@ -14,12 +14,12 @@
       "parameters": {
         "rule": {
           "interval": [
-            {
-              "field": "minutes",
-              "minutesInterval": 1
-            }
-          ]
-        }
+              {
+                "field": "minutes",
+                "minutesInterval": 15
+              }
+            ]
+          }
       }
     },
     {

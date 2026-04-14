@@ -113,6 +113,24 @@
   - local repo is clean and `HEAD == origin/main == ea1b788`
   - compared SHA-256 checksums for every file changed in this thread and the other pushed thread notes (`engine`, `studio`, 4 n8n workflows, `AGENTS.md`, `docs/context.md`, `_active.md`, task files)
   - local and VPS checksums match exactly for all compared files
+- Re-checked the live production state on April 14, 2026 after the user reported missing new content:
+  - `daily-beauty-lab` entitlement is still `plan=pro`, `status=active`, `publishingEnabled=true`, `monthlyQuota=60`, `publishedThisMonth=5`
+  - however `/api/internal/sites/automation-targets` currently returns `count=0` and explicitly skips `daily-beauty-lab` with `reason=automationStatus=inactive`
+  - recent `plan_generation_scheduler_worker` executions therefore stop at `Build scheduled payload` with empty downstream payload, which is expected while no automation targets are active
+- Reactivated `daily-beauty-lab` in the production runtime registry on April 14, 2026:
+  - ran `scripts/release/update-site-status.mjs --site daily-beauty-lab --automation-status active` on the VPS with `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog`
+  - verified `/api/internal/sites/automation-targets` now returns `count=1` and includes `daily-beauty-lab`
+- Verified the current production cadence settings after reactivation:
+  - `PLAN_SCHEDULER_TEST_MODE=false`
+  - `PLAN_SCHEDULER_TICK_MINUTES=60`
+  - `PLAN_SCHEDULER_MAX_RUNS_PER_TICK=2`
+  - `PLAN_SCHEDULER_DAILY_CAP_PRO=4`
+  - with `daily-beauty-lab` still on `plan=pro` and `publishedThisMonth=5`, the normal production scheduler will evaluate once per hour and may attempt up to 2 scoped runs on a due tick, capped at 4 successful publishes per day while the site is still behind its monthly pace
+- Reduced the external n8n trigger frequency for `plan_generation_scheduler_worker` from 1 minute to 15 minutes:
+  - updated the source workflow template `infra/n8n/workflows/plan_generation_scheduler_worker.json`
+  - synced the file to `/srv/auto-blog-project` on the VPS
+  - re-imported the changed workflows in production with `npm run n8n:test:flows` (`pass=4`, `smoke=4/4`)
+  - verified via live n8n API that `Schedule Trigger -> minutesInterval` is now `15`
 
 ## Decisions
 - Use the existing Stripe Billing + Checkout + Customer Portal integration flow; only adjust UI copy/CTA behavior and temporary production env values for the test.
@@ -128,9 +146,14 @@
 - Treat the 5-minute test interval as a publish-spacing gate, not a pure scheduler-tick cadence: because the planner checks recent `publishedAt`, a due tick can still no-op if the last publish happened less than 5 minutes earlier inside the previous run.
 - Because the VPS clone cannot currently fast-forward from GitHub safely, use direct file sync from the pushed commit as the least-destructive deploy path for this task instead of forcing a remote git cleanup.
 - Treat checksum parity between local and VPS as the authoritative post-deploy verification, because the VPS clone git metadata is currently dirty and cannot be trusted as a clean fast-forward checkout.
+- For the current production state, treat `automationStatus=inactive` as the real blocker for missing autopublishes, not the manually removed/re-added `stripe_subscription_id`; with no automation targets the scheduler never reaches the entitlement/planning nodes.
+- Re-enable automation via the runtime registry only; no entitlement DB patch or engine restart is needed because the scheduler target endpoint reads the live registry on each run.
+- Describe the current production cadence as quota-paced hourly evaluation, not as a fixed "one article every X minutes" schedule: due ticks happen hourly, successful publishes depend on backlog/QA, and the planner can use up to 2 runs per due tick until the daily cap is reached.
+- Reduce scheduler wake-ups to 15 minutes as an operational compromise for now: it materially lowers pointless polling load while still guaranteeing the hourly gating tick is observed without needing a broader refill/scheduler refactor first.
 
 ## Next
 - Decide whether the live customer subscription should stay on Pro or be manually downgraded after the test window; this is separate from the env rollback and affects a real Stripe subscription.
+- Observe the next normal production scheduler window for `daily-beauty-lab` now that it is back in `automationStatus=active`.
 - Clean up the VPS git strategy separately:
   - restore GitHub access for the server clone (`origin` currently uses SSH and fails)
   - reconcile the existing dirty worktree (`sites/daily-beauty-lab` renames and synced source files) so future deploys can use normal `git pull --ff-only`
