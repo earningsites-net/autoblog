@@ -38,17 +38,19 @@ app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, 
 const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '..', '..');
 const engineSourceDir = path.dirname(fileURLToPath(import.meta.url));
 
-function readPortalBrandLogoDataUri() {
+function readPortalBrandLogoBuffer() {
   try {
     const logoPath = path.resolve(engineSourceDir, 'assets', 'earningsites-logo.png');
-    const logoBuffer = readFileSync(logoPath);
-    return `data:image/png;base64,${logoBuffer.toString('base64')}`;
+    return readFileSync(logoPath);
   } catch {
-    return '';
+    return null;
   }
 }
 
-const portalBrandLogoSrc = readPortalBrandLogoDataUri();
+const portalBrandLogoBuffer = readPortalBrandLogoBuffer();
+const portalBrandLogoSrc = portalBrandLogoBuffer
+  ? `data:image/png;base64,${portalBrandLogoBuffer.toString('base64')}`
+  : '';
 const siteRegistry = new LocalSiteRegistry(workspaceRoot);
 const jobStore = new InMemoryJobStore();
 const engine = new DefaultEngineService(siteRegistry, jobStore, createWorkflowRunner);
@@ -196,6 +198,17 @@ function getPortalBaseUrl() {
   return String(process.env.PORTAL_BASE_URL || 'http://localhost:8787').replace(/\/$/, '');
 }
 
+app.get('/portal/assets/brand-logo.png', async (_req, reply) => {
+  if (!portalBrandLogoBuffer) {
+    return reply.code(404).send({ ok: false, error: 'Portal brand logo not available' });
+  }
+
+  return reply
+    .header('Cache-Control', 'public, max-age=86400, immutable')
+    .type('image/png')
+    .send(portalBrandLogoBuffer);
+});
+
 function getOperationalSiteStatus(entitlement: PortalSiteEntitlement): PortalSiteEntitlement['status'] {
   return isPortalSiteOperational(entitlement) ? 'active' : 'stopped';
 }
@@ -287,36 +300,117 @@ function escapeHtmlForEmail(value: string) {
   });
 }
 
+function isNoReplyMailbox(value: string) {
+  const localPart = String(value || '').trim().split('@')[0] || '';
+  return /^(?:no-?reply|do-?not-?reply)$/i.test(localPart);
+}
+
+function getPortalBrandLogoUrl() {
+  return `${getPortalBaseUrl()}/portal/assets/brand-logo.png`;
+}
+
+function getPasswordResetEmailLogoSrc() {
+  if (!portalBrandLogoSrc) return '';
+  const baseUrl = getPortalBaseUrl();
+  return /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/i.test(baseUrl)
+    ? portalBrandLogoSrc
+    : getPortalBrandLogoUrl();
+}
+
 function buildPasswordResetEmail(input: { email: string; resetUrl: string; expiresAt: string }) {
-  const subject = 'Reset your AutoBlog Portal password';
+  const subject = 'Reset your AI Blogs password';
   const expiresAtDate = new Date(input.expiresAt);
   const expiresAtLabel = Number.isNaN(expiresAtDate.getTime())
     ? input.expiresAt
     : expiresAtDate.toUTCString();
   const replyTo = String(process.env.PORTAL_PASSWORD_RESET_REPLY_TO || '').trim();
-  const supportHtml = replyTo
-    ? `<p style="margin:0 0 12px;color:#334155;">Need help? Reply to ${escapeHtmlForEmail(replyTo)}.</p>`
+  const escapedEmail = escapeHtmlForEmail(input.email);
+  const escapedResetUrl = escapeHtmlForEmail(input.resetUrl);
+  const escapedExpiresAtLabel = escapeHtmlForEmail(expiresAtLabel);
+  const escapedReplyTo = escapeHtmlForEmail(replyTo);
+  const hasMonitoredReplyTo = Boolean(replyTo) && !isNoReplyMailbox(replyTo);
+  const logoSrc = getPasswordResetEmailLogoSrc();
+  const escapedLogoSrc = escapeHtmlForEmail(logoSrc);
+  const supportHtml = hasMonitoredReplyTo
+    ? `<p style="margin:0 0 14px;color:#6c7a98;font-size:13px;line-height:1.6;">Need help? Contact <a href="mailto:${escapedReplyTo}" style="color:#295bd1;text-decoration:none;">${escapedReplyTo}</a>.</p>`
     : '';
-  const supportText = replyTo ? `Need help? Reply to ${replyTo}.\n\n` : '';
+  const supportText = hasMonitoredReplyTo ? `Need help? Contact ${replyTo}.\n\n` : '';
+  const automatedNoticeHtml = replyTo && isNoReplyMailbox(replyTo)
+    ? '<p style="margin:0 0 14px;color:#6c7a98;font-size:12px;line-height:1.5;">This is an automated email from AI Blogs. Replies to this mailbox are not monitored.</p>'
+    : '';
+  const automatedNoticeText = replyTo && isNoReplyMailbox(replyTo)
+    ? 'This is an automated email from AI Blogs. Replies to this mailbox are not monitored.\n\n'
+    : '';
+  const brandLogoHtml = logoSrc
+    ? `<img src="${escapedLogoSrc}" alt="AI Blogs logo" width="56" height="56" style="display:block;width:56px;height:56px;border:0;outline:none;text-decoration:none;" />`
+    : '<div style="width:56px;height:56px;line-height:56px;text-align:center;font-size:24px;font-weight:800;color:#16356a;">AI</div>';
   const html = `<!doctype html>
-<html>
-<body style="margin:0;padding:0;background:#f5f8ff;font-family:Arial,sans-serif;color:#0f172a;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 12px;">
+<html lang="en">
+<body style="margin:0;padding:0;background:#f3f7ff;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#101a34;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background:#f3f7ff;background-image:radial-gradient(980px 620px at 0% -8%, rgba(75,118,255,.14) 0%, rgba(75,118,255,0) 62%),radial-gradient(900px 560px at 100% -12%, rgba(255,111,184,.14) 0%, rgba(255,111,184,0) 60%),linear-gradient(135deg, #f9fbff 0%, #f1f6ff 52%, #fff5fa 100%);padding:32px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border:1px solid #dbe5f7;border-radius:14px;overflow:hidden;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;">
           <tr>
-            <td style="padding:24px;">
-              <h1 style="margin:0 0 12px;font-size:22px;line-height:1.2;color:#1d4ed8;">Reset your password</h1>
-              <p style="margin:0 0 12px;color:#334155;">A password reset was requested for <strong>${escapeHtmlForEmail(input.email)}</strong>.</p>
-              <p style="margin:0 0 16px;color:#334155;">Use the button below to set a new password. This link expires on <strong>${escapeHtmlForEmail(expiresAtLabel)}</strong>.</p>
-              <p style="margin:0 0 16px;">
-                <a href="${escapeHtmlForEmail(input.resetUrl)}" style="display:inline-block;padding:10px 16px;background:#1d4ed8;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;">Reset password</a>
-              </p>
-              <p style="margin:0 0 12px;color:#64748b;font-size:12px;">If the button does not work, copy and paste this URL:</p>
-              <p style="margin:0 0 16px;color:#334155;font-size:12px;word-break:break-all;">${escapeHtmlForEmail(input.resetUrl)}</p>
-              ${supportHtml}
-              <p style="margin:0;color:#64748b;font-size:12px;">If you did not request this change, you can ignore this email.</p>
+            <td style="padding:0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:linear-gradient(140deg, #2b66ff 0%, #3551dc 48%, #8b3cf2 100%);border-radius:24px 24px 0 0;">
+                <tr>
+                  <td style="padding:24px 28px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td style="padding-right:14px;vertical-align:middle;">
+                          <table role="presentation" cellspacing="0" cellpadding="0">
+                            <tr>
+                              <td align="center" valign="middle" style="width:72px;height:72px;padding:8px;border-radius:18px;background:rgba(255,255,255,.94);box-shadow:0 18px 36px -24px rgba(8,18,46,.5);">
+                                ${brandLogoHtml}
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                        <td style="vertical-align:middle;">
+                          <div style="margin:0 0 6px;font-size:11px;line-height:1.2;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.82);font-weight:700;">Password Reset</div>
+                          <div style="margin:0;font-size:28px;line-height:1.05;letter-spacing:-0.03em;color:#ffffff;font-weight:800;">AI Blogs</div>
+                          <div style="margin:6px 0 0;font-size:13px;line-height:1.5;color:rgba(245,248,255,.9);">Secure access for your site owner portal.</div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;border:1px solid #dfe6f5;border-top:0;border-radius:0 0 24px 24px;box-shadow:0 20px 54px -36px rgba(19,49,111,.4);">
+                <tr>
+                  <td style="padding:28px;">
+                    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.1;letter-spacing:-0.02em;color:#101a34;">Reset your password</h1>
+                    <p style="margin:0 0 12px;color:#334a74;font-size:15px;line-height:1.6;">We received a password reset request for <strong>${escapedEmail}</strong>.</p>
+                    <p style="margin:0 0 20px;color:#334a74;font-size:15px;line-height:1.6;">Use the button below to choose a new password. This link expires on <strong>${escapedExpiresAtLabel}</strong>.</p>
+                    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 20px;">
+                      <tr>
+                        <td style="border-radius:12px;background:#2b66ff;">
+                          <a href="${escapedResetUrl}" style="display:inline-block;padding:13px 20px;border-radius:12px;background:#2b66ff;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;">Reset password</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 10px;color:#6c7a98;font-size:12px;line-height:1.5;">If the button does not work, copy and paste this URL into your browser:</p>
+                    <p style="margin:0 0 18px;font-size:12px;line-height:1.7;word-break:break-all;">
+                      <a href="${escapedResetUrl}" style="color:#295bd1;text-decoration:none;">${escapedResetUrl}</a>
+                    </p>
+                    ${supportHtml}
+                    ${automatedNoticeHtml}
+                    <p style="margin:0;color:#6c7a98;font-size:12px;line-height:1.5;">If you did not request this change, you can ignore this email.</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 28px 24px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #e7ecf8;">
+                      <tr>
+                        <td style="padding-top:16px;">
+                          <div style="font-size:12px;line-height:1.5;color:#6c7a98;">powered by earningsites</div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
         </table>
@@ -326,11 +420,13 @@ function buildPasswordResetEmail(input: { email: string; resetUrl: string; expir
 </body>
 </html>`;
   const text =
-    `Reset your AutoBlog Portal password\n\n` +
-    `A password reset was requested for ${input.email}.\n` +
+    `Reset your AI Blogs password\n\n` +
+    `We received a password reset request for ${input.email}.\n` +
     `Reset link: ${input.resetUrl}\n` +
     `Expires at: ${expiresAtLabel}\n\n` +
     supportText +
+    automatedNoticeText +
+    `Powered by earningsites.\n\n` +
     `If you did not request this change, you can ignore this email.\n`;
   return {
     subject,
