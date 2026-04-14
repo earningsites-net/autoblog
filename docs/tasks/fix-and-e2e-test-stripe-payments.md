@@ -102,12 +102,17 @@
 - Committed and pushed the source fixes to `main` in two steps:
   - `e690a9a` for the Stripe billing/webhook + scheduler worker scoping changes
   - `b66de07` for the remaining small portal/footer + task-tracking docs changes the user explicitly asked to push together
+  - `ea1b788` for the final task-note sync after deploy
 - Reconciled production VPS runtime/source without `git pull`:
   - direct `git pull` on `/srv/auto-blog-project` is currently blocked because that clone uses GitHub SSH remote access that is not working on the server and also has a dirty worktree
   - uploaded a tar snapshot of the pushed files and unpacked it directly into `/srv/auto-blog-project`
   - re-imported the 4 changed n8n workflows from the synced source with smoke enabled: `pass=4`, `smoke=4/4`
   - restarted `autoblog-engine` and confirmed it returned `active`
   - confirmed the synced engine source on VPS contains the `Open Billing & Plan` portal CTA
+- Verified that no touched source/docs changes were lost during push/deploy:
+  - local repo is clean and `HEAD == origin/main == ea1b788`
+  - compared SHA-256 checksums for every file changed in this thread and the other pushed thread notes (`engine`, `studio`, 4 n8n workflows, `AGENTS.md`, `docs/context.md`, `_active.md`, task files)
+  - local and VPS checksums match exactly for all compared files
 
 ## Decisions
 - Use the existing Stripe Billing + Checkout + Customer Portal integration flow; only adjust UI copy/CTA behavior and temporary production env values for the test.
@@ -122,6 +127,7 @@
 - Keep high batch env values for bulk/prepopulate throughput, but make scheduled runs self-limiting through `schedulerRunId` instead of globally lowering `ARTICLE_BATCH_SIZE` / `IMAGE_BATCH_SIZE` / `QA_BATCH_SIZE` for every workflow.
 - Treat the 5-minute test interval as a publish-spacing gate, not a pure scheduler-tick cadence: because the planner checks recent `publishedAt`, a due tick can still no-op if the last publish happened less than 5 minutes earlier inside the previous run.
 - Because the VPS clone cannot currently fast-forward from GitHub safely, use direct file sync from the pushed commit as the least-destructive deploy path for this task instead of forcing a remote git cleanup.
+- Treat checksum parity between local and VPS as the authoritative post-deploy verification, because the VPS clone git metadata is currently dirty and cannot be trusted as a clean fast-forward checkout.
 
 ## Next
 - Decide whether the live customer subscription should stay on Pro or be manually downgraded after the test window; this is separate from the env rollback and affects a real Stripe subscription.
