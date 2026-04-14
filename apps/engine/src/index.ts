@@ -1362,7 +1362,11 @@ app.get('/portal', async (_req, reply) => {
       </section>
     </div>
 
-    <p class="portal-support">Support: <a href="mailto:info@earningsites.net">info@earningsites.net</a></p>
+    <p class="portal-support">
+      <a href="https://www.earningsites.net/terms">Terms of use</a>
+      <span aria-hidden="true"> | </span>
+      <a href="mailto:info@earningsites.net">Support</a>
+    </p>
 
     <div id="planConfirmModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="planConfirmTitle">
       <div class="modal-card">

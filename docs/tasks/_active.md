@@ -1,1 +1,1 @@
-docs/tasks/ads-management.md
+docs/tasks/inbox.md

@@ -83,6 +83,20 @@
     - Vercel builds without that blueprint file and falls back to default theme resolution
 - Updated the `ops/factory` post-launch checklist UI to include the missing deployment step:
   - `Commit new blueprint on main before Vercel deploy.`
+- Investigated the production portal login regression on `https://aiblogs.earningsites.net/portal`:
+  - auth itself still works (`/api/portal/auth/login` and `/api/portal/me` succeed), but the UI falls back to the login screen because `/api/portal/sites` returns `500`
+  - production journal shows the concrete exception:
+    - `PostgresError: column "ad_slots_enabled" of relation "site_settings" does not exist`
+  - the failure also affects public site settings/state endpoints, not only the portal
+  - the current source on both local and VPS clone is already correct: `portal-store-postgres.ts` no longer inserts/reads `ad_slots_enabled`
+  - however, the live `autoblog-engine` process in production has been running since `Thu 2026-04-09 14:57:33 CEST`, which predates the later portal-store monetization fix commits
+  - this indicates the regression is not a fresh source-code mistake in the checked-out repo, but a runtime mismatch:
+    - production schema no longer has legacy AdSense columns
+    - the still-running engine process was started from an older code version that still references them
+- Fixed the production portal regression by restarting `autoblog-engine`, forcing the live process to reload the already-updated source code in `/srv/auto-blog-project`:
+  - service start timestamp moved to `Fri 2026-04-10 12:16:06 CEST`
+  - `GET /healthz` now returns `{"ok":true,...}`
+  - `GET /api/public/sites/ai-blog-news/settings` now returns `200` with a valid payload instead of the previous `ad_slots_enabled` SQL error
 
 ## Decisions
 - Treat manual deletion of a single `entitlements` row as non-durable while the site still exists in runtime/registry and is referenced by `site_access`, engine bootstrap admin assignment, or any endpoint that reads portal site state.
@@ -123,6 +137,7 @@
 - Reconcile the active site slug used by Vercel with the real site/runtime (`glowlab-daily` vs `glow-lab`) and verify that the matching Sanity dataset contains published `article` documents for that slug.
 - Investigate why the `glow-lab` prepopulate/publish pipeline stopped at draft creation and did not transition articles to `published`.
 - Commit/push `sites/daily-beauty-lab/*` (and remove stale `sites/beauty-lab/*` if intended) before trusting Vercel output for `daily-beauty-lab`.
+- Restart or roll forward the production `autoblog-engine` process only after confirming the VPS worktree strategy, so the live process reloads the current portal-store code that matches the migrated schema.
 
 ## Risks
 - Manual DB cleanup on only one portal table can look successful in DBeaver but self-heal on the next portal/public/internal read or engine restart because the store auto-bootstraps missing site records.
@@ -141,3 +156,4 @@
 - Categories can still render even when articles are missing because category fallbacks come from blueprint/static configuration while published articles depend on Sanity/API data; this can mask slug/token/content mismatches after deploy.
 - A site can appear structurally healthy after deploy while still showing zero content if Sanity contains only `draft` articles; this is expected with the current web query (`status == "published"`).
 - A local `site:use` switch can make theme/content look correct in dev while Vercel still serves an older or fallback site if the matching `sites/<slug>/site.blueprint.json` has not been committed to `main`.
+- Production can temporarily enter a broken state if a Postgres schema migration lands (or is applied by ops scripts) while the long-running engine process is still serving older TypeScript code that expects removed columns.

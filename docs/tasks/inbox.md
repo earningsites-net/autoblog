@@ -5,6 +5,8 @@
 
 ## Done
 - Initialized task tracking system (`AGENTS.md`, `docs/context.md`, `docs/tasks/*`).
+- Switched task routing to a thread-local model for simultaneous Codex threads.
+- Reduced `docs/tasks/_active.md` to a fallback default and pointed it back to `docs/tasks/inbox.md`.
 - Stabilizzato pipeline end-to-end n8n (`article -> image -> qa/publish`) con publish reale su frontend.
 - Introdotto scheduler piano-based (`plan_generation_scheduler_worker`) con quote mensili (`base=3`, `standard=20`, `pro=60`) e trigger periodico.
 - Attivato test mode scheduler con cadenze rapide per validazione:
@@ -41,6 +43,8 @@
 ## Decisions
 - Chosen approach: auto-update active task file on each response with meaningful progress.
 - Keep `AGENTS.md` concise and stable; task history stays in `docs/tasks/*`.
+- Multi-thread safe rule: every concurrent thread should declare `TASK: <task-id>` and keep that task thread-local.
+- `_active.md` is no longer a repo-global active task pointer; it is only a fallback for threads without explicit `TASK:`.
 - Scheduler plan-based con `siteSlug` esplicito e senza fallback ambiguo.
 - Refill topic gestito dal scheduler via API engine/factory (non via webhook n8n secondari).
 - Nessuna chiamata factory costosa deve essere eseguibile senza secret/token espliciti.
@@ -48,6 +52,7 @@
 - Isolamento dati Sanity tra siti: enforced by design (strict per-site credentials).
 
 ## Next
+- For any new concurrent thread, start the first message with `TASK: <task-id>`.
 - Validare un giro completo cambio piano `base -> standard -> pro` con verifica incremento publish nel mese.
 - Portare variabili da test mode a valori produzione prima del rilascio commerciale.
 - Aggiungere soglia refill opzionale (`brief_ready < N`) per evitare buchi tra publish e refill.

@@ -13,8 +13,9 @@ This file stores durable project context shared across tasks.
 
 ## Working Conventions
 - Task progress is tracked in `docs/tasks/<task-id>.md`.
-- Active task pointer is `docs/tasks/_active.md`.
-- Use `TASK: <task-id>` in the first message of a thread to switch task.
+- Use `TASK: <task-id>` in the first message of each new thread when that thread should have its own task history.
+- `docs/tasks/_active.md` is fallback-only for threads that do not declare `TASK:`; it is not the source of truth across simultaneous threads.
+- Once a thread has established its task, keep using that same task file for the life of the thread unless a new `TASK:` is provided.
 
 ## Local Run Commands
 - Install deps: `npm install`
@@ -148,6 +149,8 @@ This file stores durable project context shared across tasks.
   - `IMAGE_BATCH_SIZE`
   - `QA_BATCH_SIZE`
   - `prepopulate_bulk_runner` usa questi batch size per ciclo: `targetPublishedCount` non e' un hard cap se i worker processano piu' di 1 item per ciclo; per smoke stretti abbassare i batch size oppure il numero di cicli.
+  - `plan_generation_scheduler_worker` riusa gli stessi worker shared: se questi batch size restano > `1`, anche un singolo tick schedulato puo' generare/pubblicare piu' di un articolo.
+  - separazione corrente bulk vs scheduler: i worker shared tengono i batch env alti per i run bulk/prepopulate, ma quando ricevono `schedulerRunId` dal planner schedulato si autolimitano a `1` item e image/qa filtrano gli articoli del tick corrente via `aiMeta.schedulerRunId`.
 - Current multi-site gap to remember:
   - web revalidate in n8n is still global-first via `WEB_APP_URL` + `WEB_REVALIDATE_SECRET`.
   - `publish_scheduler_worker` respects `PUBLISH_REVALIDATE_ENABLED=false`, but `qa_scoring_and_publish_worker` still has a hardcoded local revalidate URL and needs cleanup before relying on revalidate in production.

@@ -1,0 +1,124 @@
+# Task: fix-and-e2e-test-stripe-payments
+
+## Goal
+- Fix Stripe billing UX copy/actions, validate low-price production price IDs, and run a production E2E payment/autopublishing test with temporary scheduler settings.
+
+## Done
+- Switched the active task pointer to this task.
+- Read workspace context, Stripe billing guidance, and identified the relevant portal billing UI and scheduler env knobs.
+- Updated `apps/engine/src/index.ts` locally to:
+  - remove the inactive banner billing mode/current plan line
+  - make the inactive CTA switch to `Billing & Plan`
+  - normalize inactive plan button labels to `Choose`
+  - harden checkout flow by ignoring invalid stored Stripe subscription ids that are not real `sub_...` values
+- Verified local `@autoblog/engine` typecheck passes after the portal/checkout changes.
+- Snapshotted production `/etc/autoblog/engine.env`, `/etc/autoblog/n8n.env`, and runtime `registry.json`.
+- Rolled temporary production changes on the VPS:
+  - Stripe price ids updated to the provided low-price live ids
+  - `plan_generation_scheduler_worker` test cadence set to 5 minutes
+  - `PLAN_SCHEDULER_DAILY_CAP_BASE` raised temporarily to allow `daily-beauty-lab` to publish again today
+  - `daily-beauty-lab` temporarily activated in the runtime registry automation targets
+  - production engine source updated with the portal UI fixes and Stripe subscription-id guard
+- Verified production after restart:
+  - `autoblog-engine` and `autoblog-n8n` both returned `active`
+  - portal HTML exposes `Open Billing & Plan` and the new inactive copy
+  - portal plan label logic now returns `Choose` for inactive selections
+  - internal automation targets now include only `daily-beauty-lab`
+  - internal entitlement for `daily-beauty-lab` is still `customer_paid`, `base`, `status=stopped`, `publishingEnabled=true`
+  - `plan_generation_scheduler_worker` is active in production n8n
+- Confirmed production Stripe customer state for both inactive sites:
+  - customers exist, but neither has saved payment methods or existing subscriptions
+- Created a live Stripe Checkout session from the production portal for `daily-beauty-lab` on the `base` plan and verified via Stripe API that it uses the new Base live price id in `mode=subscription`.
+- Verified post-purchase mismatch on `daily-beauty-lab`:
+  - Stripe had created an active subscription (`sub_1TKfaUI4HGmQDM0ZP029mGFF`) with the new Base price id
+  - portal/internal entitlement still showed `status=stopped`, so the site remained inactive
+- Investigated production engine logs and found the root cause:
+  - the real Stripe webhooks reached `POST /api/billing/webhooks/stripe`
+  - both deliveries returned `400`
+  - the webhook signature verification path was using parsed JSON instead of the original raw request body
+- Fixed the webhook parser in `apps/engine/src/index.ts` by preserving raw JSON request bodies during parsing and using `req.rawBody` for Stripe signature verification.
+- Deployed the webhook parser fix to production and restarted `autoblog-engine`.
+- Replayed a signed `customer.subscription.updated` webhook for the already-created live subscription after the fix:
+  - webhook returned `200`
+  - `daily-beauty-lab` entitlement is now `status=active`
+  - portal no longer marks the site inactive
+  - `stripeSubscriptionId` and `stripePriceId` are now populated correctly
+  - the webhook path also triggered the plan automation workflow successfully
+- Investigated the missing scheduled publish after activation and found a second production issue:
+  - `plan_generation_scheduler_worker` executions were failing every minute in node `Build scheduled payload`
+  - root cause: the node was configured as `runOnceForEachItem` while returning an array of items, which breaks on the current production n8n runtime
+- Fixed `infra/n8n/workflows/plan_generation_scheduler_worker.json` by switching `Build scheduled payload` to `runOnceForAllItems`.
+- Reimported the changed workflow directly from the local repo into production n8n with the standard guard/import path and verified import + smoke passed.
+- Verified post-fix production runtime behavior on April 10, 2026:
+  - scheduler executions after the import stopped erroring and now complete successfully
+  - minute-by-minute executions are expected; non-due minutes now exit cleanly with `scheduled_tick_skipped`
+  - the first due test tick at `2026-04-10T14:45:02Z` executed the scheduled generation path successfully
+- Verified the scheduled path is no longer blocked, but uncovered a new downstream bulk-processing issue:
+  - on the first due tick, `daily-beauty-lab` published two articles at `2026-04-10T14:46:25.490Z`
+  - `Plan runs for this tick` correctly planned `runsThisTick=1`
+  - the extra publish came from shared worker behavior downstream (`article_generation_worker` emitted multiple items in one scheduled run)
+- Verified quota drift after the double publish:
+  - Sanity now shows two new published articles from the scheduled tick
+  - the engine entitlement counter only incremented once and now reports `monthlyQuota=3`, `publishedThisMonth=3`, `remaining=0`
+  - this means the scheduler error is fixed, but the one-article-per-5-minutes E2E is still not clean until the bulk worker behavior and quota reconciliation are addressed
+- Re-checked the live state on April 10, 2026 before deciding the next E2E step:
+  - `daily-beauty-lab` currently has `publishedTodayCount=10`
+  - production n8n test-mode cadence is still active at 5 minutes for all plans
+  - production `PLAN_SCHEDULER_DAILY_CAP_PRO` is still `4`
+  - production shared worker batch sizes are still `ARTICLE_BATCH_SIZE=3`, `IMAGE_BATCH_SIZE=3`, `QA_BATCH_SIZE=100`
+  - upgrading to Pro without also raising the Pro daily cap would therefore block further scheduled runs today instead of extending the test window
+- Implemented the scheduler-vs-bulk separation in source:
+  - `article_generation_worker` now detects scheduled runs via `schedulerRunId`, limits topic fetches to `1` only for those runs, and writes `aiMeta.schedulerRunId` / `aiMeta.schedulerRunIndex` on generated articles
+  - `image_generation_worker` keeps bulk behavior for normal/prepopulate runs, but when `schedulerRunId` is present it fetches only one draft and filters to articles created by that scheduler tick
+  - `qa_scoring_and_publish_worker` does the same for QA/publish, so scheduled runs no longer drain an arbitrary site-wide backlog
+  - Studio schema `aiMeta` now declares `schedulerRunId` and `schedulerRunIndex`
+- Verified the updated workflow JSON files parse correctly and the Studio schema typecheck passes.
+- Imported the updated production n8n workers with the standard guard/import path and verified import + smoke passed (`Checked workflows: 4`, `Overall: pass`).
+- Temporarily raised production `PLAN_SCHEDULER_DAILY_CAP_PRO` to `20` to reopen headroom for a live Pro-plan cadence test on the same day.
+- Upgraded the live `daily-beauty-lab` Stripe subscription from Base to Pro and verified the Stripe webhook path updated production entitlement correctly:
+  - active subscription stayed healthy after the change
+  - entitlement now resolves to `plan=pro`, `monthlyQuota=60`, `status=active`
+- Verified the first post-upgrade webhook-triggered automation run in production:
+  - execution `35114` ran with `runsThisTick=1`, `executedRuns=1`
+  - downstream worker chain processed exactly one item through article/image/qa
+  - entitlement advanced from `publishedThisMonth=3` to `4`
+- Verified the next due scheduled tick in production:
+  - execution `35120` at `2026-04-10T15:45:30Z` ran with `runsThisTick=1`, `executedRuns=1`
+  - downstream worker chain again processed exactly one item through article/image/qa
+  - no multi-article burst occurred
+- Verified the 5-minute gate behavior after the Pro publish:
+  - the due tick at `2026-04-10T15:50:30Z` correctly no-op'd with `note=Test mode interval gate not elapsed yet`, because the last publish was only ~4m31s earlier
+  - the next due tick at `2026-04-10T15:55:30Z` ran as execution `35134` with `runsThisTick=1`, `executedRuns=1`
+  - entitlement then advanced from `publishedThisMonth=4` to `5`, confirming that this later scheduled run published a single additional article
+- Confirmed the Pro E2E window now behaves as intended for the cadence path:
+  - scheduler ticks still wake every minute
+  - only real 5-minute due ticks attempt work
+  - due ticks now stay scoped to one pipeline item instead of draining multiple queued topics in one scheduled run
+- Restored the temporary production env/runtime drift after the E2E window:
+  - `/etc/autoblog/engine.env` now points back to the original Stripe price ids
+  - `/etc/autoblog/n8n.env` now has `PLAN_SCHEDULER_TEST_MODE=false`, `PLAN_SCHEDULER_TICK_MINUTES=60`, original test-interval values, and original daily caps (`Base=1`, `Standard=2`, `Pro=4`)
+  - production services restarted cleanly and returned `active`
+  - production runtime registry now has `daily-beauty-lab automationStatus=inactive`
+
+## Decisions
+- Use the existing Stripe Billing + Checkout + Customer Portal integration flow; only adjust UI copy/CTA behavior and temporary production env values for the test.
+- Use `daily-beauty-lab` for the production test because `ai-blog-news` has stale Stripe linkage and `daily-beauty-lab` has the cleanest stopped state.
+- Raise the Base daily cap temporarily instead of switching test site, because `daily-beauty-lab` already had published multiple articles today and would otherwise be blocked before the 5-minute gate could be observed.
+- Set both scheduler tick and test interval to 5 minutes in production for the temporary E2E window; changing only the interval values would not exercise the real scheduled path while `PLAN_SCHEDULER_TICK_MINUTES` remained 60.
+- Treat the failed webhook as an application bug, not a Stripe configuration issue: production deliveries were arriving, but the engine could not validate them because it did not preserve the exact raw JSON body needed for Stripe signature verification.
+- Recover the missed purchase by replaying a signed subscription update against the fixed webhook instead of asking for a second purchase or manually editing portal DB state.
+- Treat `plan_generation_scheduler_worker` running every minute as expected behavior: the real cadence gate is internal (`PLAN_SCHEDULER_TICK_MINUTES`), so non-due minutes should complete successfully with a skip report, not fail.
+- Import the scheduler fix from the local repo via the standard n8n guard/import script instead of editing the live workflow only in the n8n UI, so source and runtime stay aligned.
+- Do not use a Pro upgrade alone as the next scheduler test step while `PLAN_SCHEDULER_DAILY_CAP_PRO` remains below the current number of publishes already made today; otherwise the scheduler would no-op for the rest of the day for an unrelated reason.
+- Keep high batch env values for bulk/prepopulate throughput, but make scheduled runs self-limiting through `schedulerRunId` instead of globally lowering `ARTICLE_BATCH_SIZE` / `IMAGE_BATCH_SIZE` / `QA_BATCH_SIZE` for every workflow.
+- Treat the 5-minute test interval as a publish-spacing gate, not a pure scheduler-tick cadence: because the planner checks recent `publishedAt`, a due tick can still no-op if the last publish happened less than 5 minutes earlier inside the previous run.
+
+## Next
+- Decide whether the live customer subscription should stay on Pro or be manually downgraded after the test window; this is separate from the env rollback and affects a real Stripe subscription.
+- Commit the engine + workflow fixes from the workspace/source tree so future deploys keep the webhook/raw-body fix and scheduled-run scoping behavior.
+
+## Risks
+- The webhook parser fix is deployed directly on production engine source and should be committed back from the workspace/source tree so future deploys do not regress it.
+- The shared worker chain is still bulk-oriented for non-scheduled flows by design; scheduled runs are now isolated via `schedulerRunId`, but older content created before this change or other workflows without that tag still follow the legacy broader queries.
+- The new scheduler scoping relies on `aiMeta.schedulerRunId` being present on articles generated by scheduled runs; articles created before this change or by other flows will still be handled by the legacy broader queries.
+- The live `daily-beauty-lab` subscription is currently on Pro from the test upgrade; downgrading it is a separate billing action and was not auto-reverted with the env rollback.
