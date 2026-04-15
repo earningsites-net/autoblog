@@ -131,6 +131,36 @@
   - synced the file to `/srv/auto-blog-project` on the VPS
   - re-imported the changed workflows in production with `npm run n8n:test:flows` (`pass=4`, `smoke=4/4`)
   - verified via live n8n API that `Schedule Trigger -> minutesInterval` is now `15`
+- Re-checked the runtime/billing semantics for `incubating -> customer_paid` handoff:
+  - the scheduler target endpoint filters only on runtime `automationStatus`, not on `billingMode`
+  - the planner itself gates on `/api/internal/sites/:siteSlug/entitlement` returning `status=active`, `publishingEnabled=true`, and remaining quota
+  - `incubating` sites therefore keep publishing while `entitlements.status=active`, quota remains, and runtime automation is active
+  - the handoff command switches `customer_paid` sites to `status=stopped` and clears Stripe subscription/price ids, so scheduled publishing stops until billing is reactivated
+  - neither the handoff path nor the Stripe activation/update path resets `publishedThisMonth`; absent a month rollover or explicit patch, the counter is preserved across the transfer
+- Confirmed `publishingEnabled` lives in `site_settings.publishing_enabled`, defaults to `true`, and is toggled through `PATCH /api/portal/sites/:siteSlug/publishing`; it is independent from entitlement billing state and from the monthly counter.
+- Clarified the current multi-axis site state model:
+  - `automationStatus` is a runtime scheduler-target switch
+  - `publishingEnabled` is the owner-facing publishing toggle
+  - `entitlements.status` is the entitlement/service state
+  - `entitlements.billingStatus` is the raw billing health signal
+  - the effective operational state used by planner/public state is derived, not any single raw field alone
+- Confirmed the current billing-cycle mismatch risk for buyer resets:
+  - Stripe Checkout does not set a custom `billing_cycle_anchor`, so the real Stripe renewal date follows the subscription purchase date
+  - the app entitlement window for paid plans is still patched to `getCurrentMonthWindow()` (calendar month)
+  - therefore a naive reset like `publishedThisMonth=0`, `periodStart=now`, `periodEnd=end_of_current_month` would misalign app quota and Stripe billing when a buyer pays near month end
+- Re-verified the live Stripe price configuration on April 15, 2026 after a manual E2E plan-change error:
+  - production `/etc/autoblog/engine.env` currently uses the original live USD prices:
+    - Base `price_1T9T5YI4HGmQDM0ZKSM2SKXP`
+    - Standard `price_1T9T5YI4HGmQDM0ZBjEaJ3al`
+    - Pro `price_1T9T5YI4HGmQDM0ZX6NWfWDV`
+  - queried Stripe directly and confirmed all three are `livemode=true`, `active=true`, `currency=usd`
+  - queried the existing `daily-beauty-lab` live subscription (`sub_1TKfaUI4HGmQDM0ZP029mGFF`) and confirmed it is still on the temporary EUR Pro test price `price_1TKf8FI4HGmQDM0ZHnK8xyMu`
+  - this explains the current Stripe 400 when trying to change plan: the app is attempting to update an EUR subscription with USD-only prices
+- Sanitized Stripe billing errors exposed by the portal:
+  - `BillingService.stripeRequest()` now extracts and surfaces only the human-readable Stripe `error.message`
+  - raw Stripe JSON bodies, account details, and `request_log_url` are no longer propagated to the browser
+  - portal billing routes now log the full upstream Stripe response server-side for diagnostics while returning only the sanitized public message to the client
+  - verified `npm exec tsc -- -p apps/engine/tsconfig.json --noEmit` passes after the patch
 
 ## Decisions
 - Use the existing Stripe Billing + Checkout + Customer Portal integration flow; only adjust UI copy/CTA behavior and temporary production env values for the test.
@@ -150,10 +180,19 @@
 - Re-enable automation via the runtime registry only; no entitlement DB patch or engine restart is needed because the scheduler target endpoint reads the live registry on each run.
 - Describe the current production cadence as quota-paced hourly evaluation, not as a fixed "one article every X minutes" schedule: due ticks happen hourly, successful publishes depend on backlog/QA, and the planner can use up to 2 runs per due tick until the daily cap is reached.
 - Reduce scheduler wake-ups to 15 minutes as an operational compromise for now: it materially lowers pointless polling load while still guaranteeing the hourly gating tick is observed without needing a broader refill/scheduler refactor first.
+- Treat `publishedThisMonth` as period state, not ownership state: moving a site from `incubating` to `customer_paid` should preserve the current monthly counter unless the billing period rolls over or an explicit manual reset is applied.
+- For portal billing failures, expose only the upstream Stripe human message to end users and keep raw Stripe payloads server-side in logs.
 
 ## Next
 - Decide whether the live customer subscription should stay on Pro or be manually downgraded after the test window; this is separate from the env rollback and affects a real Stripe subscription.
 - Observe the next normal production scheduler window for `daily-beauty-lab` now that it is back in `automationStatus=active`.
+- If desired, decide whether business rules should instead reset quota counters on ownership transfer; current code does not do this automatically.
+- Fix buyer-handoff quota semantics:
+  - when the first buyer-paid Stripe subscription becomes active, reset the counter against the real Stripe billing cycle
+  - stop using calendar-month windows for transferred customer-paid sites when that would diverge from Stripe `current_period_start/current_period_end`
+- Resolve mixed-currency subscription updates for sites left on temporary EUR test subscriptions after the Stripe E2E:
+  - either migrate those subscriptions to the current USD catalog in Stripe
+  - or keep a same-currency price ladder available until those subscriptions are normalized
 - Clean up the VPS git strategy separately:
   - restore GitHub access for the server clone (`origin` currently uses SSH and fails)
   - reconcile the existing dirty worktree (`sites/daily-beauty-lab` renames and synced source files) so future deploys can use normal `git pull --ff-only`
@@ -162,6 +201,9 @@
 - The shared worker chain is still bulk-oriented for non-scheduled flows by design; scheduled runs are now isolated via `schedulerRunId`, but older content created before this change or other workflows without that tag still follow the legacy broader queries.
 - The new scheduler scoping relies on `aiMeta.schedulerRunId` being present on articles generated by scheduled runs; articles created before this change or by other flows will still be handled by the legacy broader queries.
 - The live `daily-beauty-lab` subscription is currently on Pro from the test upgrade; downgrading it is a separate billing action and was not auto-reverted with the env rollback.
+- The current handoff semantics may surprise commercial operations: a buyer who receives a site mid-month inherits the existing `publishedThisMonth` consumption for that period, because transfer does not reset counters.
+- The current paid entitlement window is still calendar-month based in the app layer, while Stripe renewals follow the actual subscription purchase/renewal date; this mismatch should be resolved before introducing buyer-specific quota resets.
+- `daily-beauty-lab` is currently in a mixed-currency billing state: active EUR subscription in Stripe, but USD production price catalog in the app config. Any direct plan update will fail until the subscription/catalog currency is normalized.
 - The VPS clone is operationally aligned with the pushed source for the touched files, but it is still not a clean git checkout:
   - synced files show as modified/untracked relative to the old local commit
   - future ops should not assume `git status` is clean on `/srv/auto-blog-project` until the remote access + worktree cleanup is handled

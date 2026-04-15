@@ -19,6 +19,41 @@ type StripeWebhookPayload = {
 };
 
 type PlanChangeMode = 'upgrade' | 'downgrade' | 'lateral';
+type StripeApiErrorEnvelope = {
+  error?: {
+    message?: unknown;
+  };
+};
+
+export class StripeRequestError extends Error {
+  readonly statusCode: number;
+  readonly publicMessage: string;
+  readonly responseText: string;
+
+  constructor(statusCode: number, publicMessage: string, responseText: string) {
+    super(publicMessage);
+    this.name = 'StripeRequestError';
+    this.statusCode = statusCode;
+    this.publicMessage = publicMessage;
+    this.responseText = responseText;
+  }
+}
+
+export function isStripeRequestError(error: unknown): error is StripeRequestError {
+  return error instanceof StripeRequestError;
+}
+
+function extractStripePublicMessage(text: string, statusCode: number) {
+  try {
+    const parsed = JSON.parse(text) as StripeApiErrorEnvelope;
+    const message = String(parsed?.error?.message || '').trim();
+    if (message) return message;
+  } catch {
+    // Ignore invalid upstream JSON and fall back to a generic public message.
+  }
+
+  return `Stripe request failed (${statusCode})`;
+}
 
 function normalizeStripeStatus(status: string | undefined | null): 'trial' | 'active' | 'overdue' | 'canceled' {
   const value = String(status || '').toLowerCase();
@@ -102,7 +137,7 @@ export class BillingService {
 
     const text = await response.text();
     if (!response.ok) {
-      throw new Error(`Stripe API ${response.status}: ${text}`);
+      throw new StripeRequestError(response.status, extractStripePublicMessage(text, response.status), text);
     }
 
     try {

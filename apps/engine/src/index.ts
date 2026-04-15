@@ -12,7 +12,7 @@ import {
 } from '@autoblog/factory-sdk';
 import { createWorkflowRunner } from './adapters/workflow-runners';
 import { AuthService } from './services/auth-service';
-import { BillingService } from './services/billing-service';
+import { BillingService, isStripeRequestError } from './services/billing-service';
 import { DefaultEngineService } from './services/engine-service';
 import { FactoryOpsService } from './services/factory-ops';
 import { InMemoryJobStore } from './services/job-store';
@@ -196,6 +196,30 @@ function parseSiteSlugList(raw: string) {
 
 function getPortalBaseUrl() {
   return String(process.env.PORTAL_BASE_URL || 'http://localhost:8787').replace(/\/$/, '');
+}
+
+function getPublicErrorMessage(error: unknown) {
+  if (isStripeRequestError(error)) return error.publicMessage;
+  if (error instanceof Error) return error.message;
+  return 'Unexpected error';
+}
+
+function logBillingRouteError(route: string, siteSlug: string, error: unknown) {
+  if (isStripeRequestError(error)) {
+    app.log.error(
+      {
+        err: error,
+        route,
+        siteSlug,
+        stripeStatusCode: error.statusCode,
+        stripeResponse: error.responseText
+      },
+      'Stripe billing request failed'
+    );
+    return;
+  }
+
+  app.log.error({ err: error, route, siteSlug }, 'Billing request failed');
 }
 
 app.get('/portal/assets/brand-logo.png', async (_req, reply) => {
@@ -2719,7 +2743,8 @@ app.post('/api/portal/sites/:siteSlug/billing/portal-session', async (req, reply
         stripeCustomerId: created.customerId
       });
     } catch (error) {
-      return reply.code(500).send({ ok: false, error: (error as Error).message });
+      logBillingRouteError('create-customer', siteSlug, error);
+      return reply.code(500).send({ ok: false, error: getPublicErrorMessage(error) });
     }
   }
 
@@ -2739,7 +2764,8 @@ app.post('/api/portal/sites/:siteSlug/billing/portal-session', async (req, reply
       url: session.url
     };
   } catch (error) {
-    return reply.code(500).send({ ok: false, error: (error as Error).message });
+    logBillingRouteError('portal-session', siteSlug, error);
+    return reply.code(500).send({ ok: false, error: getPublicErrorMessage(error) });
   }
 });
 
@@ -2765,7 +2791,8 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
         stripeCustomerId: created.customerId
       });
     } catch (error) {
-      return reply.code(500).send({ ok: false, error: (error as Error).message });
+      logBillingRouteError('create-customer', siteSlug, error);
+      return reply.code(500).send({ ok: false, error: getPublicErrorMessage(error) });
     }
   }
 
@@ -2931,7 +2958,8 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
         message.includes('STRIPE_SUBSCRIPTION_NOT_UPDATABLE') ||
         message.includes('invalid-canceled-subscription-fields');
       if (!isNotUpdatable) {
-        return reply.code(500).send({ ok: false, error: message });
+        logBillingRouteError('update-existing-subscription', siteSlug, error);
+        return reply.code(500).send({ ok: false, error: getPublicErrorMessage(error) });
       }
 
       entitlement = await portalStore.patchEntitlement(siteSlug, {
@@ -2968,7 +2996,8 @@ app.post('/api/portal/sites/:siteSlug/billing/checkout-session', async (req, rep
       sessionId: session.sessionId
     };
   } catch (error) {
-    return reply.code(500).send({ ok: false, error: (error as Error).message });
+    logBillingRouteError('create-checkout-session', siteSlug, error);
+    return reply.code(500).send({ ok: false, error: getPublicErrorMessage(error) });
   }
 });
 
