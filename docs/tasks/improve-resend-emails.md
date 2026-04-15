@@ -16,6 +16,8 @@
 - Eseguito smoke test production `forgot-password` verso `info@earningsites.net`; l'engine ha risposto `ok:true`, ma Resend ha rifiutato l'invio con `403 validation_error` perché `earningsites.net` non risulta verificato per la API key attuale del VPS.
 - Analizzato il failure Vercel su `/categories/[slug]`: i commit del task email non toccano `apps/web`; il build passa invece da `apps/web/src/lib/sanity.ts` / `apps/web/src/lib/content-repository.ts` e il `401 Session not found` indica un problema separato di autenticazione Sanity nel build environment.
 - Migliorata la compatibilità del blocco hero dell'email: il gradiente del portal ora vive sul `td` header con `bgcolor` e `background-color` di fallback, così il testo bianco resta leggibile anche nei client che ignorano `background: linear-gradient(...)`.
+- Commit locale creato (`dea62b8`) e pushato su `origin/main` per il fix di fallback dell'header email.
+- Rollout production eseguito del nuovo `apps/engine/src/index.ts` da `origin/main`; verificato che il file live matcha il blob remoto (`worktree=origin_main=5f1abb2684f47fa53f4a372a5f80d90bdb0bdd44`) e che `autoblog-engine` risponde correttamente su `/healthz`.
 
 ## Decisions
 - La mail di reset usa il branding del portal engine, non quello del sito pubblico `apps/web`.
@@ -29,7 +31,7 @@
 
 ## Next
 - Allineare su production una `RESEND_API_KEY` appartenente all'account dove `earningsites.net` è realmente verificato, oppure verificare il dominio proprio su quell'account.
-- Ripetere subito dopo lo smoke test E2E del reset password contro `https://aiblogs.earningsites.net/portal`.
+- Ripetere un invio di reset password contro `https://aiblogs.earningsites.net/portal` per verificare visivamente la resa del nuovo header nell'inbox reale.
 - Per il deploy Vercel, verificare/correggere la `SANITY_READ_TOKEN` del progetto `apps/web` su Vercel: il build sta fallendo su un problema separato di autenticazione Sanity.
 - Se serve, rifinire ulteriormente copy o spacing del template dopo un nuovo invio di prova.
 

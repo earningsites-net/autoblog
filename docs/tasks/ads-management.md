@@ -4,6 +4,17 @@
 - Replace the AdSense-specific monetization model with a provider-agnostic monetization system based on head code plus targeted placement embeds.
 
 ## Done
+- Audited the current external-reference behavior for article generation after the user reported missing citations on a health/beauty site:
+  - confirmed the repo source still contains the strengthened `article_generation_worker` prompt allowing `0-2` inline external references only when materially useful
+  - confirmed the article markdown-to-Portable-Text normalization still preserves inline markdown links as Sanity `markDefs` with `nofollow: true`
+  - confirmed the Studio article schema still supports link annotations with `nofollow`
+  - queried the live `daily-beauty-lab` Sanity dataset directly: the latest 8 articles exist and publish correctly, but every sampled article has `linkCount = 0`
+  - queried the live `ai-blog-news` Sanity dataset directly: the latest 8 articles also all have `linkCount = 0`
+  - aggregated both datasets:
+    - `daily-beauty-lab`: 15 total articles, 12 published, `0` with links
+    - `ai-blog-news`: 12 total articles, 7 published, `0` with links
+  - fetched the active production n8n `article_generation_worker` via API and confirmed the live workflow still contains the same external-reference instruction as the repo source
+  - conclusion: no prompt/deploy regression was found; the current prompt is simply too optional/risk-averse to produce links reliably in live runs
 - Investigated why deleting the production `entitlements` row for `glow-lab` via DBeaver is not durable:
   - `PortalPostgresStore.ensureSiteRecords()` recreates missing `site_settings` and `entitlements` rows with `INSERT ... ON CONFLICT DO NOTHING`
   - `getSiteSettings()` and `getEntitlement()` both call that bootstrap helper before reading
@@ -99,6 +110,10 @@
   - `GET /api/public/sites/ai-blog-news/settings` now returns `200` with a valid payload instead of the previous `ad_slots_enabled` SQL error
 
 ## Decisions
+- Treat the current external-reference implementation as present but non-reliable:
+  - the workflow and schema support still exist
+  - however, `0-2 links`, combined with `If unsure, omit the link` and a non-browsing model, yields zero links in practice across both tested niches
+- Do not change the article-generation workflow yet; keep external-reference improvement as a dedicated future TODO instead of mixing it into the current task.
 - Treat manual deletion of a single `entitlements` row as non-durable while the site still exists in runtime/registry and is referenced by `site_access`, engine bootstrap admin assignment, or any endpoint that reads portal site state.
 - Remove the AdSense legacy model instead of keeping a compatibility layer.
 - Use a generic `monetization` object with `enabled`, `providerName`, `headHtml`, and target-based placement embeds.
@@ -117,6 +132,9 @@
 - For the current Vercel setup, the safest fix is full web self-containment, not additional monorepo resolution workarounds.
 
 ## Next
+- If external references should appear with any consistency, redesign article generation to use explicit retrieval/source injection before drafting instead of relying on the model to recall safe URLs unassisted.
+- If the current MVP behavior is acceptable, keep the prompt as-is and document that inline citations are opportunistic only, not expected per article.
+- Create a dedicated task/todo for external-reference reliability so the retrieval-based redesign can be handled separately from the current ads/portal work.
 - If `glow-lab` must disappear from the portal/runtime, clean up the owning references (`site_access`, bootstrap site assignment, and any intended runtime/site presence) or mark the entitlement/settings to the desired inactive state instead of deleting only `entitlements`.
 - If needed, add product-level guidance or tooling for provider prerequisites outside the current scope: `ads.txt`, CMP/consent mode, exclusivity checks, and onboarding validation.
 - Consider adding targeted smoke fixtures with sample monetization snippets so head injection and placement rendering can be asserted automatically in CI.
@@ -140,6 +158,7 @@
 - Restart or roll forward the production `autoblog-engine` process only after confirming the VPS worktree strategy, so the live process reloads the current portal-store code that matches the migrated schema.
 
 ## Risks
+- The current prompt wording suggests support for inline citations, but in production it effectively behaves like a no-op because the model is instructed to omit links whenever uncertain and has no retrieval step.
 - Manual DB cleanup on only one portal table can look successful in DBeaver but self-heal on the next portal/public/internal read or engine restart because the store auto-bootstraps missing site records.
 - `apps/engine/src/index.ts` already has unrelated local modifications in the worktree, so future edits in the portal UI layer still need care.
 - The platform now intentionally executes owner-provided third-party monetization code on the public site; misconfigured snippets can still break layout or violate provider requirements even though the integration surface is generic.
