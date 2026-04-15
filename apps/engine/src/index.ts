@@ -2036,7 +2036,6 @@ app.get('/portal', async (_req, reply) => {
             \${monetizationLockHintHtml}
             <div class="actions">
               <button class="primary" data-action="save-monetization" data-slug="\${escapeHtml(slug)}" \${disableMutationsAttr}>Save Monetization</button>
-              <a href="${baseUrl}/api/factory/site/\${encodeURIComponent(slug)}/status" target="_blank" class="inline-link">Site status JSON</a>
               <p id="saveAdsFeedback-\${idSafe}" class="action-feedback c12" role="status" aria-live="polite"></p>
             </div>
           </div>
