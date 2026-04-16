@@ -181,6 +181,26 @@
   - removed `schedulerRunId` / `schedulerRunIndex` from article `aiMeta` writes and from the Studio `aiMeta` schema because worker scoping no longer depends on those fields
   - intentionally left the separate Replicate polling improvement already present in `image_generation_worker` untouched, because it is unrelated to this batching simplification
   - verified all changed workflow JSON files parse successfully and `npm exec tsc -- -p apps/studio/tsconfig.json --noEmit` passes
+- Attempted to fast-forward the production VPS clone after the user pushed `main`, following the safe Git path (`status`/ownership check before pull), but the SSH connection itself is currently unreachable from this environment:
+  - `ssh -o BatchMode=yes -o ConnectTimeout=5 -i ~/.ssh/autoblog_ionos root@87.106.29.31 "echo ok"` exits with `ssh: connect to host 87.106.29.31 port 22: Operation timed out`
+  - because the host could not be reached at all, no remote `git status`, ownership verification, `git fetch`, or `git pull --ff-only` was executed
+- Retried the guarded VPS git sync once SSH reachability was restored on April 16, 2026:
+  - checked `/srv/auto-blog-project` as `autoblog` and found the clone `behind 1`, with an untracked `sites/ai-news-blogger/` path and wrong top-level ownership on `apps` / `infra` (`root:root`)
+  - confirmed the untracked path matched tracked source-safe files already present on `main`, so it was backed up to `/var/lib/autoblog/backups/git-prepull-20260416151315/ai-news-blogger/` before the pull
+  - restored top-level source directory ownership to `autoblog:autoblog` for `/srv/auto-blog-project/apps` and `/srv/auto-blog-project/infra`
+  - ran the safe Git flow as `autoblog`: `git fetch origin` then `git pull --ff-only origin main`
+  - production clone fast-forwarded from `1f5aaf2dcec26e0438a5ee7b3cfab02919e87583` to `a995e27d6f63474f7dd5031253340752fc910967`
+  - verified `HEAD == origin/main == a995e27d6f63474f7dd5031253340752fc910967` and `git status --porcelain=v2 --branch` is now clean (`branch.ab +0 -0`)
+  - verified ownership for the pulled source paths is now `autoblog:autoblog`
+  - compared SHA-256 checksums for the backed-up and pulled `sites/ai-news-blogger/{README.md,site.blueprint.json}` files; they match exactly, so no source-safe site changes were lost during the cleanup
+- Investigated the image-generation retry anomaly on April 16, 2026:
+  - live production `/etc/autoblog/n8n.env` is already `IMAGE_MODEL=bytedance/seedream-4.5`
+  - the running n8n container also sees `IMAGE_MODEL=bytedance/seedream-4.5`
+  - the live workflow source and stored n8n workflow still contain the string `openai/gpt-image-1.5`, but only as a code-path check for the old aspect-ratio fallback, not as the default model URL
+  - the latest failing retries for `image_generation_worker` are executions `41144`, `41126`, `41125`
+  - execution `41144` is a `retry` with `parentExecutionId=41054`, and its stored Replicate prediction payload explicitly shows `model=openai/gpt-image-1.5`
+  - the upstream failure in that retry is `helpers.exceptions.prediction.ModelError: Service is currently unavailable due to high demand. Please try again later. (E003)`
+  - therefore the current retry behavior is reusing a stale failed prediction created under the old GPT-image model, instead of creating a fresh prediction with the current `seedream` env
 
 ## Decisions
 - Use the existing Stripe Billing + Checkout + Customer Portal integration flow; only adjust UI copy/CTA behavior and temporary production env values for the test.
@@ -219,6 +239,11 @@
 - Clean up the VPS git strategy separately:
   - restore GitHub access for the server clone (`origin` currently uses SSH and fails)
   - reconcile the existing dirty worktree (`sites/daily-beauty-lab` renames and synced source files) so future deploys can use normal `git pull --ff-only`
+- Once VPS SSH reachability is restored, rerun the guarded production clone sync in this order:
+  - no longer needed for this push; the clone has already been fast-forwarded and verified aligned
+- For image-generation tests after a model switch, do not rely on `retry` of an old failed `Upload to Sanity + Patch article` execution if you want the new model to be exercised:
+  - rerun from `Generate Image (Replicate)` or launch a fresh workflow execution so a new prediction is created under the current env
+  - optionally add a workflow-level recovery path later that regenerates a new prediction automatically when a retry sees a stale failed prediction/model mismatch
 
 ## Risks
 - Prepopulate will now take proportionally longer to reach its target published count because it no longer uses larger per-run batches; this is an intentional tradeoff for simpler and more predictable worker behavior.
@@ -230,3 +255,8 @@
 - The VPS clone is operationally aligned with the pushed source for the touched files, but it is still not a clean git checkout:
   - synced files show as modified/untracked relative to the old local commit
   - future ops should not assume `git status` is clean on `/srv/auto-blog-project` until the remote access + worktree cleanup is handled
+- At the moment, VPS Git alignment for the newest `main` push is unverified because the server is not reachable over SSH from this environment; do not assume the production clone has been pulled forward.
+- A pre-pull backup copy of `sites/ai-news-blogger/` now exists under `/var/lib/autoblog/backups/git-prepull-20260416151315/`; it is redundant with the pulled Git-tracked version, but was intentionally preserved as a safety snapshot.
+- n8n `retry` on a failed image upload/poll step can be misleading after an image-model switch:
+  - it may continue polling or surfacing the original failed prediction object from the parent execution instead of creating a new prediction with the current `IMAGE_MODEL`
+  - this makes old `gpt-image-1.5` artifacts appear even when the live env has already moved to `bytedance/seedream-4.5`

@@ -21,6 +21,9 @@ This file stores durable project context shared across tasks.
 - Install deps: `npm install`
 - Start local stack: `./scripts/dev-up.sh`
 - Stop local stack: `./scripts/dev-down.sh`
+- Bootstrap Tailscale on the production VPS over SSH: `./scripts/vps-enable-tailscale.sh --host root@87.106.29.31 --identity ~/.ssh/autoblog_ionos --hostname autoblog-ops-prod [--auth-key tskey-...]`
+- Open a local tunnel to production Factory UI over SSH/Tailscale: `./scripts/ops-factory-tunnel.sh --host autoblog@<tailscale-ip-or-name>`
+- Daily production SSH over Tailscale: `ssh -i ~/.ssh/autoblog_ionos autoblog@autoblog-ops-prod.tail2bbeab.ts.net`
 - Import changed n8n workflows: `npm run n8n:import:changed`
 - Check + import + smoke changed n8n workflows: `npm run n8n:test:flows`
 - Sync source-safe site files into the repo: `npm run site:sync:source -- <site-dir>`
@@ -144,6 +147,11 @@ This file stores durable project context shared across tasks.
   - Factory API richiede `x-factory-secret` (`FACTORY_API_SECRET`) oppure `x-internal-token` (`INTERNAL_API_TOKEN`).
   - Pagina `/ops/factory` protetta con HTTP Basic Auth (`FACTORY_UI_USERNAME`, `FACTORY_UI_PASSWORD`; fallback password a `FACTORY_API_SECRET`).
   - Webhook n8n `plan-automation` e `factory-prepopulate` validano `INTERNAL_API_TOKEN` prima di procedere.
+  - Su VPS production, il firewall provider resta un controllo di porta/IP: non puo' proteggere da solo un path privato servito su `443` come `/ops/factory`.
+  - Per accessi admin con IP domestico instabile, la baseline consigliata e' una rete privata/stabile (`WireGuard`, `Tailscale` o bastion).
+  - Stato production corrente: `22/tcp` pubblica chiusa nel firewall provider, `SSH` via Tailscale al solo utente `autoblog`, `sudo` passwordless abilitato per `autoblog`, root SSH disabilitato.
+  - Per production, l'accesso preferito a `/ops/factory` e' via SSH tunnel verso `127.0.0.1:8787` sopra la rete admin privata; la route pubblica `nginx` dovrebbe restare `deny all`.
+  - Non lasciare backup o copie di config `nginx` dentro `/etc/nginx/sites-enabled/`: il glob di include li carica e puo' creare `server_name` duplicati/warning.
 - Batch workers controllati da env n8n:
   - `ARTICLE_BATCH_SIZE`
   - `IMAGE_BATCH_SIZE`
@@ -219,6 +227,7 @@ This file stores durable project context shared across tasks.
 - Hostname ops production correnti:
   - engine / portal / factory: `https://aiblogs.earningsites.net`
   - n8n editor / webhook: `https://n8n.earningsites.net`
+  - quando `n8n` gira dietro `nginx`/reverse proxy che inoltra `X-Forwarded-For`, l'env n8n deve includere `N8N_PROXY_HOPS=1` e `infra/n8n/docker-compose.yml` deve propagare esplicitamente quella variabile al container; senza questo, l'editor puo' loggare `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` e diventare instabile
 - Sanity content queries by site:
   - `article`, `topicCandidate`, `category` e `authorProfile` usano il campo stringa `siteSlug` come filtro principale; non assumere una reference `site.slug.current` nei check o nei cleanup.
   - per un reset E2E davvero pulito usare `scripts/sanity-cleanup.mjs --site-slug <slug> --include-topics`, altrimenti i `topicCandidate` residui restano nel dataset.

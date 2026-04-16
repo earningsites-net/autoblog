@@ -65,6 +65,15 @@ Nota operativa:
 
 - se la policy di default apre porte di management come `8443` o `8447`, chiudile
 - usa `nginx` come unico entrypoint pubblico per le app
+- il firewall IONOS lavora per porta/IP, non per path: una pagina privata come `/ops/factory` che passa su `443` va protetta a livello `nginx` o resa raggiungibile solo da rete admin privata
+
+Se il tuo IP domestico cambia spesso, non usare come soluzione stabile una sequenza infinita di allowlist `/32` o CIDR residenziali troppo ampi. Ordine consigliato:
+
+1. preferito: rete admin privata/stabile (`WireGuard`, `Tailscale` o bastion) e accessi admin solo da li'
+2. fallback accettabile: `22/tcp` aperta a Internet solo con `SSH` hardenizzato (`PubkeyAuthentication yes`, `PasswordAuthentication no`, `PermitRootLogin no`, `AllowUsers autoblog`, `fail2ban` attivo)
+3. workaround temporaneo: aprire `22/tcp` a un IP/range piu ampio solo per bootstrap o recovery, poi richiudere
+
+Per gli IP osservati finora (`93.56.169.173`, `93.56.168.49`, `93.56.161.89`), il minimo supernet che li copre tutti e' `93.56.160.0/20`: puo' ridurre i lockout, ma non va considerato il controllo principale di lungo periodo.
 
 ## 4. DNS
 
@@ -113,21 +122,85 @@ install -d -m 700 -o autoblog -g autoblog /home/autoblog/.ssh
 cp /root/.ssh/authorized_keys /home/autoblog/.ssh/authorized_keys
 chown autoblog:autoblog /home/autoblog/.ssh/authorized_keys
 chmod 600 /home/autoblog/.ssh/authorized_keys
+cat <<'EOF' >/etc/sudoers.d/90-autoblog-nopasswd
+autoblog ALL=(ALL:ALL) NOPASSWD:ALL
+EOF
+chmod 440 /etc/sudoers.d/90-autoblog-nopasswd
+visudo -cf /etc/sudoers.d/90-autoblog-nopasswd
 ```
 
 Verifica login:
 
 ```bash
 ssh -i ~/.ssh/autoblog_ionos autoblog@87.106.29.31
+ssh -i ~/.ssh/autoblog_ionos autoblog@87.106.29.31 'sudo -n true'
 ```
 
-Solo dopo la verifica, disabilita password e root login:
+Solo dopo la verifica, limita `SSH` al solo utente `autoblog` con chiavi pubbliche:
 
 ```bash
 sudo sed -i 's/^#\\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
 sudo sed -i 's/^#\\?PermitRootLogin .*/PermitRootLogin no/' /etc/ssh/sshd_config
-sudo systemctl restart ssh
+grep -q '^PubkeyAuthentication ' /etc/ssh/sshd_config || echo 'PubkeyAuthentication yes' | sudo tee -a /etc/ssh/sshd_config
+sudo sed -i 's/^PubkeyAuthentication .*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+grep -q '^AuthenticationMethods ' /etc/ssh/sshd_config || echo 'AuthenticationMethods publickey' | sudo tee -a /etc/ssh/sshd_config
+sudo sed -i 's/^AuthenticationMethods .*/AuthenticationMethods publickey/' /etc/ssh/sshd_config
+grep -q '^AllowUsers ' /etc/ssh/sshd_config || echo 'AllowUsers autoblog' | sudo tee -a /etc/ssh/sshd_config
+sudo sed -i 's/^AllowUsers .*/AllowUsers autoblog/' /etc/ssh/sshd_config
+sudo sshd -t
+sudo systemctl reload ssh
 ```
+
+## 5b. Rete admin Tailscale (consigliata)
+
+Se il tuo IP domestico cambia spesso, sposta l'accesso admin su `Tailscale` e usa `SSH` sopra la tailnet invece di dipendere da una allowlist pubblica su `22/tcp`.
+
+Prerequisito per la prima installazione:
+
+- se `22/tcp` e' gia bloccata per il tuo IP attuale, aprila temporaneamente dal pannello IONOS per il tuo IP corrente oppure usa la console provider
+
+Sul tuo computer admin:
+
+1. Installa `Tailscale` e accedi al tailnet che userai per l'admin.
+2. Dal pannello Tailscale genera preferibilmente una `one-off auth key` per il VPS; se hai `device approval`, abilita anche `pre-approved`.
+
+Bootstrap del VPS:
+
+```bash
+cd /Users/danilociamprone/Documents/Auto\ blog\ project
+./scripts/vps-enable-tailscale.sh \
+  --host root@87.106.29.31 \
+  --identity ~/.ssh/autoblog_ionos \
+  --hostname autoblog-ops-prod \
+  --auth-key tskey-xxxxxxxx
+```
+
+Se non passi `--auth-key`, lo script installa `tailscaled` e ti stampa il comando `tailscale up ...` da completare manualmente sul VPS.
+
+Verifica sul VPS:
+
+```bash
+tailscale status
+tailscale ip -4
+```
+
+Accesso consigliato dopo il bootstrap:
+
+- usa l'IP Tailscale del VPS (`100.x.y.z`) oppure il nome MagicDNS se lo hai attivo
+- continua a usare `OpenSSH` normale, ma sopra la rete Tailscale, come utente `autoblog`
+
+Esempio:
+
+```bash
+ssh -i ~/.ssh/autoblog_ionos autoblog@100.x.y.z
+ssh -i ~/.ssh/autoblog_ionos autoblog@autoblog-ops-prod.<magicdns-suffix>
+```
+
+Solo dopo che questo login funziona in modo affidabile:
+
+- chiudi `22/tcp` nel firewall pubblico IONOS
+- mantieni `80/tcp` e `443/tcp` pubbliche
+- lascia `8787` e `5678` non esposte
 
 ## 6. Docker
 
@@ -259,6 +332,7 @@ Valori da allineare in `/etc/autoblog/n8n.env`:
 
 - `N8N_HOST=n8n.earningsites.net`
 - `N8N_PROTOCOL=https`
+- `N8N_PROXY_HOPS=1` quando `n8n` gira dietro `nginx` sullo stesso VPS
 - `POSTGRES_PORT=5432` (porta esposta solo su `127.0.0.1`, non pubblica)
 
 ## 10b. Portal Postgres dedicato nello stesso server
@@ -434,8 +508,11 @@ server {
     proxy_pass http://127.0.0.1:5678;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Host $host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
   }
 }
 EOF
@@ -462,6 +539,7 @@ Installa la configurazione HTTPS di esempio solo dopo avere i certificati:
 sudo cp /srv/auto-blog-project/infra/ops/nginx/engine-and-factory.conf.example /etc/nginx/sites-available/autoblog-ops
 sudo ln -sf /etc/nginx/sites-available/autoblog-ops /etc/nginx/sites-enabled/autoblog-ops
 sudo rm -f /etc/nginx/sites-enabled/autoblog-ops-http
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 ```
@@ -473,22 +551,35 @@ Nota su Certbot:
 - quindi anche il blocco `server_name n8n.earningsites.net` usa:
   - `/etc/letsencrypt/live/aiblogs.earningsites.net/fullchain.pem`
   - `/etc/letsencrypt/live/aiblogs.earningsites.net/privkey.pem`
+- per `n8n`, mantieni anche `proxy_set_header X-Forwarded-Host $host`, `Upgrade` e `Connection "upgrade"` nel blocco reverse proxy; senza questi header l'editor può perdere la connessione durante `Execute workflow`
 
-Prima del reload finale, sostituisci la allowlist di `/ops/factory` con il tuo IP pubblico o con il range della VPN.
+Per la `Factory UI`, il percorso consigliato non e' piu una allowlist di IP pubblici. Tieni la route pubblica bloccata in `nginx` e usala tramite tunnel SSH sopra `Tailscale`.
 Esempio:
 
 ```nginx
 location /ops/factory {
-  allow 203.0.113.10/32;
   deny all;
-
-  proxy_pass http://127.0.0.1:8787/ops/factory;
-  proxy_http_version 1.1;
-  proxy_set_header Host $host;
-  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-  proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
+
+Per aprirla dal computer admin:
+
+```bash
+cd /Users/danilociamprone/Documents/Auto\ blog\ project
+./scripts/ops-factory-tunnel.sh --host autoblog@100.x.y.z
+```
+
+Poi apri:
+
+```text
+http://127.0.0.1:8788/ops/factory
+```
+
+Questo percorso bypassa `nginx` per la sola UI ops, evita lockout dovuti all'IP domestico e mantiene comunque la `Basic Auth` applicativa.
+
+Nota operativa:
+
+- se fai un backup manuale di `autoblog-ops`, non lasciarlo dentro `/etc/nginx/sites-enabled/`: `nginx` include tutti i file del glob e potresti reintrodurre warning o conflitti di `server_name`
 
 Verifica:
 

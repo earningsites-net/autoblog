@@ -46,10 +46,27 @@
   - il successivo `git pull --ff-only origin main` sulla VPS fallisce con `The following untracked working tree files would be overwritten by merge`, confermando che quei file vanno prima spostati o rimossi dal clone e solo dopo assorbiti tramite Git dal commit gia' pushato
 - Implementata una correzione architetturale per ridurre il problema alla radice:
   - introdotto supporto a `AUTOBLOG_SOURCE_SITES_ROOT` (alias legacy `AUTOBLOG_SITE_SOURCE_ROOT`) in engine e CLI per tenere i file source-safe dei siti fuori dal clone Git production
+  - questo non cambia il source of truth Git: `site.blueprint.json` e `README.md` restano file da pullare in locale, committare e pushare su `main`; cambia solo il luogo in cui la Factory li crea inizialmente sulla VPS
   - `LocalSiteRegistry`, `SiteRuntimeService` e i resolver shared ora leggono i blueprint dal source root configurato invece di assumere sempre `./sites`
   - aggiunto fallback compatibile al path legacy `./sites`, cosi i siti esistenti nel repo continuano a funzionare anche durante una migrazione graduale al source root esterno
   - `scripts/site-pull.mjs` ora rileva automaticamente sia il layout nuovo consigliato (`/var/lib/autoblog/source-sites`) sia quello legacy nel clone (`/srv/auto-blog-project/sites`)
   - aggiornata la documentazione operativa (`docs/context.md`, `docs/factory.md`, `docs/deploy/ionos-vps-ops.md`)
+- Chiarito il tradeoff architetturale con l'approccio `local-first`:
+  - sarebbe piu' semplice per l'allineamento Git puro, perche' il sito nascerebbe subito nella repo locale
+  - ma non e' automaticamente piu' semplice per l'intero flusso production, dato che Factory oggi gira sulla VPS e interagisce con runtime live, registry, env per-sito, portal store e servizi ops
+  - per l'assetto attuale, la correzione piu' pragmatica e' separare Factory dal clone Git production, non spostare tutta la creazione sito sul laptop
+- Chiarito cosa crea davvero la Factory sulla VPS:
+  - source-safe site files: `site.blueprint.json` e `README.md`
+  - runtime per-site: `.env.generated`, `seed-content/*`, `handoff/*`
+  - registry entry nel runtime (`sites/registry.json` sotto `AUTOBLOG_RUNTIME_ROOT`)
+  - payload JSON per il seed CMS e per i topic candidate
+  - opzionalmente mutazioni applicate su Sanity (`siteSettings`, `category`, `tag`, `authorProfile`, `promptPreset`, `topicCandidate`)
+  - opzionalmente trigger verso n8n per `prepopulate`
+  - opzionalmente provisioning owner/admin access lato portal/engine
+- Chiarito perche' la Factory materializza comunque un blueprint sulla VPS:
+  - non perche' Vercel legga quel file dalla VPS
+  - ma perche' i passaggi della Factory che girano sulla VPS (`theme-generate`, `provision-env`, `init-content`, `seed-cms`, `discover-topics`, `handoff-pack`) usano il blueprint file come input persistente condiviso
+  - il blueprint creato sulla VPS e' quindi una copia operativa/draft locale al flusso production; la copia che finisce in GitHub dopo `site:pull` + commit/push resta il source of truth versionato per web/Vercel
 - Verifica tecnica della patch architetturale:
   - `npm --workspace @autoblog/engine run typecheck` -> ok
   - `node --check scripts/site-pull.mjs` -> ok

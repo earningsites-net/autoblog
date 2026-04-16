@@ -182,3 +182,9 @@ solo alla fine rimuovere dal repo:
 
 - sites/<id-blog>/site.blueprint.json
 - eventuale sites/<id-blog>/README.md
+
+## Tailscale
+Per l’uso quotidiano:
+
+SSH: ssh -i ~/.ssh/autoblog_ionos autoblog@100.68.245.109
+Factory UI: ./scripts/ops-factory-tunnel.sh --host autoblog@100.68.245.109, poi apri http://127.0.0.1:8788/ops/factory

@@ -18,18 +18,13 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
   }
 
-  # Keep Factory UI private: replace this allowlist with your public IP or VPN range
-  # and keep app-level Basic Auth enabled.
+  # Keep Factory UI off the public internet.
+  # Preferred access path:
+  # 1. join the admin tailnet
+  # 2. open an SSH tunnel to 127.0.0.1:8787
+  # 3. browse http://127.0.0.1:<local-port>/ops/factory
   location /ops/factory {
-    allow 10.0.0.0/8;
-    allow 192.168.0.0/16;
     deny all;
-
-    proxy_pass http://127.0.0.1:8787/ops/factory;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
   }
 }
 
@@ -45,7 +40,10 @@ server {
     proxy_pass http://127.0.0.1:5678;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Host $host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
   }
 }

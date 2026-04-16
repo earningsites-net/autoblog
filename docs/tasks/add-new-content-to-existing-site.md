@@ -1,0 +1,189 @@
+# Task: add-new-content-to-existing-site
+
+## Goal
+- Completare la pubblicazione del sito `ai-news-blogger` recuperando gli articoli rimasti in `draft`, generando le immagini mancanti con il nuovo modello e pubblicando in modo coerente con la strategia desiderata.
+
+## Done
+- Analizzato il blueprint e l'env del sito `ai-news-blogger`.
+- Verificato che `image_generation_worker` recupera articoli `draft` senza `coverImage` e salva `coverImage.modelVersion` usando `IMAGE_MODEL`.
+- Verificato il meccanismo di selezione del contenuto in `image_generation_worker`:
+- non riceve un `articleId`
+- risolve prima `siteSlug` da input o da env
+- poi interroga Sanity con filtro `siteSlug == <slug> && status == "draft" && !defined(coverImage)` e prende il primo per `_createdAt asc`
+- Verificato che la UI n8n documenta il pinning/mock dei dati sull'`Execute Sub-workflow Trigger`, utile per testare manualmente un subworkflow passando `siteSlug` senza creare un workflow parent dedicato.
+- Verificato dalle docs n8n che il pinning vale solo per esecuzioni manuali nell'editor e non per production executions; il messaggio UI `Node will always output current data instead of executing. Doesn't apply to production executions.` e' informativo, non un errore.
+- Chiarito che, nella UI attuale, il percorso pratico per ottenere dati pinnati su un subworkflow trigger e' partire da una execution passata (`Copy to editor` / `Debug in editor`), che pinna i dati nel primo nodo del workflow.
+- Verificato sulle docs n8n che `Debug in editor` / `Copy to editor` e' disponibile su `n8n Cloud` e `registered Community plans`, quindi puo' effettivamente risultare non disponibile nel setup corrente.
+- Verificato sulle docs n8n che su self-hosted esiste il CLI command `n8n execute --id <ID>` per avviare un workflow salvato direttamente dal container/processo n8n.
+- Verificato che `qa_scoring_and_publish_worker` recupera articoli `draft` con immagine e:
+- pubblica subito se `pipelineMode` e' `prepopulate_bulk_direct`
+- mette in `ready_to_publish` solo se `pipelineMode` e' `steady_scheduled`
+- Verificato che `publish_scheduler_worker` pubblica solo articoli gia' in `ready_to_publish`.
+- Verificato che `prepopulate_bulk_runner` non e' adatto al recovery dei draft esistenti perche' riesegue anche `article_generation_worker` e quindi rischia di creare altro contenuto invece di chiudere solo l'arretrato.
+- Verificato che nell'env production del repo `infra/n8n/.env.production` `SITE_SLUG` e' vuoto, quindi un run manuale del worker senza input non ha un sito di default da usare.
+- Verificato che il compose locale usa `n8nio/n8n:latest`, quindi la funzione UI documentata per subworkflow recenti e' coerente con il setup repo.
+- Verificato sulle docs n8n che:
+- `n8n execute --id <ID>` e' il comando CLI corretto per eseguire un workflow salvato in Docker
+- `N8N_RUNNERS_BROKER_PORT` ha default `5679`
+- `N8N_RUNNERS_ENABLED` puo' essere disabilitato via env
+- l'errore `Task Broker's port 5679 is already in use` e' coerente con il tentativo di avviare un secondo processo n8n nel container mentre l'istanza principale occupa gia' quella porta
+- Verificato in pratica che il workaround CLI con override env non risolve nel setup corrente: il comando continua a fallire con conflitto sul task broker.
+- Da questo segue che, nel setup attuale, `n8n execute` non e' un percorso operativo affidabile per questi worker con Code nodes.
+- Chiarito che il file env production di n8n (`/etc/autoblog/n8n.env`) e' tipicamente installato con permessi root-only (`600`), quindi una scrittura diretta come utente operativo non privilegiato fallisce con `Permission denied`.
+- Verificato dai runbook che lo stack production n8n gira dietro `systemd` + `docker compose` (`autoblog-n8n`) e che i check diagnostici standard sono `systemctl status` e `docker compose logs`.
+- Chiarito che l'errore UI `Problem running workflow / Lost connection to the server` punta prima di tutto a un problema di connessione o restart/crash del servizio n8n durante il run, non a una normale validazione del workflow.
+- Verificato nel task `recurring-firewall-problems` che le modifiche recenti con `Tailscale` hanno riguardato soprattutto:
+- accesso `SSH`
+- route pubblica di `/ops/factory`
+- chiusura di `22/tcp` pubblico
+- Lo stesso task conferma invece che `https://n8n.earningsites.net/` restava pubblicamente raggiungibile `200`, quindi quelle modifiche non spiegano da sole una disconnessione dell'editor n8n durante un run.
+- Eseguiti check runtime live sul VPS production:
+- `autoblog-n8n.service` risulta `active (exited)` come oneshot systemd, con recreate dello stack alle `16:27:42-16:27:54` del `2026-04-16`
+- i container `autoblog-n8n` e `autoblog-postgres` risultano `Up`
+- `https://n8n.earningsites.net/` risponde `HTTP/2 200`
+- nel file env live `/etc/autoblog/n8n.env` `SITE_SLUG=ai-news-blogger` e' gia impostato
+- nel file env live non compare `N8N_PROXY_HOPS`
+- nel live nginx per `n8n.earningsites.net` vengono inoltrati `X-Forwarded-For` e `X-Forwarded-Proto`
+- nei log del container n8n compare l'errore `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`, coerente con n8n dietro reverse proxy senza `trust proxy` configurato
+- Applicata modifica live minimamente invasiva:
+- backup env creato su VPS: `/etc/autoblog/n8n.env.bak-20260416164549`
+- aggiunto `N8N_PROXY_HOPS=1` a `/etc/autoblog/n8n.env`
+- riavviato `autoblog-n8n`
+- Esito del test post-restart:
+- il servizio e i container tornano `Up`
+- `https://n8n.earningsites.net/` continua a rispondere `200`
+- l'errore `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` compare ancora nei log
+- Individuata la causa del fix inefficace:
+- `infra/n8n/docker-compose.yml` passa al container solo una whitelist esplicita di env
+- `N8N_PROXY_HOPS` non e' presente in quella whitelist
+- quindi aggiungerlo a `/etc/autoblog/n8n.env` oggi non cambia davvero l'env del container n8n
+- Patchato il repo locale con il fix durevole:
+- `infra/n8n/docker-compose.yml` ora passa `N8N_PROXY_HOPS` al container
+- `infra/n8n/.env.example` documenta `N8N_PROXY_HOPS=1`
+- `docs/context.md` registra il caveat deploy per n8n dietro nginx
+- Applicato anche hotfix live sul clone production VPS:
+- backup compose creato in `/tmp/docker-compose.yml.bak-20260416171223`
+- `N8N_PROXY_HOPS: ${N8N_PROXY_HOPS}` aggiunto al compose live
+- `autoblog-n8n` riavviato
+- Verifica post-hotfix:
+- il container production espone `N8N_PROXY_HOPS=1`
+- `https://n8n.earningsites.net/` risponde `200`
+- l'errore `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` non compare piu' nell'ultimo tail di startup dei log n8n
+- Verificato che il blocco live `nginx` per `n8n.earningsites.net` non inoltrava ancora:
+- `X-Forwarded-Host`
+- `Upgrade`
+- `Connection "upgrade"`
+- Applicato hotfix live su `/etc/nginx/sites-enabled/autoblog-ops`:
+- backup live creato in `/tmp/autoblog-ops.nginx.bak-20260416172209`
+- aggiunti gli header proxy/websocket nel blocco `location /` di `n8n.earningsites.net`
+- `nginx -t` superato e reload applicato con successo
+- recheck pubblico: `https://n8n.earningsites.net/` continua a rispondere `200`
+- Completato il rollback della sola modifica temporanea di recovery:
+- `SITE_SLUG` in `/etc/autoblog/n8n.env` riportato da `ai-news-blogger` a vuoto
+- creato backup rollback env: `/etc/autoblog/n8n.env.bak-rollback-20260416173642`
+- riavviato `autoblog-n8n`
+- verifica post-rollback: `autoblog-n8n.service` attivo e `https://n8n.earningsites.net/` risponde ancora `200`
+
+## Decisions
+- Priorita' a un recovery mirato da UI n8n, non al rerun completo di `prepopulate_bulk_runner`.
+- Prima del recovery va confermato che l'env n8n attivo abbia `IMAGE_MODEL=openai/gpt-image-1.5` (gia' presente nei file env del repo).
+- Se si vuole pubblicazione scaglionata, serve forzare gli articoli arretrati su `pipelineMode=steady_scheduled` oppure usare un workflow di recovery dedicato che scriva `ready_to_publish`.
+- Senza UI, l'approccio meno invasivo e' eseguire direttamente i worker via CLI n8n passando `SITE_SLUG=ai-news-blogger` come env solo per il processo della singola esecuzione.
+- Workaround preferito per il CLI one-shot: disabilitare task runners sul processo CLI con `N8N_RUNNERS_ENABLED=false`; fallback secondario: usare una broker port diversa solo per il processo CLI.
+- Dopo il test fallito, il CLI n8n viene declassato a opzione non raccomandata per questo recovery.
+- Restano due percorsi robusti:
+- impostare temporaneamente `SITE_SLUG=ai-news-blogger` nell'env del servizio n8n e usare `Execute workflow` dalla UI
+- bypassare n8n con uno script diretto che replichi `image_generation_worker`
+- Scelta corrente: percorso piu' semplice con env del servizio n8n puntata temporaneamente a `ai-news-blogger` e run manuale dalla UI di `image_generation_worker`.
+- In base ai check live, il candidato principale per `Lost connection to the server` non e' il firewall/Tailscale ma la configurazione reverse-proxy di n8n dietro nginx.
+- Fix candidato principale: aggiungere `N8N_PROXY_HOPS=1` all'env live di n8n e riavviare `autoblog-n8n`.
+- Correzione della decisione precedente: il fix giusto non e' solo aggiornare l'env live, ma anche propagare `N8N_PROXY_HOPS` dentro il container n8n modificando il compose/deploy path che whitelista le env.
+- `N8N_PROXY_HOPS=1` non va trattato come workaround temporaneo: con un solo hop `nginx -> n8n` puo' restare in modo permanente.
+- La modifica temporanea da riportare indietro a fine recovery resta `SITE_SLUG=ai-news-blogger` nell'env live n8n.
+- Il compose live del VPS ora diverge volontariamente dal repo remoto finche' il fix non viene allineato via normale percorso Git/deploy.
+- Oltre a `N8N_PROXY_HOPS=1`, il reverse proxy live di n8n necessita degli header `X-Forwarded-Host`, `Upgrade` e `Connection \"upgrade\"` per evitare disconnessioni dell'editor dietro nginx.
+- Per gli articoli arretrati di `ai-news-blogger`, lanciare `qa_scoring_and_publish_worker` con `Execute workflow` e' adatto solo se va bene la pubblicazione immediata dei draft con immagine.
+- Se serve pubblicazione scaglionata via scheduler, non basta lanciare il QA worker standard: prima va corretto `pipelineMode` degli articoli o va usato un percorso separato che li metta in `ready_to_publish`.
+- Percorso operativo corrente: dopo il recovery immagini, usare `qa_scoring_and_publish_worker` con `Execute workflow` solo se l'obiettivo e' far uscire subito gli articoli recuperati.
+
+## Next
+- Scegliere tra:
+- recovery rapido da UI n8n con publish diretto dei draft arretrati
+- recovery da UI n8n con coda `ready_to_publish` e publish via scheduler
+- Per il recovery immagini senza nuovo flow:
+- aprire una execution esistente di `image_generation_worker` o di un parent che lo ha chiamato
+- usare `Copy to editor` o `Debug in editor`
+- modificare i dati pinnati del primo nodo in `siteSlug: ai-news-blogger`
+- eseguire il workflow piu' volte, una volta per articolo mancante
+- Se il pin sul trigger non e' comodo nella tua UI, alternativa minima:
+- duplicare temporaneamente il workflow
+- sostituire il trigger con `Manual Trigger` + `Edit Fields` che emette `siteSlug=ai-news-blogger`
+- eseguire e poi eliminare la copia
+- Recovery senza UI:
+- eseguire `image_generation_worker` via CLI n8n con override env `SITE_SLUG=ai-news-blogger`
+- ripetere finche' la query non trova piu' draft senza immagine
+- valutare con attenzione se eseguire `qa_scoring_and_publish_worker` via CLI, perche' sui draft prepopulate tende a pubblicare subito
+- Comando candidato su installazione Docker self-hosted:
+- `docker exec -e SITE_SLUG=ai-news-blogger -u node autoblog-n8n n8n execute --id <workflow-id-image>`
+- con workflow id production atteso da env repo: `vn06sSxBlwZ1xfNb`
+- Workaround da provare per primo:
+- `docker exec -e SITE_SLUG=ai-news-blogger -e N8N_RUNNERS_ENABLED=false -u node autoblog-n8n n8n execute --id vn06sSxBlwZ1xfNb`
+- Se il processo CLI richiede comunque task runners:
+- `docker exec -e SITE_SLUG=ai-news-blogger -e N8N_RUNNERS_BROKER_PORT=5689 -e N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT=5690 -u node autoblog-n8n n8n execute --id vn06sSxBlwZ1xfNb`
+- Nuovo percorso preferito:
+- se accetti un minimo di UI, impostare temporaneamente `SITE_SLUG=ai-news-blogger` nel servizio n8n e riavviare n8n; poi `image_generation_worker` puo' essere lanciato con semplice `Execute workflow`
+- se vuoi zero UI, preparare uno script Node dedicato che:
+- query Sanity per il primo draft senza immagine del sito
+- genera l'immagine con lo stesso modello/prompt del worker
+- carica l'asset su Sanity e patcha l'articolo
+- Passi pratici scelti:
+- aggiornare la n8n env corretta
+- riavviare n8n
+- eseguire `image_generation_worker` piu' volte dalla UI
+- poi verificare quanti draft con immagine restano e decidere il publish
+- Se l'editor mostra `Lost connection to the server`:
+- verificare subito stato servizio `autoblog-n8n`
+- leggere gli ultimi log del compose `n8n`
+- solo dopo distinguere se il problema e' restart del servizio, crash del container, proxy/nginx o un errore interno del workflow
+- Prossimo step raccomandato:
+- aggiungere `N8N_PROXY_HOPS=1` in `/etc/autoblog/n8n.env`
+- riavviare `autoblog-n8n`
+- ritentare `Execute workflow` su `image_generation_worker`
+- Nuovo prossimo step corretto:
+- aggiornare `infra/n8n/docker-compose.yml` per esporre anche `N8N_PROXY_HOPS` al container
+- fare deploy controllato del compose aggiornato in production
+- poi ritentare `Execute workflow`
+- rollback disponibile gia' ora per la sola env live con backup `/etc/autoblog/n8n.env.bak-20260416164549`
+- Prossimo step operativo utente:
+- ritentare `Execute workflow` su `image_generation_worker` dalla UI production
+- se il run parte, ripeterlo finche' `Fetch drafts missing image` restituisce `0 items`
+- Se l'obiettivo immediato e' pubblicare tutto il batch recuperato:
+- lanciare `qa_scoring_and_publish_worker` con `Execute workflow`
+- aspettarsi publish immediato dei draft con immagine del sito corrente
+- Dopo il publish batch:
+- riportare `SITE_SLUG` al valore precedente in `/etc/autoblog/n8n.env`
+- riavviare `autoblog-n8n`
+- Fatto: `SITE_SLUG` rollbackato e servizio riavviato
+- a fine recovery:
+- riportare `SITE_SLUG` al valore precedente in `/etc/autoblog/n8n.env`
+- riavviare `autoblog-n8n`
+- allineare il fix del compose live al repo remoto con il normale percorso Git/deploy, per eliminare la divergenza temporanea del clone production
+- Allineamento ancora da fare nel repo/deploy path:
+- riportare anche il fix nginx live negli esempi/config versionate del repo se vogliamo evitare regressioni future
+- Se si sceglie la coda scheduler, creare in UI n8n un workflow temporaneo di recovery che:
+- legge `draft` senza immagine per `siteSlug`
+- genera/uploada immagine
+- esegue QA
+- patcha `status=ready_to_publish` e `pipelineMode=steady_scheduled`
+
+## Risks
+- Rilanciare `prepopulate_bulk_runner` puo' generare nuovi articoli oltre a quelli gia' rimasti in `draft`.
+- Eseguire `qa_scoring_and_publish_worker` sui draft esistenti senza correggere `pipelineMode` porta con alta probabilita' a publish immediato.
+- I worker template processano `1` articolo per run nelle query correnti (`[0...1]`), quindi dalla sola UI standard il recovery puo' richiedere run ripetuti se non si costruisce un wrapper/loop dedicato.
+- Un `Execute workflow` manuale su `image_generation_worker` senza `siteSlug` esplicito o env di fallback puo' fallire prima ancora di interrogare Sanity.
+- Modificare `/etc/autoblog/n8n.env` richiede privilegi adeguati; farlo da editor/file manager senza `sudo` fallisce per design.
+- Un tentativo di `Execute workflow` sull'editor puo' perdere la sessione se il container `autoblog-n8n` viene ricreato/restartato o se il processo n8n crasha durante il run; senza log runtime non si puo' distinguere il caso con certezza.
+- E' possibile confondere un problema firewall/Tailscale con un restart del servizio, ma in base alla documentazione locale il firewall recente non dovrebbe aver reso privato `n8n.earningsites.net`; senza log, attribuire l'errore alla rete sarebbe debole.
+- Finche' il compose fix resta solo sul clone production VPS e nel workspace locale ma non su `origin/main`, il clone production e il repo remoto non sono allineati; evitare `git pull` sul VPS senza prima integrare correttamente il fix via Git.
+- Anche il file live `nginx` ora diverge dal template versionato del repo; trattarlo come hotfix temporaneo finche' non viene riportato nel normale percorso Git/deploy.
+- Fare rollback anche di `N8N_PROXY_HOPS=1` o degli header nginx websocket/proxy farebbe riemergere il rischio di instabilita' dell'editor n8n dietro reverse proxy.

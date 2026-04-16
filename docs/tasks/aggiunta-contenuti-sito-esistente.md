@@ -36,6 +36,10 @@
   - `IK5hWdMSdBZKr51n` attivo e aggiornato con l'ultimo sync (`2026-04-02`)
 - Verificato che il file sorgente `infra/n8n/workflows/prepopulate_bulk_runner.json` non ha un `id` fisso, quindi storicamente i reimport locali hanno potuto generare duplicati.
 - Verificato che il `no-op` del prepopulate è coerente con il codice: se `publishedCount >= targetPublishedCount`, il runner restituisce `noWorkNeeded=true`.
+- Riverificato che il workflow `image_generation_worker` corrente costruisce sempre la chiamata Replicate come `/v1/models/<IMAGE_MODEL>/predictions`, invia `input.prompt` + `input.aspect_ratio` e si aspetta in output un URL immagine scaricabile.
+- Verificata la compatibilità di `bytedance/seedream-4.5` rispetto al workflow immagini corrente confrontando schema Replicate e payload locale.
+- Verificato e aggiornato il runtime n8n di produzione in `/etc/autoblog/n8n.env` per un test con `IMAGE_MODEL=bytedance/seedream-4.5` e `IMAGE_ASPECT_RATIO=3:2`.
+- Riavviato `autoblog-n8n` in produzione e verificato che il servizio sia tornato `active` con le nuove env.
 
 ## Decisions
 - Task id impostato a `aggiunta-contenuti-sito-esistente`.
@@ -52,6 +56,9 @@
 - Per i workflow senza `id` fisso nei file sorgente, l'allineamento locale va fatto assegnando esplicitamente l'ID canonico locale prima dell'import, altrimenti si rischiano nuovi duplicati.
 - L'ultimo sync locale non ha creato un nuovo duplicato di `prepopulate_bulk_runner`; ha aggiornato in-place l'ID attivo `IK5hWdMSdBZKr51n`.
 - Per aggiungere nuovi articoli via prepopulate, il `targetPublishedCount` deve essere maggiore del numero di articoli già `published`; se il sito è a `12`, un target `12` produce legittimamente `Target already reached`.
+- La domanda "basta cambiare env?" va risposta in base al contratto del workflow attivo: oggi è `env-only` solo per modelli Replicate compatibili con quel payload, non come regola generale.
+- `bytedance/seedream-4.5` è compatibile a livello di schema base (`prompt`, `aspect_ratio`, output array di URL), ma non è un drop-in sicuro con la config attuale `3:2`: alcune versioni Replicate documentate supportano solo `1:1`, e il workflow usa l'endpoint del modello senza pin di versione.
+- Per validare l'ipotesi operativa sul supporto `3:2` di Seedream, il runtime prod è stato impostato temporaneamente su `bytedance/seedream-4.5` mantenendo `IMAGE_ASPECT_RATIO=3:2`.
 
 ## Next
 - Se serve, trasformare questa procedura in documentazione permanente del repo.
@@ -62,6 +69,7 @@
 - In alternativa all'import API, applicare la modifica direttamente dalla UI n8n sul workflow `image_generation_worker`.
 - Se serve, pulire in locale i duplicati storici inattivi dei workflow n8n per ridurre confusione operativa.
 - Se serve, ripulire specificamente i tre `prepopulate_bulk_runner` inattivi legacy presenti nell'istanza locale.
+- Osservare il prossimo run immagini in produzione per confermare se la default version corrente di `bytedance/seedream-4.5` accetta davvero `3:2`.
 
 ## Risks
 - `targetPublishedCount` non è un hard cap stretto se i worker n8n elaborano più item per ciclo; per refill molto piccoli conviene allineare i batch env dei worker.
@@ -71,3 +79,5 @@
 - L'automazione `n8n:import:changed` resta bloccata finché `N8N_API_KEY` non è configurata correttamente per l'istanza locale.
 - Nel DB locale n8n restano workflow storici duplicati inattivi; la chain attiva è allineata, ma la UI può ancora mostrare copie legacy accanto ai canonici.
 - Finché `prepopulate_bulk_runner.json` resta senza `id` fisso nel source, future import non controllati possono ricreare lo stesso problema su istanze locali diverse.
+- Su modelli Replicate aggiornati frequentemente come `bytedance/seedream-4.5`, il comportamento del path `/v1/models/<owner>/<model>/predictions` può cambiare con la default version del provider; senza pin di versione non c'è stabilità piena sul supporto `aspect_ratio`.
+- Il restart di n8n ha applicato correttamente le env di test, ma un eventuale errore `aspect_ratio` potrà emergere solo al primo run immagini effettivo contro Replicate.

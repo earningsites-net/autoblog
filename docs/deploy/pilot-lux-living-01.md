@@ -135,7 +135,8 @@ node scripts/release/update-site-status.mjs \
 
 ## 5) Security Controls
 
-- Keep `/ops/factory` private (IP allowlist or private network) and keep Basic Auth enabled.
+- Keep `/ops/factory` private and keep Basic Auth enabled.
+- Preferred production access: private admin network (`Tailscale`) + SSH tunnel to `127.0.0.1:8787`, with public `nginx` route for `/ops/factory` set to `deny all`.
 - Keep `/api/factory/*` and `/v1/factory/*` protected with `x-factory-secret`.
 - Keep internal routes protected by `x-internal-token`.
 - Rotate and store secrets in a vault, not in repo.
