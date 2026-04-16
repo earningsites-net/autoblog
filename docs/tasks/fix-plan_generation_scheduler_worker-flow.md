@@ -43,6 +43,21 @@
   - restarted `autoblog-n8n`
   - verified healthy restart: Postgres reports `database system is ready to accept connections` and n8n reports `Editor is now accessible via: https://n8n.earningsites.net`
   - confirmed the auth path no longer dies with `500`: the login endpoint now returns application-level validation errors on bad payloads instead of Postgres permission failures
+- Investigated the follow-up report that `plan_generation_scheduler_worker` was "not starting anymore":
+  - production workflow `plan_generation_scheduler_worker` is active in n8n as workflow id `hV5sUOLtf4ih8wLP`
+  - fresh executions proved the workflow was still starting:
+    - scheduled trigger execution `41162` at `2026-04-16 21:00:35 CEST`
+    - manual webhook execution `41163` at `2026-04-16 21:01:26 CEST`
+  - both failed on the old production engine with the same historical `Run discover-topics refill` `400` (`No topic candidates discovered for 'daily-beauty-lab'`)
+- Deployed the refill fix to production:
+  - committed and pushed `main` as `3015c15` (`Handle empty topic refill gracefully`)
+  - on VPS production, verified clean clone state and updated `/srv/auto-blog-project` with `git fetch origin` + `git pull --ff-only origin main`
+  - restarted `autoblog-engine`
+  - verified engine health on `http://127.0.0.1:8787/healthz`
+- Verified the live scheduler path after deploy:
+  - direct production call to `POST /api/factory/site/discover-topics` for `daily-beauty-lab` now succeeds again
+  - the endpoint generated and applied `60` `brief_ready` topic mutations in production (`Transaction: C6Tof5mjTvwXcWUxnLn8qB`)
+  - post-deploy manual scheduler webhook execution `41164` completed with `status=success`
 
 ## Decisions
 - Keep the fix in the source-of-truth discovery path (`scripts/autoblog.mjs` + engine factory endpoint), not in n8n-only workflow logic.
@@ -51,10 +66,10 @@
 - Treat the n8n login incident as a separate production runtime regression in the Postgres bind mount permissions, not as a consequence of the scheduler refill fix.
 - The most plausible historical trigger is an ownership correction applied too broadly under `/srv/auto-blog-project/infra/n8n`, likely during the `add-new-content-to-existing-site` activity; the firewall/Tailscale work is not the primary suspect for this specific `500`.
 - Treat `/srv/auto-blog-project/infra/n8n/postgres` as runtime state with container-owned permissions, not as source tree content that should be mass-chowned to `autoblog:autoblog`.
+- Treat the current scheduler incident as a production rollout gap, not a trigger regression in n8n: the workflow was firing, but the engine on the VPS had not yet received the refill fix.
 
 ## Next
-- Import/deploy the updated engine code to the environment where `plan_generation_scheduler_worker` is currently failing.
-- Observe the next due production refill for `daily-beauty-lab` to confirm the node now returns either new topics or a clean no-op note.
+- Observe the next due automatic production tick for `plan_generation_scheduler_worker` to confirm the scheduled path now stays green without manual triggering.
 - If `daily-beauty-lab` starts exhausting the broader pool again, widen the site blueprint seed topics rather than relaxing dedupe.
 - Retest n8n UI login interactively now that the runtime stack is healthy again.
 - Prevent recurrence by excluding `infra/n8n/postgres` from broad source ownership fixes under `/srv/auto-blog-project`.
@@ -63,3 +78,4 @@
 - `daily-beauty-lab` still has a fairly narrow editorial seed set; the broader synthetic generator increases runway but does not make the topic space infinite.
 - Local verification ran without live Sanity reads (`fetch failed` in this sandbox), so the exact production mix/count can differ once remote existing topics/articles are included in dedupe.
 - The Postgres data dir is production runtime state; any future recursive `chown`/permission repair under `infra/n8n` can break n8n login again if it touches the bind mount.
+- `PLAN_SCHEDULER_TICK_MINUTES=60` means the scheduler does useful work on hourly ticks; intermediate schedule wakes can still be valid no-op runs.
