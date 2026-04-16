@@ -83,6 +83,19 @@
 - creato backup rollback env: `/etc/autoblog/n8n.env.bak-rollback-20260416173642`
 - riavviato `autoblog-n8n`
 - verifica post-rollback: `autoblog-n8n.service` attivo e `https://n8n.earningsites.net/` risponde ancora `200`
+- Riallineato il repo locale con un commit unico che include tutti i file in changes senza staging selettivo:
+- commit locale/pushato: `b131a19` (`Align n8n proxy and ops runbooks`)
+- `main` locale e `origin/main` ora puntano entrambi a `b131a19b639880e3a172e922fac52053a5310b07`
+- Riallineato anche il clone production `/srv/auto-blog-project`:
+- prima del pull trovato solo `infra/n8n/docker-compose.yml` modificato manualmente per l'hotfix
+- rilevata ownership errata di `/srv/auto-blog-project/infra/n8n` (`root:root`), corretta a `autoblog:autoblog`
+- eseguiti `git restore -- infra/n8n/docker-compose.yml`, `git fetch origin` e `git pull --ff-only origin main`
+- clone production ora a `b131a19b639880e3a172e922fac52053a5310b07` con `branch.ab +0 -0`
+- Riallineato anche il live nginx fuori dal clone Git:
+- `/etc/nginx/sites-available/autoblog-ops` aggiornato dal template versionato del repo
+- `/etc/nginx/sites-enabled/autoblog-ops` riportato a symlink verso `sites-available`
+- `nginx -t` e reload eseguiti con successo
+- verifica finale: `https://n8n.earningsites.net/` risponde `200`
 
 ## Decisions
 - Priorita' a un recovery mirato da UI n8n, non al rerun completo di `prepopulate_bulk_runner`.
@@ -105,6 +118,10 @@
 - Per gli articoli arretrati di `ai-news-blogger`, lanciare `qa_scoring_and_publish_worker` con `Execute workflow` e' adatto solo se va bene la pubblicazione immediata dei draft con immagine.
 - Se serve pubblicazione scaglionata via scheduler, non basta lanciare il QA worker standard: prima va corretto `pipelineMode` degli articoli o va usato un percorso separato che li metta in `ready_to_publish`.
 - Percorso operativo corrente: dopo il recovery immagini, usare `qa_scoring_and_publish_worker` con `Execute workflow` solo se l'obiettivo e' far uscire subito gli articoli recuperati.
+- I fix permanenti da mantenere dopo il recovery sono:
+- `N8N_PROXY_HOPS=1` nel runtime env live n8n
+- header reverse-proxy/websocket nel blocco nginx di `n8n.earningsites.net`
+- i relativi template/versioned files nel repo devono restare allineati al live per evitare nuovi hotfix manuali fuori banda
 
 ## Next
 - Scegliere tra:
@@ -170,6 +187,7 @@
 - allineare il fix del compose live al repo remoto con il normale percorso Git/deploy, per eliminare la divergenza temporanea del clone production
 - Allineamento ancora da fare nel repo/deploy path:
 - riportare anche il fix nginx live negli esempi/config versionate del repo se vogliamo evitare regressioni future
+- Fatto: fix nginx riportato nel repo, pushato su `main` e riallineato anche sul VPS
 - Se si sceglie la coda scheduler, creare in UI n8n un workflow temporaneo di recovery che:
 - legge `draft` senza immagine per `siteSlug`
 - genera/uploada immagine
@@ -187,3 +205,4 @@
 - Finche' il compose fix resta solo sul clone production VPS e nel workspace locale ma non su `origin/main`, il clone production e il repo remoto non sono allineati; evitare `git pull` sul VPS senza prima integrare correttamente il fix via Git.
 - Anche il file live `nginx` ora diverge dal template versionato del repo; trattarlo come hotfix temporaneo finche' non viene riportato nel normale percorso Git/deploy.
 - Fare rollback anche di `N8N_PROXY_HOPS=1` o degli header nginx websocket/proxy farebbe riemergere il rischio di instabilita' dell'editor n8n dietro reverse proxy.
+- Il runtime env live (`/etc/autoblog/n8n.env`) resta fuori Git per design: il repo documenta il requisito (`.env.example`), ma il valore effettivo `N8N_PROXY_HOPS=1` va comunque preservato e verificato anche in futuri rebuild/restore del server.
