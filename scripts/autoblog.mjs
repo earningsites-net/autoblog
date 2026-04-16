@@ -88,6 +88,16 @@ function exists(filePath) {
   return fs.existsSync(filePath);
 }
 
+function readMutationCount(filePath) {
+  if (!exists(filePath)) return 0;
+  try {
+    const payload = readJson(filePath);
+    return Array.isArray(payload?.mutations) ? payload.mutations.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function toTitleCaseFromSlug(slug) {
   return slug
     .split('-')
@@ -646,45 +656,85 @@ const TOPIC_VARIETY_PATTERNS = [
   {
     format: 'guide',
     when: () => true,
-    build: (base) => base
+    build: (rawBase) => rawBase
   },
   {
     format: 'guide',
-    when: (base) => !/\bguide\b/i.test(base),
-    build: (base) => `${base} guide`
+    when: (rawBase) => !/\bguide\b/i.test(rawBase),
+    build: (rawBase, stemBase) => `${stemBase} guide`
   },
   {
     format: 'examples',
-    when: (base) => !/\bexamples?\b/i.test(base),
-    build: (base) => `${base} examples`
+    when: (rawBase) => !/\bexamples?\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `${stemBase} examples`
   },
   {
     format: 'use-cases',
-    when: (base) => !/\buse cases?\b|\bapplications?\b/i.test(base),
-    build: (base) => `${base} use cases`
+    when: (rawBase) => !/\buse cases?\b|\bapplications?\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `${stemBase} use cases`
   },
   {
     format: 'trends',
-    when: (base) => /\b(ai|automation|tool|platform|market|industry|future|content|finance|healthcare|education|cybersecurity|commerce)\b/i.test(base)
-      && !/\btrends?\b|\bfuture\b|\boutlook\b|\bforecast\b|20\d{2}/i.test(base),
-    build: (base) => `${base} trends`
+    when: (rawBase) => /\b(ai|automation|tool|platform|market|industry|future|content|finance|healthcare|education|cybersecurity|commerce)\b/i.test(rawBase)
+      && !/\btrends?\b|\bfuture\b|\boutlook\b|\bforecast\b|20\d{2}/i.test(rawBase),
+    build: (_rawBase, stemBase) => `${stemBase} trends`
   },
   {
     format: 'comparison',
-    when: (base) => /\btools?\b|\bplatforms?\b|\bsoftware\b|\bapps?\b|\bassistants?\b/i.test(base)
-      && !/\bcompare\b|\bcomparison\b|\bversus\b|\bvs\b/i.test(base),
-    build: (base) => `${base} comparison`
+    when: (rawBase) => /\btools?\b|\bplatforms?\b|\bsoftware\b|\bapps?\b|\bassistants?\b/i.test(rawBase)
+      && !/\bcompare\b|\bcomparison\b|\bversus\b|\bvs\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `${stemBase} comparison`
   },
   {
     format: 'industry-analysis',
-    when: (base) => /\bindustry\b|\bmarket\b|\bbusiness\b|\bbusinesses\b|\bstartup\b|\bstartups\b|\bfinance\b|\bbanking\b|\be-commerce\b|\bmarketing\b|\bcustomer support\b/i.test(base)
-      && !/\bindustry analysis\b|\bmarket analysis\b/i.test(base),
-    build: (base) => `${base} industry analysis`
+    when: (rawBase) => /\bindustry\b|\bmarket\b|\bbusiness\b|\bbusinesses\b|\bstartup\b|\bstartups\b|\bfinance\b|\bbanking\b|\be-commerce\b|\bmarketing\b|\bcustomer support\b/i.test(rawBase)
+      && !/\bindustry analysis\b|\bmarket analysis\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `${stemBase} industry analysis`
   },
   {
     format: 'guide',
-    when: (base) => !/\bexplained\b/i.test(base),
-    build: (base) => `${base} explained`
+    when: (rawBase) => !/\bexplained\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `${stemBase} explained`
+  },
+  {
+    format: 'myths',
+    when: (rawBase) => !/\bmyths?\b|\bfacts?\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `myths and facts about ${stemBase}`
+  },
+  {
+    format: 'budget',
+    when: (rawBase) => !/\bbudget\b|\baffordable\b|\bcost\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `${stemBase} on a budget`
+  },
+  {
+    format: 'seasonal',
+    when: (rawBase) => !/\bseasonal\b|\bspring\b|\bsummer\b|\bautumn\b|\bfall\b|\bwinter\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `seasonal ${stemBase}`
+  },
+  {
+    format: 'essentials',
+    when: (rawBase) => !/\bessentials?\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `${stemBase} essentials`
+  },
+  {
+    format: 'goals',
+    when: (rawBase) => !/\bgoals?\b|\bneeds?\b|\buse cases?\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `${stemBase} for different goals`
+  },
+  {
+    format: 'challenges',
+    when: (rawBase) => !/\bchallenges?\b|\bobstacles?\b|\bbarriers?\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `common challenges with ${stemBase}`
+  },
+  {
+    format: 'everyday',
+    when: (rawBase) => !/\beveryday\b|\bdaily\b|\breal life\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `${stemBase} for everyday life`
+  },
+  {
+    format: 'outcomes',
+    when: (rawBase) => !/\bresults?\b|\boutcomes?\b|\bconsistency\b/i.test(rawBase),
+    build: (_rawBase, stemBase) => `${stemBase} for consistent results`
   }
 ];
 
@@ -782,6 +832,14 @@ function areTopicQueriesNearDuplicate(left, right) {
 
 function extractTopicFormat(query) {
   const raw = String(query || '').toLowerCase();
+  if (/myths?|facts?/.test(raw)) return 'myths';
+  if (/budget|affordable|cost/.test(raw)) return 'budget';
+  if (/seasonal|spring|summer|autumn|fall|winter/.test(raw)) return 'seasonal';
+  if (/essentials?/.test(raw)) return 'essentials';
+  if (/goals?|needs?/.test(raw)) return 'goals';
+  if (/challenges?|obstacles?|barriers?/.test(raw)) return 'challenges';
+  if (/everyday|daily life|real life/.test(raw)) return 'everyday';
+  if (/consistent results|outcomes?/.test(raw)) return 'outcomes';
   if (/compare|comparison|versus|\bvs\b/.test(raw)) return 'comparison';
   if (/use cases?|applications?/.test(raw)) return 'use-cases';
   if (/examples?/.test(raw)) return 'examples';
@@ -790,14 +848,32 @@ function extractTopicFormat(query) {
   return 'guide';
 }
 
+function normalizeSyntheticTopicBase(seed) {
+  const raw = String(seed || '').trim().replace(/\s+/g, ' ');
+  if (!raw) return '';
+
+  return raw
+    .replace(/\band\s+tips$/i, '')
+    .replace(/\band\s+tutorials?$/i, '')
+    .replace(/\btips$/i, '')
+    .replace(/\btutorials?$/i, '')
+    .replace(/\bguides?$/i, '')
+    .replace(/\bexamples?$/i, '')
+    .replace(/\buse cases?$/i, '')
+    .replace(/\bexplained$/i, '')
+    .replace(/[,:;.\-]+$/g, '')
+    .trim();
+}
+
 function buildSyntheticTopicVariants(seed) {
-  const base = String(seed || '').trim();
-  if (!base) return [];
+  const rawBase = String(seed || '').trim().replace(/\s+/g, ' ');
+  if (!rawBase) return [];
+  const stemBase = normalizeSyntheticTopicBase(rawBase) || rawBase;
 
   const out = [];
   for (const pattern of TOPIC_VARIETY_PATTERNS) {
-    if (typeof pattern.when === 'function' && !pattern.when(base)) continue;
-    const query = String(pattern.build(base) || '').trim();
+    if (typeof pattern.when === 'function' && !pattern.when(rawBase, stemBase)) continue;
+    const query = String(pattern.build(rawBase, stemBase) || '').trim();
     if (!query) continue;
     if (out.some((item) => areTopicQueriesNearDuplicate(item.query, query))) continue;
     out.push({ query, format: pattern.format, source: 'synthetic' });
@@ -2206,11 +2282,24 @@ async function commandSeedTopics(siteSlug, flags) {
     throw new Error(`Unknown --source value "${source}". Use "suggest" or "synthetic".`);
   }
 
+  const workflowRunId = `seed-topics-${new Date().toISOString()}`;
+  const previewPath = resolveSiteSeedContentFile(siteSlug, 'topic-candidates.generated.json');
+  const mutationsPath = resolveSiteSeedContentFile(siteSlug, 'topic-candidates.mutations.json');
+
   if (!discovered.length) {
-    throw new Error(`No topic candidates discovered for '${siteSlug}'`);
+    writeJson(mutationsPath, { mutations: [] });
+    console.log(`No new topic candidates discovered for '${siteSlug}'`);
+    console.log(`Discovery source: ${source}`);
+    console.log(`Selection mode: ${selectorConfig.selector}${selectorConfig.useLlm ? ` (${selectorConfig.model})` : ''}`);
+    console.log(`Locale: ${locale}`);
+    console.log(`Existing query count: ${existingQueries.length}`);
+    if (exists(previewPath)) {
+      console.log(`Preview retained: ${displayPath(WORKSPACE_ROOT, previewPath)}`);
+    }
+    console.log(`Sanity mutations: ${displayPath(WORKSPACE_ROOT, mutationsPath)}`);
+    return;
   }
 
-  const workflowRunId = `seed-topics-${new Date().toISOString()}`;
   const safeSiteSlug = sanitizeSiteSlug(siteSlug);
   const docs = discovered
     .map((item, index) => buildTopicCandidateDoc(safeSiteSlug, item.query, index, status, workflowRunId, item.categorySlug, blueprint))
@@ -2223,8 +2312,6 @@ async function commandSeedTopics(siteSlug, flags) {
     }))
   };
 
-  const previewPath = resolveSiteSeedContentFile(siteSlug, 'topic-candidates.generated.json');
-  const mutationsPath = resolveSiteSeedContentFile(siteSlug, 'topic-candidates.mutations.json');
   writeJson(previewPath, {
     siteSlug,
     count: docs.length,
@@ -2297,7 +2384,16 @@ async function commandLaunchSite(siteSlug, flags) {
   const applied = [];
   if (applySanity) {
     applied.push(await applySanityMutationsFile(cmsMutations));
-    applied.push(await applySanityMutationsFile(topicMutations));
+    if (readMutationCount(topicMutations) > 0) {
+      applied.push(await applySanityMutationsFile(topicMutations));
+    } else {
+      applied.push({
+        file: topicMutations,
+        mutationCount: 0,
+        skipped: true,
+        reason: 'No topic candidate mutations generated'
+      });
+    }
   }
 
   const normalizedBlueprint = ensureBusinessDefaults(loadSiteBlueprint(siteSlug));

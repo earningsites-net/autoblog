@@ -137,6 +137,7 @@ This file stores durable project context shared across tasks.
   - quando i `topicCandidate` `brief_ready` sono vuoti, scheduler chiama `POST /api/factory/site/discover-topics`
   - parametri di default refill: `source=suggest`, `status=brief_ready`, `replace=true`, `apply=true`
   - la logica autorevole di topic mix / category balancing / near-dedup del refill vive nel path engine `POST /api/factory/site/discover-topics` -> `FactoryOpsService.discoverTopics()` -> `scripts/autoblog.mjs discover-topics`
+  - se la discovery non trova nuovi topic davvero distinti, il path factory deve restituire `ok=true` con mutazioni vuote e una nota di no-op; non deve più propagare un HTTP `400` allo scheduler
   - `infra/n8n/workflows/topic_discovery_daily.json` resta un template legacy/minimale e non e' il source of truth operativo per la varieta' dei topic in refill
 - Variabili runtime rilevanti scheduler:
   - `PLAN_SCHEDULER_TEST_MODE`
@@ -183,6 +184,10 @@ This file stores durable project context shared across tasks.
   - systemd engine service: `infra/ops/systemd/autoblog-engine.service.example`
   - systemd n8n stack service: `infra/ops/systemd/autoblog-n8n.service.example`
   - nginx reverse proxy + private factory example: `infra/ops/nginx/engine-and-factory.conf.example`
+- n8n Postgres runtime ownership:
+  - production bind mount `/srv/auto-blog-project/infra/n8n/postgres` is runtime state, not source content
+  - with the current `postgres:16-alpine` image, the container DB user is `uid/gid 70:70`; the bind mount must remain readable by that uid/gid
+  - do not include `infra/n8n/postgres` in broad ownership corrections to `autoblog:autoblog` when fixing source tree permissions on `/srv/auto-blog-project`
 - Sanity Studio deploy:
   - `apps/studio/sanity.cli.ts` supporta `SANITY_STUDIO_HOSTNAME` per un hostname stabile del deploy
   - per deploy non interattivi servono `SANITY_STUDIO_PROJECT_ID`, `SANITY_STUDIO_DATASET`, `SANITY_STUDIO_SITE_SLUG`, `SANITY_STUDIO_HOSTNAME` e autenticazione CLI valida o `SANITY_AUTH_TOKEN`
@@ -253,6 +258,7 @@ This file stores durable project context shared across tasks.
   - `scripts/autoblog.mjs discover-topics` usa un modello ibrido: pool grezzo da `seedTopics` + Google Suggest, poi selezione finale `auto|heuristic|hybrid|llm`
   - `TOPIC_DISCOVERY_SELECTOR=auto` usa il pass LLM solo se `OPENAI_API_KEY` è disponibile; altrimenti resta sul fallback euristico
   - la dedupe controlla: batch corrente, contenuti già presenti sul sito via Sanity, e in fallback l'ultimo preview locale `seed-content/topic-candidates.generated.json`
+  - il fallback `synthetic` deve generare anche angoli semantici aggiuntivi (es. myths/facts, budget, seasonal, goals, challenges, everyday, results), non solo cambi di formato come `guide`/`examples`/`use cases`, altrimenti i refill ripetuti si esauriscono troppo presto
   - l'obiettivo è evitare varianti banali dello stesso stem (`changing` vs `transforming`, `applications` vs `examples`, plurali/anni) prima del brief/article stage
 - Pilot release checks read env files:
   - root: `.env.staging` / `.env.production`

@@ -575,6 +575,16 @@ export class FactoryOpsService {
     return this.runNodeScript(this.sanityApplyScript, ['--file', filePath], envOverrides);
   }
 
+  private async readMutationCount(filePath: string) {
+    try {
+      const raw = await fs.readFile(filePath, 'utf8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed?.mutations) ? parsed.mutations.length : 0;
+    } catch {
+      return 0;
+    }
+  }
+
   private async resolveSiteSanityEnv(input: {
     siteSlug: string;
     sanityProjectId?: string;
@@ -795,8 +805,10 @@ export class FactoryOpsService {
     if (!discover.ok) return { ok: false, step: 'discover-topics', discover };
 
     const mutationFile = this.siteRuntime.getSiteSeedContentPath(input.siteSlug, 'topic-candidates.mutations.json');
+    const mutationCount = await this.readMutationCount(mutationFile);
+    const noTopicsDiscovered = mutationCount <= 0;
     let applied: CommandResult | null = null;
-    if (input.apply) {
+    if (input.apply && mutationCount > 0) {
       const sanityEnv = await this.resolveSiteSanityEnv({ siteSlug: input.siteSlug });
       if (!sanityEnv.SANITY_PROJECT_ID || !sanityEnv.SANITY_WRITE_TOKEN) {
         return {
@@ -810,7 +822,15 @@ export class FactoryOpsService {
       if (!applied.ok) return { ok: false, step: 'sanity-apply-topics', discover, applied };
     }
 
-    return { ok: true, siteSlug: input.siteSlug, discover, applied };
+    return {
+      ok: true,
+      siteSlug: input.siteSlug,
+      mutationCount,
+      noTopicsDiscovered,
+      note: noTopicsDiscovered ? `No new topic candidates discovered for '${input.siteSlug}'` : undefined,
+      discover,
+      applied
+    };
   }
 
   async prepopulate(input: PrepopulateInput) {
