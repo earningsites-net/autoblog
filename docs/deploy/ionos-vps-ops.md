@@ -244,11 +244,13 @@ Valori da allineare in `/etc/autoblog/engine.env`:
 - `PLAN_AUTOMATION_TRIGGER_URL=https://n8n.earningsites.net/webhook/plan-automation`
 - `PREPOPULATE_TRIGGER_URL=https://n8n.earningsites.net/webhook/factory-prepopulate`
 - `PORTAL_BOOTSTRAP_SITE_SLUGS=` (vuoto di default in multi-site production)
+- `AUTOBLOG_SOURCE_SITES_ROOT=/var/lib/autoblog/source-sites` per tenere i blueprint/README creati via Factory fuori dal clone Git `/srv/auto-blog-project`
 
 Note:
 
 - `ENGINE_PORT=8787` è opzionale; l'engine usa gia quel default.
 - `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog` per spostare registry, `.env.generated`, `seed-content/`, `handoff/` e report flow-check fuori dal repo.
+- con `AUTOBLOG_SOURCE_SITES_ROOT=/var/lib/autoblog/source-sites`, anche i file source-safe dei siti creati via Factory restano fuori dal clone Git production e non bloccano i successivi `git pull`
 - non impostare `SITE_SLUG` o `NEXT_PUBLIC_SITE_SLUG` nel root env dell'engine production: il runtime ops è multi-site.
 - non usare `PORTAL_BOOTSTRAP_SITE_SLUGS` per replicare il vecchio auto-grant globale: compilalo solo se vuoi preassegnare esplicitamente alcuni siti già esistenti al portal admin.
 - `NEXT_PUBLIC_PORTAL_BASE_URL` va configurata sul web/Vercel, non è richiesta dal backend engine.
@@ -342,7 +344,8 @@ Procedura consigliata:
 1. esegui un backup prima di cleanup importanti o deploy delicati sul VPS
 2. mantieni Git come source of truth solo per i file source-safe del sito (`site.blueprint.json` + opzionale `README.md`)
 3. usa `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog` in engine e n8n env per evitare che registry/env/report finiscano nel working tree
-4. usa `npm run site:sync:source -- <dir-sito-copiato-dal-vps>` sul tuo computer per riallineare il blueprint locale dopo una creazione fatta via Factory
+4. usa anche `AUTOBLOG_SOURCE_SITES_ROOT=/var/lib/autoblog/source-sites` in production per evitare che la Factory scriva i blueprint nel clone Git
+5. usa `npm run site:pull -- <site-slug>` oppure `npm run site:sync:source -- <dir-sito-copiato-dal-vps>` sul tuo computer per riallineare il blueprint locale dopo una creazione fatta via Factory
 
 ## 11. Service systemd engine
 

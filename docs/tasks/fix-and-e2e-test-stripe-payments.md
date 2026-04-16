@@ -161,6 +161,26 @@
   - raw Stripe JSON bodies, account details, and `request_log_url` are no longer propagated to the browser
   - portal billing routes now log the full upstream Stripe response server-side for diagnostics while returning only the sanitized public message to the client
   - verified `npm exec tsc -- -p apps/engine/tsconfig.json --noEmit` passes after the patch
+- Pushed the billing-error sanitization fix to `main` (`ae1ca41`) and synced the changed engine files to the VPS.
+- Resolved a post-deploy production outage on `/portal`:
+  - nginx `502` was caused by `autoblog-engine` hanging before `listen()` while waiting on `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS monetization_enabled ...`
+  - the migration lock was held by two stale `DBeaver ... Main` sessions left `idle in transaction`
+  - terminated only the blocking Postgres backends, after which the engine finished booting and bound to `127.0.0.1:8787`
+  - verified `http://127.0.0.1:8787/portal` and `https://aiblogs.earningsites.net/portal` both return `200`
+- Re-enabled the temporary EUR Stripe test catalog in production on April 15, 2026:
+  - updated `/etc/autoblog/engine.env` so `STRIPE_PRICE_ID_BASE/STANDARD/PRO` now point again to
+    - Base `price_1TKesUI4HGmQDM0ZiMfOVOtT`
+    - Standard `price_1TKf81I4HGmQDM0ZLyXMtiX7`
+    - Pro `price_1TKf8FI4HGmQDM0ZHnK8xyMu`
+  - restarted `autoblog-engine` and verified it returned `active`
+  - verified `https://aiblogs.earningsites.net/portal` still returns `200`
+  - queried Stripe directly and confirmed all three active live prices are now `eur` with unit amounts `1/2/3`
+- Simplified content batching back to a single execution model on April 16, 2026:
+  - `article_generation_worker`, `image_generation_worker`, and `qa_scoring_and_publish_worker` now always fetch/process exactly one item per run, regardless of whether the caller is the scheduler or prepopulate
+  - `prepopulate_bulk_runner` now always plans sequential single-item cycles (`batchSize=1`) instead of honoring higher bulk batch inputs/env values
+  - removed `schedulerRunId` / `schedulerRunIndex` from article `aiMeta` writes and from the Studio `aiMeta` schema because worker scoping no longer depends on those fields
+  - intentionally left the separate Replicate polling improvement already present in `image_generation_worker` untouched, because it is unrelated to this batching simplification
+  - verified all changed workflow JSON files parse successfully and `npm exec tsc -- -p apps/studio/tsconfig.json --noEmit` passes
 
 ## Decisions
 - Use the existing Stripe Billing + Checkout + Customer Portal integration flow; only adjust UI copy/CTA behavior and temporary production env values for the test.
@@ -172,7 +192,7 @@
 - Treat `plan_generation_scheduler_worker` running every minute as expected behavior: the real cadence gate is internal (`PLAN_SCHEDULER_TICK_MINUTES`), so non-due minutes should complete successfully with a skip report, not fail.
 - Import the scheduler fix from the local repo via the standard n8n guard/import script instead of editing the live workflow only in the n8n UI, so source and runtime stay aligned.
 - Do not use a Pro upgrade alone as the next scheduler test step while `PLAN_SCHEDULER_DAILY_CAP_PRO` remains below the current number of publishes already made today; otherwise the scheduler would no-op for the rest of the day for an unrelated reason.
-- Keep high batch env values for bulk/prepopulate throughput, but make scheduled runs self-limiting through `schedulerRunId` instead of globally lowering `ARTICLE_BATCH_SIZE` / `IMAGE_BATCH_SIZE` / `QA_BATCH_SIZE` for every workflow.
+- Simplify batching to one item per worker run for both scheduled and prepopulate flows; accept slower prepopulate in exchange for lower Rewrite/LLM burst pressure and a single, easier-to-reason-about execution model.
 - Treat the 5-minute test interval as a publish-spacing gate, not a pure scheduler-tick cadence: because the planner checks recent `publishedAt`, a due tick can still no-op if the last publish happened less than 5 minutes earlier inside the previous run.
 - Because the VPS clone cannot currently fast-forward from GitHub safely, use direct file sync from the pushed commit as the least-destructive deploy path for this task instead of forcing a remote git cleanup.
 - Treat checksum parity between local and VPS as the authoritative post-deploy verification, because the VPS clone git metadata is currently dirty and cannot be trusted as a clean fast-forward checkout.
@@ -186,6 +206,9 @@
 ## Next
 - Decide whether the live customer subscription should stay on Pro or be manually downgraded after the test window; this is separate from the env rollback and affects a real Stripe subscription.
 - Observe the next normal production scheduler window for `daily-beauty-lab` now that it is back in `automationStatus=active`.
+- Clean up portal plan-state UX for scheduled downgrades:
+  - when a downgrade is already scheduled, the currently active plan should not lock the user out from undoing that choice
+  - the plan CTA state/label should distinguish between `current active plan` and `scheduled next plan`, instead of disabling the return path as `Current plan`
 - If desired, decide whether business rules should instead reset quota counters on ownership transfer; current code does not do this automatically.
 - Fix buyer-handoff quota semantics:
   - when the first buyer-paid Stripe subscription becomes active, reset the counter against the real Stripe billing cycle
@@ -198,12 +221,12 @@
   - reconcile the existing dirty worktree (`sites/daily-beauty-lab` renames and synced source files) so future deploys can use normal `git pull --ff-only`
 
 ## Risks
-- The shared worker chain is still bulk-oriented for non-scheduled flows by design; scheduled runs are now isolated via `schedulerRunId`, but older content created before this change or other workflows without that tag still follow the legacy broader queries.
-- The new scheduler scoping relies on `aiMeta.schedulerRunId` being present on articles generated by scheduled runs; articles created before this change or by other flows will still be handled by the legacy broader queries.
+- Prepopulate will now take proportionally longer to reach its target published count because it no longer uses larger per-run batches; this is an intentional tradeoff for simpler and more predictable worker behavior.
 - The live `daily-beauty-lab` subscription is currently on Pro from the test upgrade; downgrading it is a separate billing action and was not auto-reverted with the env rollback.
 - The current handoff semantics may surprise commercial operations: a buyer who receives a site mid-month inherits the existing `publishedThisMonth` consumption for that period, because transfer does not reset counters.
 - The current paid entitlement window is still calendar-month based in the app layer, while Stripe renewals follow the actual subscription purchase/renewal date; this mismatch should be resolved before introducing buyer-specific quota resets.
 - `daily-beauty-lab` is currently in a mixed-currency billing state: active EUR subscription in Stripe, but USD production price catalog in the app config. Any direct plan update will fail until the subscription/catalog currency is normalized.
+- Direct schema changes or metadata inspection from GUI tools like DBeaver can block engine startup migrations if sessions remain `idle in transaction`; this can surface externally as nginx `502` even when systemd still shows the service `active`.
 - The VPS clone is operationally aligned with the pushed source for the touched files, but it is still not a clean git checkout:
   - synced files show as modified/untracked relative to the old local commit
   - future ops should not assume `git status` is clean on `/srv/auto-blog-project` until the remote access + worktree cleanup is handled

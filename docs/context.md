@@ -188,6 +188,8 @@ This file stores durable project context shared across tasks.
   - i preset restano solo come retrocompatibilità/override strutturale, non come unica fonte della strategia editoriale
 - Runtime/source separation:
   - il source of truth Git del sito resta `sites/<slug>/site.blueprint.json` (+ opzionale `README.md`)
+  - engine/CLI supportano `AUTOBLOG_SOURCE_SITES_ROOT` (alias legacy supportato: `AUTOBLOG_SITE_SOURCE_ROOT`) per tenere i file source-safe dei siti fuori dal clone Git production
+  - con `AUTOBLOG_SOURCE_SITES_ROOT` impostato in production, la Factory scrive blueprint/README nel source root esterno invece che in `/srv/auto-blog-project/sites`
   - il runtime può essere esternalizzato con `AUTOBLOG_RUNTIME_ROOT`, che sposta fuori dal repo:
     - `registry.json`
     - `sites/<slug>/.env.generated`
@@ -225,12 +227,15 @@ This file stores durable project context shared across tasks.
 - Deploy caveat su VPS production:
   - su `IONOS VPS` il rollout è attivo:
     - `AUTOBLOG_RUNTIME_ROOT=/var/lib/autoblog`
+    - `AUTOBLOG_SOURCE_SITES_ROOT=/var/lib/autoblog/source-sites` e' il layout consigliato per non sporcare il clone Git production con i nuovi siti creati via Factory
     - registry live: `/var/lib/autoblog/sites/registry.json`
     - env per-sito live: `/var/lib/autoblog/sites/<slug>/.env.generated`
+    - source-safe site files live consigliati: `/var/lib/autoblog/source-sites/<slug>/`
     - flow-check reports: `/var/lib/autoblog/reports/n8n-flow-checks`
   - con questo assetto il clone production in `/srv/auto-blog-project` torna a essere source-only e puo' usare `git pull --ff-only origin main`
   - `/etc/autoblog/engine.env` non va trattato come shell-safe in automatico: alcuni valori possono rompere `source`; per i comandi ops che devono agire sul runtime production conviene passare esplicitamente almeno `PORTAL_DATABASE_URL` e `AUTOBLOG_RUNTIME_ROOT` al processo invocato
   - i siti creati via Factory in production non esistono automaticamente nel workspace locale; per ispezionarli in dev usare uno sync esplicito (`scp` del sito dal VPS) oppure uno Studio deployato dedicato
+  - `site:pull` puo' rilevare automaticamente sia il layout legacy nel clone (`/srv/auto-blog-project/sites`) sia il nuovo source root esterno (`/var/lib/autoblog/source-sites`)
   - workflow consigliato per i nuovi siti: create via Factory in production -> copia locale del sito -> `npm run site:sync:source -- <dir-sito>` -> commit del solo `site.blueprint.json`/`README.md` -> deploy `apps/web`
   - non usare auto-commit/auto-push dal VPS production verso `main`: `sites/<slug>/.env.generated`, `registry` e handoff sono stato runtime, non source of truth Git
   - il comando locale `npm run site:use -- <site-slug>` deve riallineare sia il root `.env` sia `apps/studio/.env`; dopo lo switch va riavviato `sanity dev` per vedere il progetto Sanity corretto

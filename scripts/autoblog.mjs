@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   displayPath,
+  resolveDefaultSitesSourceRoot,
   resolveRuntimePaths,
   resolveSiteBlueprintPath as resolveSourceSiteBlueprintPath,
   resolveSiteHandoffDir as resolveRuntimeSiteHandoffDir,
@@ -20,8 +21,8 @@ import {
 import { createPortalStore } from './lib/portal-store.mjs';
 
 const WORKSPACE_ROOT = process.cwd();
-const SITES_SOURCE_ROOT = path.join(WORKSPACE_ROOT, 'sites');
-const TEMPLATES_ROOT = path.join(SITES_SOURCE_ROOT, 'templates');
+const LEGACY_SITES_SOURCE_ROOT = resolveDefaultSitesSourceRoot(WORKSPACE_ROOT);
+const TEMPLATES_ROOT = path.join(LEGACY_SITES_SOURCE_ROOT, 'templates');
 const RUNTIME_PATHS = resolveRuntimePaths({ workspaceRoot: WORKSPACE_ROOT, env: process.env });
 const SITE_REGISTRY_PATH = RUNTIME_PATHS.registryPath;
 
@@ -1412,6 +1413,26 @@ function resolveSiteReadmePath(siteSlug) {
   return resolveSourceSiteReadmePath(WORKSPACE_ROOT, siteSlug);
 }
 
+function resolveLegacySiteFile(siteSlug, fileName) {
+  return path.join(LEGACY_SITES_SOURCE_ROOT, sanitizeSiteSlug(siteSlug), fileName);
+}
+
+function resolveReadableSiteBlueprintPath(siteSlug) {
+  const preferredPath = resolveSiteBlueprintPath(siteSlug);
+  const legacyPath = resolveLegacySiteFile(siteSlug, 'site.blueprint.json');
+  if (exists(preferredPath)) return preferredPath;
+  if (preferredPath !== legacyPath && exists(legacyPath)) return legacyPath;
+  return preferredPath;
+}
+
+function resolveReadableSiteReadmePath(siteSlug) {
+  const preferredPath = resolveSiteReadmePath(siteSlug);
+  const legacyPath = resolveLegacySiteFile(siteSlug, 'README.md');
+  if (exists(preferredPath)) return preferredPath;
+  if (preferredPath !== legacyPath && exists(legacyPath)) return legacyPath;
+  return preferredPath;
+}
+
 function resolveSiteEnvPath(siteSlug) {
   return resolveRuntimeSiteEnvPath(RUNTIME_PATHS, siteSlug);
 }
@@ -1433,7 +1454,7 @@ function resolveSiteHandoffFile(siteSlug, fileName) {
 }
 
 function loadSiteBlueprint(siteSlug) {
-  const filePath = resolveSiteBlueprintPath(siteSlug);
+  const filePath = resolveReadableSiteBlueprintPath(siteSlug);
   if (!exists(filePath)) {
     throw new Error(`Missing site blueprint: ${filePath}`);
   }
@@ -1798,7 +1819,8 @@ function commandNew(siteSlug, flags) {
   writeJson(targetBlueprintPath, blueprint);
 
   const notesPath = resolveSiteReadmePath(siteSlug);
-  if (!exists(notesPath) || flags.force) {
+  const readableNotesPath = resolveReadableSiteReadmePath(siteSlug);
+  if (!exists(readableNotesPath) || flags.force) {
     fs.writeFileSync(
       notesPath,
       `# ${blueprint.brandName}\n\nGenerated from blueprint: ${templateId}\n\nFiles:\n- site.blueprint.json\n- runtime: .env.generated, seed-content/, handoff/\n`,

@@ -13,6 +13,17 @@ function resolveOptionalPath(workspaceRoot: string, value?: string) {
   return trimmed ? path.resolve(workspaceRoot, trimmed) : '';
 }
 
+function resolveSourceRootOverride(workspaceRoot: string, env: NodeJS.ProcessEnv) {
+  return (
+    resolveOptionalPath(workspaceRoot, env.AUTOBLOG_SOURCE_SITES_ROOT) ||
+    resolveOptionalPath(workspaceRoot, env.AUTOBLOG_SITE_SOURCE_ROOT)
+  );
+}
+
+export function resolveDefaultSitesSourceRoot(workspaceRoot: string) {
+  return path.join(path.resolve(workspaceRoot), 'sites');
+}
+
 export type RuntimePaths = {
   workspaceRoot: string;
   runtimeRoot: string;
@@ -49,20 +60,25 @@ export function resolveRuntimePaths(workspaceRoot: string, env: NodeJS.ProcessEn
   };
 }
 
-export function resolveSitesSourceRoot(workspaceRoot: string) {
-  return path.join(path.resolve(workspaceRoot), 'sites');
+export function resolveSitesSourceRoot(workspaceRoot: string, env: NodeJS.ProcessEnv = process.env) {
+  const resolvedWorkspaceRoot = path.resolve(workspaceRoot);
+  return resolveSourceRootOverride(resolvedWorkspaceRoot, env) || resolveDefaultSitesSourceRoot(resolvedWorkspaceRoot);
 }
 
-export function resolveSiteSourceDir(workspaceRoot: string, siteSlug: string) {
-  return path.join(resolveSitesSourceRoot(workspaceRoot), normalizeSiteSlug(siteSlug));
+export function resolveAllSitesSourceRoots(workspaceRoot: string, env: NodeJS.ProcessEnv = process.env) {
+  return Array.from(new Set([resolveSitesSourceRoot(workspaceRoot, env), resolveDefaultSitesSourceRoot(workspaceRoot)]));
 }
 
-export function resolveSiteBlueprintPath(workspaceRoot: string, siteSlug: string) {
-  return path.join(resolveSiteSourceDir(workspaceRoot, siteSlug), 'site.blueprint.json');
+export function resolveSiteSourceDir(workspaceRoot: string, siteSlug: string, env: NodeJS.ProcessEnv = process.env) {
+  return path.join(resolveSitesSourceRoot(workspaceRoot, env), normalizeSiteSlug(siteSlug));
 }
 
-export function resolveSiteReadmePath(workspaceRoot: string, siteSlug: string) {
-  return path.join(resolveSiteSourceDir(workspaceRoot, siteSlug), 'README.md');
+export function resolveSiteBlueprintPath(workspaceRoot: string, siteSlug: string, env: NodeJS.ProcessEnv = process.env) {
+  return path.join(resolveSiteSourceDir(workspaceRoot, siteSlug, env), 'site.blueprint.json');
+}
+
+export function resolveSiteReadmePath(workspaceRoot: string, siteSlug: string, env: NodeJS.ProcessEnv = process.env) {
+  return path.join(resolveSiteSourceDir(workspaceRoot, siteSlug, env), 'README.md');
 }
 
 export function resolveSiteRuntimeDir(runtimePaths: RuntimePaths, siteSlug: string) {

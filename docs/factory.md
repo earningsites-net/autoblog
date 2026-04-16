@@ -70,7 +70,12 @@ npm run portal:postgres:bootstrap -- --admin-url postgres://n8n:password@127.0.0
 4. Click `Launch Site (One Click)` to run: create -> niche/theme -> provision -> seed -> discover -> optional prepopulate -> handoff.
 
 ## Source-Safe Git Sync After Production Creation
-Factory creation on the ops VPS is intentionally `prod-first`: it creates or updates `sites/<slug>/` on the server, including runtime-only files that must not be treated as Git source.
+Factory creation on the ops VPS is intentionally `prod-first`: it creates or updates the site on the server first.
+
+- Source-safe files live in the site source root:
+  - default legacy path: `sites/<slug>/` inside the workspace
+  - recommended production path: `<AUTOBLOG_SOURCE_SITES_ROOT>/<slug>/` outside the Git clone
+- Runtime-only files must not be treated as Git source.
 
 After creating a site in production, the safe workflow is:
 
@@ -99,7 +104,8 @@ The sync command intentionally ignores runtime artifacts:
 - `seed-content/`
 - `handoff/`
 
-If `AUTOBLOG_RUNTIME_ROOT` is configured on the VPS, those runtime artifacts live outside the repo by default.
+If `AUTOBLOG_RUNTIME_ROOT` is configured on the VPS, runtime artifacts live outside the repo by default.
+If `AUTOBLOG_SOURCE_SITES_ROOT` is configured on the VPS, source-safe site files also live outside the production clone by default.
 
 Example:
 

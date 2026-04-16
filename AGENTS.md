@@ -31,6 +31,25 @@ Keep thread context small and reliable while working on `main`, including simult
   - important run/deploy commands
 - Do not store per-task progress in `docs/context.md`.
 
+## Git And VPS Guardrails
+- Treat `/srv/auto-blog-project` on production as a `source-only` Git clone.
+- Never copy, extract, or edit source files directly into `/srv/auto-blog-project` as `root`.
+- On the VPS, run Git operations for the production clone only as user `autoblog`.
+- Before any `git pull` or `git reset` on the VPS, check the clone state first:
+  - `git status --porcelain=v2 --branch`
+  - verify source files are owned by `autoblog:autoblog`
+- If the production clone is dirty, has unexpected untracked files, or has source paths not owned by `autoblog:autoblog`, stop and fix that state before any pull/reset/deploy.
+- Preferred VPS update flow is:
+  - `git fetch origin`
+  - `git pull --ff-only origin main`
+- Do not use manual `tar`/`scp`/`cp` syncs into the production clone as a normal deploy strategy. Use them only if the user explicitly asks for an emergency workaround, and record it in the task file.
+- Keep runtime state out of the clone:
+  - runtime envs, registry, handoff files, reports, and seed artifacts belong under `AUTOBLOG_RUNTIME_ROOT`
+  - `/etc/autoblog/*.env` is runtime config, not Git source
+- `ops/factory` is allowed to create/update source-safe site files on the VPS (`sites/<slug>/site.blueprint.json`, optional `README.md`), which means the VPS clone can temporarily differ from `main` after site creation.
+- After any production site creation via `ops/factory`, sync the source-safe site files back locally (`site:pull` or `site:sync:source`), commit them on `main`, and only then treat local, GitHub, and VPS as aligned again.
+- When the user delegates commit/push/pull tasks, prefer the safe Git path above over ad-hoc file syncs, and explicitly stop if the repo state makes that unsafe.
+
 ## Task Naming
 - Use short `kebab-case` ids (example: `fix-webhook-timeout`).
 - Reuse the same task id across threads until that activity is complete.

@@ -4,6 +4,74 @@
 - Replace the AdSense-specific monetization model with a provider-agnostic monetization system based on head code plus targeted placement embeds.
 
 ## Done
+- Documented the current operator recovery path when a site launch/prepopulate stops mid-run:
+  - if `prepopulate_bulk_runner` fails after article generation, the dataset can legitimately end up with:
+    - draft articles already created
+    - only a subset of those drafts patched with `coverImage`
+    - zero published articles if QA/publish never completed
+  - in that state, do **not** relaunch full site creation; treat it as a partial pipeline recovery problem
+  - preferred recovery path is:
+    1. retry the failed `prepopulate_bulk_runner` execution from n8n UI first when the failure looks transient
+    2. if the site is left with mixed `draft` + partial images, resume the missing stages only:
+       - `image_generation_worker` for drafts without `coverImage`
+       - then `qa_scoring_and_publish_worker` for drafts that already have `coverImage`
+  - workflow topology relevant for recovery:
+    - `prepopulate_bulk_runner` orchestrates `article_generation_worker` -> `image_generation_worker` -> `qa_scoring_and_publish_worker`
+    - `image_generation_worker` processes `draft` articles with `!defined(coverImage)`
+    - `qa_scoring_and_publish_worker` processes `draft` articles with `defined(coverImage)`
+  - n8n UI guidance:
+    - retrying a failed existing execution from the UI is supported and is the safest operator path
+    - `prepopulate_bulk_runner` has a `Manual Trigger`, but in multi-site production it is not the primary operator path because `siteSlug` must be supplied correctly
+    - worker workflows are subworkflows (`When Executed by Another Workflow`) and are better retried/resumed from existing executions than treated as standalone manual tools
+- Investigated the new `ai-news-blogger` bootstrap issues:
+  - local site runtime env is coherent for the new site:
+    - `SANITY_PROJECT_ID=10cl2er2`
+    - `SITE_SLUG=ai-news-blogger`
+    - `SANITY_READ_TOKEN` and `SANITY_WRITE_TOKEN` are present in `sites/ai-news-blogger/.env.generated`
+  - queried the live Sanity project directly with the site's `SANITY_READ_TOKEN` and confirmed the token works
+  - current dataset state for `ai-news-blogger`:
+    - `categories = 6`
+    - `topics = 55`
+    - `draftLike articles = 33`
+    - `published articles = 0`
+  - latest articles in Sanity are all `status: "draft"` with `publishedAt: null`
+  - conclusion:
+    - the missing public content is not caused by a broken `SANITY_READ_TOKEN`
+    - the site has content scaffolding and drafts, but nothing published yet
+  - the Studio deploy error (`Forbidden - User is missing required grant sanity.project.read`) is separate from runtime tokens:
+    - `npm --workspace @autoblog/studio run deploy` authenticates as the current Sanity CLI user (or `SANITY_AUTH_TOKEN`)
+    - it does not use the site's `SANITY_READ_TOKEN` / `SANITY_WRITE_TOKEN`
+    - the current CLI identity is missing project membership/grants on Sanity project `10cl2er2`
+- Investigated the `ai-news-blogger` image-generation failure in production:
+  - production n8n execution chain for the prepopulate run shows:
+    - parent prepopulate webhook execution `41031` -> `error`
+    - child `article_generation_worker` executions `41032`..`41043` -> `success`
+    - child `image_generation_worker` execution `41044` -> `error`
+  - exact runtime error in `image_generation_worker` execution `41044`:
+    - `Replicate did not return an image yet (status: starting). Retry the workflow once the prediction is complete.`
+  - the failing node is the `Upload to Sanity + Patch article` code step, which currently throws whenever the Replicate prediction still has `status: starting` and no `output`
+  - at least one image prediction in the same batch had already reached `succeeded`, but the batch contains another prediction still `starting`, so the worker aborts the run instead of polling/retrying that item
+  - current Sanity state is consistent with that failure:
+    - latest sampled `ai-news-blogger` articles are still `draft`
+    - none of the sampled latest articles has `coverImage` / `coverImageAlt`
+  - conclusion:
+    - `SANITY_READ_TOKEN` is not the issue
+    - the pipeline is currently blocked on image generation retry/polling semantics against Replicate
+- Applied a minimal workflow fix to `infra/n8n/workflows/image_generation_worker.json` and rolled it to the live n8n instance:
+  - the `Upload to Sanity + Patch article` node now polls `prediction.urls.get` instead of failing immediately when Replicate returns `status=starting|processing` with no output yet
+  - verified the active production `image_generation_worker` now contains the new `waitForPrediction(...)` polling logic
+- Confirmed the resumed run seen later was triggered by an explicit retry of the failed prepopulate execution:
+  - new execution `41054`
+  - `mode = retry`
+  - `retryOf = 41031`
+  - started at `2026-04-15T18:22:49.484Z`
+  - stopped at `2026-04-15T18:29:20.353Z`
+  - this means the observed resume was not a fresh launch from scratch, but a retry of the original failed prepopulate run
+- Verified the current prepopulate behavior for future site launches:
+  - `POST /api/factory/site/prepopulate` is a separate trigger and can be called again after the initial launch
+  - `prepopulate_bulk_runner` first counts current published articles, then plans only the remaining delta toward `targetPublishedCount`
+  - `targetPublishedCount` is the desired total published count, not the number of additional articles to add
+  - because the n8n runner processes by cycles/batches, `targetPublishedCount` is not a strict hard cap; small targets can overshoot if worker batch sizes are >1
 - Audited the current external-reference behavior for article generation after the user reported missing citations on a health/beauty site:
   - confirmed the repo source still contains the strengthened `article_generation_worker` prompt allowing `0-2` inline external references only when materially useful
   - confirmed the article markdown-to-Portable-Text normalization still preserves inline markdown links as Sanity `markDefs` with `nofollow: true`
@@ -110,6 +178,15 @@
   - `GET /api/public/sites/ai-blog-news/settings` now returns `200` with a valid payload instead of the previous `ad_slots_enabled` SQL error
 
 ## Decisions
+- Treat Sanity Studio deploy auth as account-scoped, not site-token-scoped:
+  - runtime read/write tokens can be valid for CMS access while Studio deploy still fails if the logged-in Sanity user is not a member of the project
+- Treat the current production image worker as fragile for batch prepopulate:
+  - `Prefer: wait=60` is not enough to guarantee every Replicate prediction returns a finished output
+  - if one item remains `starting`, the current worker aborts instead of retrying/polling it asynchronously
+- Treat prepopulate as safely repeatable for growth:
+  - start low for smoke tests
+  - later rerun prepopulate with a higher total target instead of re-running the whole launch flow
+  - when you need very tight increments, keep `batchSize` small to reduce overshoot risk
 - Treat the current external-reference implementation as present but non-reliable:
   - the workflow and schema support still exist
   - however, `0-2 links`, combined with `If unsure, omit the link` and a non-browsing model, yields zero links in practice across both tested niches

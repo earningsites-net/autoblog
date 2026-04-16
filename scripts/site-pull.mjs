@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 const WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_HOST = 'root@87.106.29.31';
 const DEFAULT_IDENTITY = '~/.ssh/autoblog_ionos';
-const DEFAULT_SOURCE_ROOT = '/srv/auto-blog-project/sites';
+const DEFAULT_SOURCE_ROOTS = ['/var/lib/autoblog/source-sites', '/srv/auto-blog-project/sites'];
 const DEFAULT_RUNTIME_ROOT = '/var/lib/autoblog/sites';
 
 function parseArgs(argv) {
@@ -74,6 +74,33 @@ function runCommand(command, args, options = {}) {
   return result;
 }
 
+function shellEscape(value) {
+  return `'${String(value || '').replace(/'/g, `'\\''`)}'`;
+}
+
+function remoteFileExists(host, identity, remotePath) {
+  const result = spawnSync('ssh', ['-i', identity, host, `test -f ${shellEscape(remotePath)}`], {
+    cwd: WORKSPACE_ROOT,
+    stdio: 'pipe',
+    encoding: 'utf8'
+  });
+  return result.status === 0;
+}
+
+function resolveSourceRoot({ host, identity, siteSlug, explicitSourceRoot }) {
+  const normalizedExplicit = String(explicitSourceRoot || '').trim();
+  if (normalizedExplicit) return normalizedExplicit;
+
+  for (const candidateRoot of DEFAULT_SOURCE_ROOTS) {
+    const probePath = `${candidateRoot.replace(/\/$/, '')}/${siteSlug}/site.blueprint.json`;
+    if (remoteFileExists(host, identity, probePath)) return candidateRoot;
+  }
+
+  throw new Error(
+    `Could not locate source-safe site files for ${siteSlug} on ${host}. Tried: ${DEFAULT_SOURCE_ROOTS.join(', ')}`
+  );
+}
+
 function main() {
   const { positional, flags } = parseArgs(process.argv.slice(2));
   const siteSlug = slugify(positional[0]);
@@ -83,7 +110,12 @@ function main() {
 
   const host = String(flags.host || process.env.AUTOBLOG_SITE_PULL_HOST || DEFAULT_HOST).trim();
   const identity = expandHome(flags.identity || process.env.AUTOBLOG_SITE_PULL_IDENTITY || DEFAULT_IDENTITY);
-  const sourceRoot = String(flags['source-root'] || process.env.AUTOBLOG_SITE_PULL_SOURCE_ROOT || DEFAULT_SOURCE_ROOT).trim();
+  const sourceRoot = resolveSourceRoot({
+    host,
+    identity,
+    siteSlug,
+    explicitSourceRoot: flags['source-root'] || process.env.AUTOBLOG_SITE_PULL_SOURCE_ROOT
+  });
   const runtimeRoot = String(flags['runtime-root'] || process.env.AUTOBLOG_SITE_PULL_RUNTIME_ROOT || DEFAULT_RUNTIME_ROOT).trim();
   const rootEnv = String(flags['root-env'] || '.env').trim();
   const activateLocal = asBool(flags['activate-local'], true);
@@ -134,6 +166,7 @@ function main() {
     ok: true,
     siteSlug,
     host,
+    sourceRoot,
     sourceRemote,
     runtimeEnvRemote: includeRuntimeEnv ? runtimeEnvRemote : null,
     localSiteDir,

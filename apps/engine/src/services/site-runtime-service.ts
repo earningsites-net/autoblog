@@ -1,10 +1,11 @@
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { MonetizationPlacementTarget, SiteRegistryMonetizationSummary } from '@autoblog/factory-sdk';
 import type { PortalSiteEntitlement, PortalSiteSettings } from './portal-store-types';
 import {
   normalizeSiteSlug,
   resolveRuntimePaths,
+  resolveDefaultSitesSourceRoot,
   resolveSiteBlueprintPath,
   resolveSiteHandoffPath,
   resolveSiteReadmePath,
@@ -108,12 +109,28 @@ export class SiteRuntimeService {
     return this.runtimePaths.registryPath;
   }
 
+  private resolveLegacySiteSourceFile(siteSlug: string, fileName: string) {
+    return path.join(resolveDefaultSitesSourceRoot(this.workspaceRoot), normalizeSiteSlug(siteSlug), fileName);
+  }
+
+  private resolveReadableSiteFile(preferredPath: string, legacyPath: string) {
+    if (existsSync(preferredPath)) return preferredPath;
+    if (preferredPath !== legacyPath && existsSync(legacyPath)) return legacyPath;
+    return preferredPath;
+  }
+
   getSiteBlueprintPath(siteSlug: string) {
-    return resolveSiteBlueprintPath(this.workspaceRoot, siteSlug);
+    return this.resolveReadableSiteFile(
+      resolveSiteBlueprintPath(this.workspaceRoot, siteSlug, process.env),
+      this.resolveLegacySiteSourceFile(siteSlug, 'site.blueprint.json')
+    );
   }
 
   getSiteReadmePath(siteSlug: string) {
-    return resolveSiteReadmePath(this.workspaceRoot, siteSlug);
+    return this.resolveReadableSiteFile(
+      resolveSiteReadmePath(this.workspaceRoot, siteSlug, process.env),
+      this.resolveLegacySiteSourceFile(siteSlug, 'README.md')
+    );
   }
 
   getSiteRuntimeDir(siteSlug: string) {
