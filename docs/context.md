@@ -23,6 +23,7 @@ This file stores durable project context shared across tasks.
 - Stop local stack: `./scripts/dev-down.sh`
 - Bootstrap Tailscale on the production VPS over SSH: `./scripts/vps-enable-tailscale.sh --host root@87.106.29.31 --identity ~/.ssh/autoblog_ionos --hostname autoblog-ops-prod [--auth-key tskey-...]`
 - Open a local tunnel to production Factory UI over SSH/Tailscale: `./scripts/ops-factory-tunnel.sh --host autoblog@<tailscale-ip-or-name>`
+- Open a local tunnel to production Postgres over SSH/Tailscale: `./scripts/ops-postgres-tunnel.sh --host autoblog@autoblog-ops-prod.tail2bbeab.ts.net`
 - Daily production SSH over Tailscale: `ssh -i ~/.ssh/autoblog_ionos autoblog@autoblog-ops-prod.tail2bbeab.ts.net`
 - Import changed n8n workflows: `npm run n8n:import:changed`
 - Check + import + smoke changed n8n workflows: `npm run n8n:test:flows`
@@ -51,7 +52,7 @@ This file stores durable project context shared across tasks.
   - engine is **one-to-many** and serves multiple `siteSlug`.
   - single-site mode is legacy/compatibility only and should not be used for normal ops.
   - per-site isolation boundary is `sites/<slug>/.env.generated` + registry metadata, not root env.
-- Frontend supports pluggable content repository via `CONTENT_REPOSITORY_DRIVER`.
+- Frontend supports `mock`, `sanity`, or `auto` content repository modes via `CONTENT_REPOSITORY_DRIVER`.
 - `apps/web` importa package interni del monorepo (per esempio `@autoblog/factory-sdk`): per build affidabili su Vercel con `Root Directory = apps/web`, dichiarare il package sia in `apps/web/package.json` sia in `apps/web/next.config.ts` tramite `transpilePackages`, e fissare `outputFileTracingRoot` al repo root.
 - `apps/web` deployato come progetto Vercel standalone con `Root Directory = apps/web` deve restare autosufficiente per il runtime/build: evitare import diretti da package monorepo `packages/*` quando l'helper puo' vivere localmente nel web, altrimenti si rischiano regressioni di risoluzione/modulo anche con `Include files outside the Root Directory` attivo.
 - n8n workflows are template-based and require configured credentials/endpoint ids.

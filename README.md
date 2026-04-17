@@ -18,7 +18,7 @@ Monorepo MVP for an AI-autopopulated Home & DIY editorial site with:
 
 ## Notes
 - The frontend includes a mock content fallback when Sanity credentials are not set.
-- The frontend now supports a pluggable content repository (`mock`, `sanity`, `api`) via `CONTENT_REPOSITORY_DRIVER`.
+- The frontend supports `mock`, `sanity`, or `auto` content repository modes via `CONTENT_REPOSITORY_DRIVER`.
 - n8n workflows are provided as importable templates and reference docs; provider credentials and endpoint IDs must be configured.
 - `scripts/autoblog.mjs` provides a factory CLI to bootstrap additional sites from blueprint templates.
 - See `docs/factory.md` for the API-first “site factory” architecture.

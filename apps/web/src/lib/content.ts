@@ -14,7 +14,6 @@ const getPublishedArticlesCached = unstable_cache(
     siteConfig.slug || 'no-site',
     process.env.SANITY_PROJECT_ID || 'no-project',
     process.env.SANITY_DATASET || 'no-dataset',
-    process.env.CONTENT_API_BASE_URL || process.env.CONTENT_ENGINE_URL || '',
     process.env.SITE_BLUEPRINT_PATH || ''
   ],
   { revalidate: 300 }

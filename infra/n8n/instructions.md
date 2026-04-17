@@ -20,8 +20,8 @@ npm run dev:up
 
 ## Procedura corretta per importare le env aggiornate sul server vps quando vengono cambiate:
 
-scp -i ~/.ssh/autoblog_ionos .env.production root@87.106.29.31:/tmp/engine.env
-scp -i ~/.ssh/autoblog_ionos infra/n8n/.env.production root@87.106.29.31:/tmp/n8n.env
+scp -i ~/.ssh/autoblog_ionos .env.production autoblog@autoblog-ops-prod.tail2bbeab.ts.net:/tmp/engine.env
+scp -i ~/.ssh/autoblog_ionos infra/n8n/.env.production autoblog@autoblog-ops-prod.tail2bbeab.ts.net:/tmp/n8n.env
 Poi sul server:
 
 sudo install -m 600 /tmp/engine.env /etc/autoblog/engine.env
@@ -43,7 +43,7 @@ sudo systemctl status autoblog-n8n --no-pager
 
 # Login al vps con username autoblog
 
-ssh -i ~/.ssh/autoblog_ionos autoblog@87.106.29.31
+ssh -i ~/.ssh/autoblog_ionos autoblog@autoblog-ops-prod.tail2bbeab.ts.net
 
 # Orientamento filesystem VPS
 
@@ -188,3 +188,7 @@ Per l’uso quotidiano:
 
 SSH: ssh -i ~/.ssh/autoblog_ionos autoblog@100.68.245.109
 Factory UI: ./scripts/ops-factory-tunnel.sh --host autoblog@100.68.245.109, poi apri http://127.0.0.1:8788/ops/factory
+
+Tunnerl per dbeaver:
+cd "/Users/danilociamprone/Documents/Auto blog project"
+./scripts/ops-postgres-tunnel.sh --host autoblog@autoblog-ops-prod.tail2bbeab.ts.net

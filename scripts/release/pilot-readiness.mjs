@@ -253,7 +253,7 @@ function main() {
 
   pushCheck(
     'site_env.CONTENT_REPOSITORY_DRIVER',
-    ['sanity', 'api', 'auto'].includes(String(siteEnv.CONTENT_REPOSITORY_DRIVER || '').toLowerCase()),
+    ['sanity', 'auto'].includes(String(siteEnv.CONTENT_REPOSITORY_DRIVER || '').toLowerCase()),
     `CONTENT_REPOSITORY_DRIVER=${String(siteEnv.CONTENT_REPOSITORY_DRIVER || '(missing)')}`,
     'error'
   );

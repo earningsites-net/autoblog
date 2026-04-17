@@ -48,8 +48,6 @@ npm run portal:postgres:bootstrap -- --admin-url postgres://n8n:password@127.0.0
 - `POST /v1/pipelines/run`
 - `GET /v1/jobs/:jobId`
 - `GET /v1/sites/:siteSlug/health`
-- `GET /v1/content/categories?siteSlug=...` (read-side stub)
-- `GET /v1/content/articles?siteSlug=...` (read-side stub)
 - `POST /api/factory/site/create`
 - `POST /api/factory/site/launch` (one-click orchestration)
 - `POST /api/factory/site/seed-cms`

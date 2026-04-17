@@ -1009,7 +1009,11 @@ export class FactoryOpsService {
             NEXT_PUBLIC_SITE_SLUG: normalizedSlug,
             SANITY_STUDIO_SITE_SLUG: normalizedSlug,
             SITE_BLUEPRINT_PATH: `../../sites/${normalizedSlug}/site.blueprint.json`,
-            CONTENT_REPOSITORY_DRIVER: String(env.CONTENT_REPOSITORY_DRIVER || 'sanity').trim() || 'sanity',
+            CONTENT_REPOSITORY_DRIVER:
+              (() => {
+                const value = String(env.CONTENT_REPOSITORY_DRIVER || 'sanity').trim().toLowerCase();
+                return value === 'auto' || value === 'sanity' ? value : 'sanity';
+              })(),
             SANITY_PROJECT_ID: projectId,
             SANITY_DATASET: dataset,
             SANITY_API_VERSION: apiVersion,

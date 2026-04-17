@@ -202,6 +202,72 @@ Solo dopo che questo login funziona in modo affidabile:
 - mantieni `80/tcp` e `443/tcp` pubbliche
 - lascia `8787` e `5678` non esposte
 
+Configurazione locale consigliata dopo il passaggio a `Tailscale`:
+
+```sshconfig
+Host autoblog-vps
+  HostName autoblog-ops-prod.tail2bbeab.ts.net
+  User autoblog
+  IdentityFile ~/.ssh/autoblog_ionos
+  IdentitiesOnly yes
+```
+
+Con questa alias:
+
+- `VS Code Remote SSH` puo' collegarsi a `autoblog-vps`
+- gli script daily admin possono usare il nome MagicDNS invece dell'IP tailnet
+
+Per `DBeaver`, non usare il VPS come host Postgres diretto: il database resta bindato su `127.0.0.1:5432` nel VPS. Le opzioni corrette sono:
+
+- per il `portal` usa:
+  - database: `autoblog_portal_prod`
+  - user: `autoblog_portal_prod`
+  - password: quella contenuta in `PORTAL_DATABASE_URL` dentro `/etc/autoblog/engine.env`
+- per `n8n` usa:
+  - database: `n8n`
+  - user: `n8n`
+  - password: quella contenuta in `/etc/autoblog/n8n.env`
+
+Per le attivita' operative del progetto, nella maggior parte dei casi in `DBeaver` ti interessa il `portal`, non il DB interno di `n8n`.
+
+Nota importante sulle password:
+
+- dentro `PORTAL_DATABASE_URL` alcuni caratteri speciali della password possono comparire in formato URL-encoded
+  - esempio: `%40` = `@`, `%2B` = `+`, `%25` = `%`
+- nel campo `Password` di `DBeaver` va inserita la password reale decodificata, non la stringa encoded presa pari-pari dall'URL
+- se preferisci, puoi anche usare il campo/driver URL di `DBeaver` con l'intera connection string `postgres://...`, evitando di separare manualmente i campi
+
+1. tunnel locale:
+
+```bash
+./scripts/ops-postgres-tunnel.sh --host autoblog@autoblog-ops-prod.tail2bbeab.ts.net
+```
+
+Poi in `DBeaver`, per il `portal`:
+
+- host: `127.0.0.1`
+- port: `15432`
+- database: `autoblog_portal_prod`
+- user: `autoblog_portal_prod`
+- password: valore letto da `PORTAL_DATABASE_URL` in `/etc/autoblog/engine.env`
+
+Se invece vuoi ispezionare tabelle interne di `n8n`, lascia invariati `host` e `port` ma usa:
+
+- database: `n8n`
+- user: `n8n`
+- password: valore `POSTGRES_PASSWORD` da `/etc/autoblog/n8n.env`
+
+2. tunnel SSH integrato di `DBeaver`:
+
+- SSH host: `autoblog-ops-prod.tail2bbeab.ts.net`
+- SSH user: `autoblog`
+- auth: chiave privata `~/.ssh/autoblog_ionos`
+- DB host remoto: `127.0.0.1`
+- DB port remota: `5432`
+- database: `autoblog_portal_prod`
+- user: `autoblog_portal_prod`
+- password: valore letto da `PORTAL_DATABASE_URL` in `/etc/autoblog/engine.env`
+
 ## 6. Docker
 
 Installa Docker dal repository ufficiale:
@@ -277,11 +343,11 @@ sudo -u autoblog npm ci
 
 ## 10. Env production sul VPS
 
-Trasferisci i file env dal tuo computer:
+Trasferisci i file env dal tuo computer tramite l'accesso admin `Tailscale`:
 
 ```bash
-scp -i ~/.ssh/autoblog_ionos .env.production root@87.106.29.31:/tmp/engine.env
-scp -i ~/.ssh/autoblog_ionos infra/n8n/.env.production root@87.106.29.31:/tmp/n8n.env
+scp -i ~/.ssh/autoblog_ionos .env.production autoblog@autoblog-ops-prod.tail2bbeab.ts.net:/tmp/engine.env
+scp -i ~/.ssh/autoblog_ionos infra/n8n/.env.production autoblog@autoblog-ops-prod.tail2bbeab.ts.net:/tmp/n8n.env
 ```
 
 Sul server:

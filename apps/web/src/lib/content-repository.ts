@@ -4,7 +4,7 @@ import { hasSanityConfig, sanityClient } from './sanity';
 import { siteConfig } from './site';
 import type { Article, Category } from './types';
 
-export type ContentRepositoryDriver = 'auto' | 'mock' | 'sanity' | 'api';
+export type ContentRepositoryDriver = 'auto' | 'mock' | 'sanity';
 
 export interface ContentRepository {
   driver: ContentRepositoryDriver;
@@ -95,48 +95,12 @@ class SanityContentRepository implements ContentRepository {
   }
 }
 
-class ApiContentRepository implements ContentRepository {
-  driver: ContentRepositoryDriver = 'api';
-  private readonly baseUrl = (process.env.CONTENT_API_BASE_URL || process.env.CONTENT_ENGINE_URL || '').replace(/\/$/, '');
-
-  async getPublishedArticles() {
-    if (!this.baseUrl) return [];
-
-    try {
-      const res = await fetch(`${this.baseUrl}/v1/content/articles?siteSlug=${encodeURIComponent(siteSlug)}`, {
-        next: { revalidate: 300 }
-      });
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      const json = (await res.json()) as { items?: Article[] };
-      return json.items?.length ? json.items.map(normalizeArticle) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  async getAllCategories() {
-    if (!this.baseUrl) return [];
-
-    try {
-      const res = await fetch(`${this.baseUrl}/v1/content/categories?siteSlug=${encodeURIComponent(siteSlug)}`, {
-        next: { revalidate: 300 }
-      });
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      const json = (await res.json()) as { items?: Category[] };
-      return json.items?.length ? json.items : [];
-    } catch {
-      return [];
-    }
-  }
-}
-
 const mockRepository = new MockContentRepository();
 const sanityRepository = new SanityContentRepository();
-const apiRepository = new ApiContentRepository();
 
 function resolveDriver(): ContentRepositoryDriver {
   const driver = (process.env.CONTENT_REPOSITORY_DRIVER || 'auto').toLowerCase();
-  if (driver === 'mock' || driver === 'sanity' || driver === 'api' || driver === 'auto') {
+  if (driver === 'mock' || driver === 'sanity' || driver === 'auto') {
     return driver;
   }
   return 'auto';
@@ -148,7 +112,6 @@ export function getContentRepository(): ContentRepository {
 
   if (driver === 'mock') return mockRepository;
   if (driver === 'sanity') return sanityRepository;
-  if (driver === 'api') return apiRepository;
 
   if (hasSanityConfig) return sanityRepository;
   if (isProduction) {

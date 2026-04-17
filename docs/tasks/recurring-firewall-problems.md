@@ -68,6 +68,30 @@
   - il test su `87.106.29.31:22` va in timeout, coerente con la rimozione delle regole firewall IONOS
   - `nginx` ripulito da file superflui in `sites-enabled` (`default` rimosso, backup spostato fuori dal glob)
   - `nginx -t` non mostra piu warning di `server_name` duplicati
+- Verificato che gli accessi locali admin dopo il cambio a `Tailscale` richiedono anche riallineamento dei client:
+  - `~/.ssh/config` locale ha ancora l'alias `autoblog-vps` verso `87.106.29.31` come `root`
+  - il target corretto giornaliero via `SSH` e' `autoblog@autoblog-ops-prod.tail2bbeab.ts.net`
+  - il nome MagicDNS risponde correttamente via `SSH`
+- Verificato che il Postgres production resta esposto solo su loopback del VPS:
+  - `POSTGRES_PORT=5432`
+  - bind docker compose `127.0.0.1:${POSTGRES_PORT:-5432}:5432`
+  - l'accesso corretto per tool admin esterni (`DBeaver`) va quindi fatto via tunnel `SSH/Tailscale`, non come host diretto
+- Chiarita la distinzione tra i due database Postgres production sullo stesso server:
+  - `portal`: database/utente `autoblog_portal_prod` (credenziale letta da `PORTAL_DATABASE_URL` in `/etc/autoblog/engine.env`)
+  - `n8n`: database/utente `n8n` (credenziale letta da `/etc/autoblog/n8n.env`)
+  - per l'operativita' normale del progetto, in `DBeaver` serve quasi sempre il `portal`, non il DB interno di `n8n`
+- Verificato che la password del `portal` dentro `PORTAL_DATABASE_URL` e' salvata con URL encoding sui caratteri speciali; per `DBeaver` va usata la password decodificata, non la forma encoded letta dall'URL
+- Trovata la workspace DBeaver separata indicata per il progetto (`~/DBeaverData/autoblog`), ma senza datasource `autoblog` persistiti nei file di workspace individuati; preparata quindi una procedura/config pulita invece di patchare un datasource ambiguo
+- Aggiunto `scripts/ops-postgres-tunnel.sh` per aprire un tunnel locale verso il Postgres production via `SSH/Tailscale`
+- Aggiornati i default degli script operativi production che non devono piu' puntare a `root@87.106.29.31`:
+  - `scripts/site-pull.mjs`
+  - `scripts/site-handoff-prod.mjs`
+  - `scripts/site-studio-prod.mjs`
+- Aggiornate docs/runbook per il nuovo assetto:
+  - `docs/context.md`
+  - `docs/deploy/ionos-vps-ops.md`
+  - `infra/n8n/instructions.md`
+  - documentata la configurazione corretta per `VS Code Remote SSH` e `DBeaver` dopo `Tailscale`
 
 ## Decisions
 - La soluzione raccomandata di lungo periodo e' spostare gli accessi admin su una rete privata stabile invece di inseguire IP domestici `/32`.
@@ -82,10 +106,18 @@
   - `/ops/factory` da non dipendere piu' da allowlist dell'IP domestico; meglio accesso via tunnel/ rete admin privata + Basic Auth
   - preferire `OpenSSH` normale sopra `Tailscale` prima di valutare `Tailscale SSH`, per tenere il rollout piu semplice
 - Con `SSH` via Tailscale verificato come funzionante, le regole pubbliche `22/tcp` basate su IP domestici/lavoro non sono piu' necessarie per l'operativita' ordinaria e andrebbero rimosse/disabilitate.
+- Per il lavoro quotidiano, host e utente admin di riferimento devono essere `autoblog@autoblog-ops-prod.tail2bbeab.ts.net` invece del vecchio `root@87.106.29.31`.
+- Il Postgres production non va esposto neanche sulla tailnet come porta diretta: si mantiene bindato a `127.0.0.1` sul VPS e si raggiunge via tunnel `SSH/Tailscale`.
+- Per `DBeaver`, la configurazione consigliata e':
+  - tunnel locale con `scripts/ops-postgres-tunnel.sh`
+  - oppure tunnel `SSH` integrato verso `autoblog@autoblog-ops-prod.tail2bbeab.ts.net`
+  - usare come default la connessione `autoblog_portal_prod`; lasciare `n8n` solo per debug dei workflow
+  - se si parte da `PORTAL_DATABASE_URL`, ricordarsi di decodificare i caratteri `%..` nella password prima di incollarla nel campo `Password`
 
 ## Next
-- Aggiornare l'accesso operativo quotidiano per usare `autoblog@100.68.245.109` o `autoblog-ops-prod.tail2bbeab.ts.net`.
-- Usare `./scripts/ops-factory-tunnel.sh --host autoblog@100.68.245.109` per la `Factory UI`.
+- Aggiornare il file locale `~/.ssh/config` per far puntare l'alias `autoblog-vps` al nome MagicDNS `autoblog-ops-prod.tail2bbeab.ts.net` come utente `autoblog`.
+- Creare o aggiornare nell'istanza DBeaver dedicata la connessione Postgres usando tunnel `SSH` o il tunnel locale `./scripts/ops-postgres-tunnel.sh --host autoblog@autoblog-ops-prod.tail2bbeab.ts.net`.
+- Usare `./scripts/ops-factory-tunnel.sh --host autoblog@autoblog-ops-prod.tail2bbeab.ts.net` per la `Factory UI`.
 - Decidere il modello finale per `n8n`:
   - minimo: lasciare pubblico `n8n.earningsites.net` ma abilitare hardening aggiuntivo (`N8N_PUBLIC_API_DISABLED`, `N8N_PUBLIC_API_SWAGGERUI_DISABLED`, MFA/SSO se disponibile, aggiornamenti regolari)
   - meglio: separare hostname pubblico webhook e hostname privato editor, o bloccare l'editor pubblico via `nginx` lasciando esposti solo i path webhook
@@ -96,3 +128,5 @@
 - Il problema di logout nel pannello IONOS va trattato come issue separata del portale/sessione browser finche' non emerge una causa lato account/provider.
 - Su macOS, l'installazione del client `Tailscale` puo' richiedere intervento locale non automatizzabile: password admin e approvazione estensione/network component.
 - Se l'editor `n8n` resta pubblicamente raggiungibile sullo stesso hostname dei webhook, la superficie di attacco resta piu ampia del necessario anche se `5678` non e' esposta direttamente.
+- La workspace DBeaver dedicata non espone chiaramente un datasource `autoblog` persistito nei file trovati, quindi una modifica automatica ai file interni senza conferma del datasource corretto rischia di agire sull'istanza sbagliata.
+- Per ricreare da zero la connessione Postgres in `DBeaver` serve comunque il valore attuale di `POSTGRES_PASSWORD` presente in `/etc/autoblog/n8n.env`.

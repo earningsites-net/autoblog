@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DEFAULT_HOST = 'root@87.106.29.31';
+const DEFAULT_HOST = 'autoblog@autoblog-ops-prod.tail2bbeab.ts.net';
 const DEFAULT_IDENTITY = '~/.ssh/autoblog_ionos';
 const DEFAULT_REPO_ROOT = '/srv/auto-blog-project';
 const DEFAULT_RUNTIME_ROOT = '/var/lib/autoblog';

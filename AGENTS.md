@@ -31,6 +31,20 @@ Keep thread context small and reliable while working on `main`, including simult
   - important run/deploy commands
 - Do not store per-task progress in `docs/context.md`.
 
+## Runtime Alignment
+- After any change to n8n workflows, runtime env, or code that affects live execution, explicitly sync every relevant environment instead of assuming the repo state is already live.
+- Treat `repo source`, `local runtime`, and `production runtime` as separate states that can drift.
+- For workflow changes:
+  - import the changed workflow into the target n8n instance
+  - publish/reactivate it if required
+  - restart n8n when the platform requires it for the published version to take effect
+  - verify the active workflow from the runtime side (for example by exporting the active workflow or checking execution logs), not only by reading the repo file
+- For env/runtime config changes:
+  - update the correct env file for each target environment
+  - restart the affected service(s)
+  - verify the effective runtime values from the target environment
+- Before declaring a fix complete, confirm local and production alignment whenever both environments are expected to behave the same.
+
 ## Git And VPS Guardrails
 - Treat `/srv/auto-blog-project` on production as a `source-only` Git clone.
 - Never copy, extract, or edit source files directly into `/srv/auto-blog-project` as `root`.

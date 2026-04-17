@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DEFAULT_HOST = 'root@87.106.29.31';
+const DEFAULT_HOST = 'autoblog@autoblog-ops-prod.tail2bbeab.ts.net';
 const DEFAULT_IDENTITY = '~/.ssh/autoblog_ionos';
 const DEFAULT_SOURCE_ROOTS = ['/var/lib/autoblog/source-sites', '/srv/auto-blog-project/sites'];
 const DEFAULT_RUNTIME_ROOT = '/var/lib/autoblog/sites';
@@ -105,7 +105,7 @@ function main() {
   const { positional, flags } = parseArgs(process.argv.slice(2));
   const siteSlug = slugify(positional[0]);
   if (!siteSlug) {
-    throw new Error('Usage: node scripts/site-pull.mjs <site-slug> [--host root@host] [--identity ~/.ssh/key] [--activate-local true] [--root-env .env]');
+    throw new Error('Usage: node scripts/site-pull.mjs <site-slug> [--host autoblog@host] [--identity ~/.ssh/key] [--activate-local true] [--root-env .env]');
   }
 
   const host = String(flags.host || process.env.AUTOBLOG_SITE_PULL_HOST || DEFAULT_HOST).trim();

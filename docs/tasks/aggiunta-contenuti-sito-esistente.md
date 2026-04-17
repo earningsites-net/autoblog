@@ -40,6 +40,85 @@
 - Verificata la compatibilità di `bytedance/seedream-4.5` rispetto al workflow immagini corrente confrontando schema Replicate e payload locale.
 - Verificato e aggiornato il runtime n8n di produzione in `/etc/autoblog/n8n.env` per un test con `IMAGE_MODEL=bytedance/seedream-4.5` e `IMAGE_ASPECT_RATIO=3:2`.
 - Riavviato `autoblog-n8n` in produzione e verificato che il servizio sia tornato `active` con le nuove env.
+- Riverificata la procedura bulk corrente per siti esistenti alla luce del nuovo sistema seed-topic (`discover-topics` engine -> `scripts/autoblog.mjs`).
+- Verificato che la route factory `POST /api/factory/site/discover-topics` non espone ancora `selector` o `locale`: usa il selector runtime (`TOPIC_DISCOVERY_SELECTOR`, `OPENAI_API_KEY`) e i `seedTopics` del blueprint.
+- Verificato che `prepopulate_bulk_runner` oggi forza `batchSize = 1`, quindi il payload `batchSize: 3` passato alla route engine non influenza più i cicli del runner.
+- Chiarita la differenza operativa tra i selector topic `auto`, `heuristic`, `hybrid` e `llm` nel codice corrente di `scripts/autoblog.mjs`.
+- Verificato che il `PREPOPULATE_TRIGGER_URL` locale punta ancora all'ID `IK5hWdMSdBZKr51n`, che corrisponde al workflow `prepopulate_bulk_runner` canonico usato nel repo.
+- Verificato che il trigger locale usa ancora il path webhook draft/encoded `.../webhook/<id>/webhook%2520trigger/factory-prepopulate`, mentre la documentazione corrente tende a riferirsi al path semplice published `.../webhook/factory-prepopulate`.
+- Diagnosticato un failure locale reale su `prepopulate_bulk_runner -> Run image_generation_worker` leggendo il log n8n attivo.
+- Verificato che il workflow locale attivo `image_generation_worker` (`DJO82hLkI6S6wg0v`) non è allineato al file sorgente del repo: nella versione attiva manca ancora il polling della prediction Replicate e il nodo `Upload to Sanity + Patch article` fallisce con `Retry the workflow once the prediction is complete`.
+- Confermato dal log locale che il parent `prepopulate_bulk_runner` fallisce solo in cascata dopo il child `image_generation_worker`:
+  - execution child `6003` fallita su `Upload to Sanity + Patch article`
+  - execution parent `5996` fallita su `Run image_generation_worker`
+- Tentato `npm run n8n:import:changed` in locale: nessun workflow rilevato come changed, quindi non sufficiente a correggere un'istanza n8n già driftata.
+- Riallineato manualmente il workflow locale `image_generation_worker` importando il file corrente del repo nell'istanza n8n locale.
+- Pubblicato di nuovo `image_generation_worker` in locale e riavviato `autoblog-n8n`.
+- Verificata la copia runtime attiva esportata dall'istanza locale:
+  - `active=true`
+  - `hasWaitForPrediction=true`
+  - `hasPollTimeoutMessage=true`
+  - `hasOldImmediateRetryMessage=false`
+- Aggiornato `AGENTS.md` con una sezione `Runtime Alignment` per imporre il riallineamento esplicito di repo, runtime locale e runtime production dopo ogni modifica che impatta l'esecuzione.
+- Diagnosticato un failure successivo del bulk locale su `Run article_generation_worker` leggendo il log runtime attivo.
+- Verificato che `autoblog-n8n` e `autoblog-engine` locali erano entrambi online durante il failure.
+- Verificato che il child `article_generation_worker` fallito era l'execution `6026` e che l'errore reale avviene nel nodo `Generate Article JSON`, cioè sulla chiamata `POST https://api.openai.com/v1/responses`.
+- Verificato dal log che lo stesso worker aveva completato con successo le execution immediatamente precedenti `6023` e `6024`, quindi il problema non è un misconfig strutturale del workflow ma un drop di connessione/transient upstream verso OpenAI.
+- Diagnosticato un failure successivo di `image_generation_worker` dopo piu' execution riuscite (`6051`, `6054`, `6056`, `6058`).
+- Verificato dal log che il nuovo failure immagini non e' piu' il vecchio caso "prediction non pronta": l'execution `6060` arriva fino al nodo `Upload to Sanity + Patch article` e fallisce con `<!DOCTYPE html> [line 48]`.
+- Verificato che `image_generation_worker` locale attivo usa il fix con polling Replicate, quindi il problema attuale e' a valle della generazione: download output URL, upload asset Sanity, o patch articolo su Sanity che restituisce una risposta HTML inattesa.
+- Verificato che `prepopulate_bulk_runner` esegue i child worker con `Execute Workflow` senza isolamento dell'errore per item: se un child fallisce, il parent bulk fallisce in cascata sul nodo `Run image_generation_worker`.
+- Verificato inoltre che in locale stanno fallendo in parallelo anche `plan_generation_scheduler_worker` (`A 'json' property isn't an object`) e `brief_generation_worker` (`Could not get parameter`), aggiungendo rumore operativo e carico concorrente durante i test bulk.
+- Diagnosticato il failure production `image_generation_worker` execution `41249` tramite n8n API: il messaggio mostrato in UI sul nodo `Upload to Sanity + Patch article` e' fuorviante, perche' l'eccezione reale nasce dentro `waitForPrediction` con `Replicate prediction failed: Prediction interrupted; please retry (code: PA)`.
+- Verificato dai dati dell'execution prod `41249` che il run non stava usando GPT ma `bytedance/seedream-4.5`; nello stesso batch due prediction sono riuscite e una sola e' stata interrotta dal provider Replicate (`code: PA`), quindi non e' una regressione strutturale del patch/upload Sanity.
+- Verificato via n8n API che il workflow attivo in production `image_generation_worker` (`vn06sSxBlwZ1xfNb`) e' la versione aggiornata con polling Replicate e prompt non hardcoded legacy.
+- Verificato che il valore effettivo di `aspect_ratio` nel runtime attivo prod era `16:9`.
+- Verificato che il file locale `infra/n8n/.env.production` risultava ancora disallineato sul modello/ratio (`openai/gpt-image-1.5`, `3:2`) rispetto al runtime effettivamente osservato in production.
+- Riallineati i file env locali ignorati `infra/n8n/.env` e `infra/n8n/.env.production` a `IMAGE_MODEL=bytedance/seedream-4.5` e `IMAGE_ASPECT_RATIO=16:9`, lasciando inalterate le chiavi dei due ambienti.
+- Riavviato il container locale `autoblog-n8n` per applicare le env aggiornate.
+- Verificato nel container locale ricreato che `IMAGE_MODEL=bytedance/seedream-4.5` e' effettivamente presente a runtime.
+- Scoperto un disallineamento strutturale nel compose: `infra/n8n/docker-compose.yml` esporta `IMAGE_MODEL` verso il container n8n ma non esporta `IMAGE_ASPECT_RATIO`, quindi il workflow cade sempre sul fallback interno `16:9` indipendentemente dal valore definito nei file env.
+- Corretto `infra/n8n/docker-compose.yml` aggiungendo `IMAGE_ASPECT_RATIO: ${IMAGE_ASPECT_RATIO}` al blocco env del servizio `n8n`.
+- Ricreato `autoblog-n8n` in locale dopo il patch del compose.
+- Verificato dal container locale ricreato che il runtime vede entrambe le env:
+  - `IMAGE_MODEL=bytedance/seedream-4.5`
+  - `IMAGE_ASPECT_RATIO=16:9`
+- Verificato lo stato live di `ai-news-blogger` su produzione:
+  - `https://ainewsblogger.com/` risponde con redirect `307` verso `https://www.ainewsblogger.com/`
+  - `https://www.ainewsblogger.com/` risponde `200` da Vercel con pagina prerenderizzata (`x-nextjs-prerender: 1`, `x-vercel-cache: HIT`)
+- Verificato che la content API engine `GET /v1/content/articles?siteSlug=ai-news-blogger` non e' oggi la source of truth del sito live: restituisce `source: "publisher-read-adapter-pending"` e `items: []`, cioe' un adapter read-side ancora stub.
+- Verificato nel codice web che il sito live puo' leggere direttamente da Sanity tramite `SanityContentRepository` in `apps/web/src/lib/content-repository.ts`; questo spiega perche' il sito mostra contenuti anche se la content API engine e' vuota.
+- Query diretta al dataset Sanity production conferma che i nuovi articoli `ai-news-blogger` sono effettivamente `published`, con `publishedAt` valorizzato e `coverImage` presente; un articolo recente e' invece `rejected_auto` (`how-are-businesses-using-ai-today-mo2ofbuhoo74`).
+- Verificato che i permalink nuovi sono live sul dominio, ad esempio `https://www.ainewsblogger.com/articles/how-ai-will-change-the-way-we-work-mo2ntt3t6vj3` restituisce la pagina articolo corretta con metadata e immagine Sanity.
+- Verificato che anche la homepage live contiene gia' diversi slug/titoli nuovi pubblicati, inclusi:
+  - `popular-ai-tools-explained-simply-mo2pm6j7pt12`
+  - `most-common-ai-use-cases-mo2plv62u57v`
+  - `how-we-are-using-ai-in-everyday-life-mo2plkruln86`
+  - `how-ai-will-change-the-way-we-work-mo2ntt3t6vj3`
+- Notato un disallineamento secondario nel frontend live: canonical/OG URL continuano a puntare al dominio Vercel `ai-news-blogger.vercel.app` invece del dominio custom `www.ainewsblogger.com`.
+- Verificata la situazione architetturale del read-side:
+  - `apps/web/src/lib/content-repository.ts` supporta ancora un driver `api` opzionale che chiamerebbe `/v1/content/articles` e `/v1/content/categories`
+  - ma il path live corrente sceglie `SanityContentRepository` quando le env Sanity sono presenti
+  - `apps/engine/src/index.ts` espone ancora `/v1/content/articles` come stub placeholder (`publisher-read-adapter-pending`, `items: []`)
+  - l'endpoint categories e' invece implementato, mentre articles e' solo placeholder
+- Conclusione operativa: l'endpoint articles non e' oggi usato dal frontend production corrente, ma il contratto `api` esiste ancora nel codice e nella documentazione; se si decide di rimuoverlo, va rimossa o resa esplicitamente unsupported anche quell'opzione nel web per evitare dead paths silenziosi.
+- Eseguito audit approfondito del read-side `api` prima della rimozione:
+  - nessun caller runtime interno residuo nel repo per `/v1/content/articles` o `/v1/content/categories` oltre al driver `api` opzionale del frontend
+  - `apps/web/.env.local` usa gia' `CONTENT_REPOSITORY_DRIVER=sanity`
+  - la factory/generazione env di sito usa gia' `sanity` come default
+  - il sito production osservato legge gia' da Sanity, non dall'engine read API
+- Rimossi dal source:
+  - driver `api` da `apps/web/src/lib/content-repository.ts`
+  - dipendenza del cache key da `CONTENT_API_BASE_URL` in `apps/web/src/lib/content.ts`
+  - endpoint engine `/v1/content/categories` e `/v1/content/articles` in `apps/engine/src/index.ts`
+  - env morto `CONTENT_API_BASE_URL` da `.env.example` e dal generator `scripts/autoblog.mjs`
+  - riferimenti docs/readiness al driver `api` e agli endpoint content stub
+- Resa coerente la generazione env lato engine/factory:
+  - `CONTENT_REPOSITORY_DRIVER` ora viene sanificato a `sanity|auto` in `apps/engine/src/services/factory-ops.ts`
+  - output env factory in `apps/engine/src/index.ts` ora sanifica `CONTENT_REPOSITORY_DRIVER` a `sanity|auto`
+- Verifica tecnica post-change:
+  - `npm run typecheck` passato (`web` + `studio`)
+  - `npm --workspace @autoblog/engine run typecheck` passato
 
 ## Decisions
 - Task id impostato a `aggiunta-contenuti-sito-esistente`.
@@ -59,6 +138,31 @@
 - La domanda "basta cambiare env?" va risposta in base al contratto del workflow attivo: oggi è `env-only` solo per modelli Replicate compatibili con quel payload, non come regola generale.
 - `bytedance/seedream-4.5` è compatibile a livello di schema base (`prompt`, `aspect_ratio`, output array di URL), ma non è un drop-in sicuro con la config attuale `3:2`: alcune versioni Replicate documentate supportano solo `1:1`, e il workflow usa l'endpoint del modello senza pin di versione.
 - Per validare l'ipotesi operativa sul supporto `3:2` di Seedream, il runtime prod è stato impostato temporaneamente su `bytedance/seedream-4.5` mantenendo `IMAGE_ASPECT_RATIO=3:2`.
+- Le istruzioni bulk per siti esistenti restano valide come shape generale (`discover-topics` -> `prepopulate`), ma vanno aggiornate su due punti:
+  - il nuovo sistema seed-topic è già dietro `discover-topics`, quindi non serve cambiare endpoint; se però si vuole controllare esplicitamente il selector (`auto|heuristic|hybrid|llm`) bisogna usare la CLI `npm run factory -- discover-topics ... --selector ...`, non la route factory attuale
+  - `batchSize` nel `curl` di prepopulate è ormai fuorviante perché il runner lo ignora e usa `1`
+- Nel codice attuale:
+  - `auto` è il default ed equivale a "prova il pass LLM solo se `OPENAI_API_KEY` è disponibile, altrimenti euristico"
+  - `hybrid` forza sempre il tentativo LLM, ma poi completa comunque con fallback euristico
+  - con `OPENAI_API_KEY` presente, `auto` e `hybrid` hanno di fatto un comportamento molto simile
+  - non esiste oggi un vero percorso "LLM-only strict", perché anche `llm` completa i buchi con il fallback euristico
+- Se il `curl` a `/api/factory/site/prepopulate` risponde `"Workflow was started"` ma l'utente non vede alcuna execution in UI, il primo workflow da verificare è `prepopulate_bulk_runner`; l'ID locale atteso è `IK5hWdMSdBZKr51n`.
+- Il mismatch più sospetto non è l'ID del workflow, ma il fatto che il root env engine usi ancora un `PREPOPULATE_TRIGGER_URL` draft/encoded invece del path published canonico.
+- Nel caso osservato su locale, il problema non è principalmente l'env: è il disallineamento della versione attiva di `image_generation_worker` nell'istanza n8n rispetto al file nel repo.
+- Il file sorgente del repo contiene già il fix corretto: polling della prediction Replicate fino a completamento prima dell'upload su Sanity.
+- `n8n:import:changed` non basta come garanzia di allineamento quando il repo non è cambiato ma l'istanza runtime è driftata; in questi casi serve una verifica runtime-side e, se necessario, un reimport mirato del workflow.
+- La policy di progetto deve trattare `repo source`, `local runtime` e `production runtime` come stati separati da riallineare e verificare esplicitamente.
+- L'errore `The connection to the server was closed unexpectedly` osservato su `Run article_generation_worker` è, in questo caso, un errore di rete/upstream sul nodo `Generate Article JSON` verso OpenAI, non un problema del parent `prepopulate_bulk_runner` né di `engine` locale offline.
+- Il failure immagini attuale e' intermittente e downstream: dopo la generazione riuscita su Replicate, almeno una delle chiamate HTTP dentro `Upload to Sanity + Patch article` sta ricevendo HTML invece del payload atteso.
+- La frequenza percepita degli errori dipende dalla somma di tre fattori: dipendenza da provider esterni (OpenAI/Replicate/Sanity), assenza di retry mirati nei passaggi downstream dell'image worker, e propagazione hard-fail del child verso il parent bulk.
+- Per i failure prod osservati su `41249`, il problema reale non e' a valle di Sanity ma a monte su Replicate: il provider puo' interrompere singole prediction con `Prediction interrupted; please retry (code: PA)` anche quando altre prediction dello stesso batch riescono.
+- Il nome del nodo `Upload to Sanity + Patch article` puo' indurre in errore durante la diagnosi, perche' nello stesso code node oggi convivono sia il polling/attesa della prediction Replicate sia upload e patch Sanity.
+- L'allineamento env modello/ratio non e' sufficiente da solo finche' `docker-compose.yml` non propaga anche `IMAGE_ASPECT_RATIO` al container n8n.
+- Il fix minimo corretto per rendere operativo il ratio configurato e' propagarlo esplicitamente dal compose al container n8n; senza questo, il workflow continua a usare il fallback interno.
+- Se il sito live usa `SanityContentRepository`, la content API engine vuota non blocca la visualizzazione degli articoli sul dominio; in questo caso eventuali problemi percepiti dipendono piu' da caching/revalidate o dall'osservazione del punto sbagliato del sistema.
+- La homepage Vercel e' prerenderizzata/cacheata e puo' mostrare aggiornamenti con un piccolo ritardo anche quando i documenti sono gia' `published` in Sanity e i permalink articolo sono immediatamente raggiungibili.
+- Mantenere un endpoint articles placeholder che restituisce `200` con array vuoto e' peggio che non averlo: comunica uno stato falsamente autorevole e alimenta diagnosi sbagliate.
+- La rimozione del read-side `api` e' sicura per il repo e per il path live osservato, a condizione di trattare eventuali consumatori esterni non versionati come rischio residuo separato.
 
 ## Next
 - Se serve, trasformare questa procedura in documentazione permanente del repo.
@@ -70,6 +174,18 @@
 - Se serve, pulire in locale i duplicati storici inattivi dei workflow n8n per ridurre confusione operativa.
 - Se serve, ripulire specificamente i tre `prepopulate_bulk_runner` inattivi legacy presenti nell'istanza locale.
 - Osservare il prossimo run immagini in produzione per confermare se la default version corrente di `bytedance/seedream-4.5` accetta davvero `3:2`.
+- Riallineare l'istanza n8n locale reimportando/pubblicando `image_generation_worker` dalla versione del repo prima di fare nuovi bulk run locali.
+- Rilanciare un bulk run locale per confermare che `image_generation_worker` non fallisca più sul caso "prediction non ancora pronta".
+- Se il problema si ripete, strumentare `Upload to Sanity + Patch article` per loggare quale step fallisce tra download immagine, upload asset e patch articolo, con status code e primi byte della risposta.
+- Valutare retry/backoff espliciti per download output URL Replicate, upload asset Sanity e patch articolo, invece di far fallire l'intero bulk al primo errore transitorio.
+- Valutare di fermare o correggere in locale i workflow schedulati rumorosi (`plan_generation_scheduler_worker`, `brief_generation_worker`) quando si fanno test bulk manuali.
+- Correggere `infra/n8n/docker-compose.yml` per esportare `IMAGE_ASPECT_RATIO` al container n8n, poi riallineare anche production runtime con restart del servizio.
+- Riallineare ora anche production runtime applicando lo stesso compose/env live e riavviando `autoblog-n8n`.
+- Valutare una separazione del code node immagini in due step distinti (`wait/poll prediction` e `upload/patch`) per rendere i messaggi di errore meno ambigui.
+- Valutare retry/backoff specifici per il caso Replicate `Prediction interrupted; please retry (code: PA)` senza classificare subito il run come regressione del workflow.
+- Correggere il disallineamento SEO/canonical del frontend live che oggi continua a referenziare `ai-news-blogger.vercel.app`.
+- Se si decide di non supportare piu' il read-side via engine, rimuovere l'endpoint stub `/v1/content/articles`, aggiornare `ContentRepositoryDriver`/documentazione e fare fallire esplicitamente la modalita' `api` invece di lasciarla esistere come path morto.
+- Dopo la rimozione source, riallineare i runtime/deploy che devono ricevere questa semplificazione architetturale.
 
 ## Risks
 - `targetPublishedCount` non è un hard cap stretto se i worker n8n elaborano più item per ciclo; per refill molto piccoli conviene allineare i batch env dei worker.
@@ -81,3 +197,18 @@
 - Finché `prepopulate_bulk_runner.json` resta senza `id` fisso nel source, future import non controllati possono ricreare lo stesso problema su istanze locali diverse.
 - Su modelli Replicate aggiornati frequentemente come `bytedance/seedream-4.5`, il comportamento del path `/v1/models/<owner>/<model>/predictions` può cambiare con la default version del provider; senza pin di versione non c'è stabilità piena sul supporto `aspect_ratio`.
 - Il restart di n8n ha applicato correttamente le env di test, ma un eventuale errore `aspect_ratio` potrà emergere solo al primo run immagini effettivo contro Replicate.
+- Chi usa ancora il `curl` factory `discover-topics` non può forzare dal payload il selector del nuovo sistema seed-topic; il comportamento dipende dall'env runtime e può quindi differire tra locale e production.
+- Chi usa ancora `batchSize` nel `curl` di prepopulate può aspettarsi un controllo sui cicli che oggi non esiste più nel runner.
+- Finché `PREPOPULATE_TRIGGER_URL` locale resta su un path webhook draft/encoded, può essere più difficile correlare il trigger engine con la execution visibile in UI e c'è rischio di puntare a un endpoint non più allineato alla registrazione webhook corrente.
+- Finché l'istanza n8n locale mantiene il `image_generation_worker` stale, i run bulk locali possono fallire in modo intermittente o sistematico quando Replicate non restituisce subito `output` entro la response iniziale.
+- Anche con repo pulito e workflow source corretti, le istanze n8n possono restare disallineate se il workflow attivo non viene reimportato/pubblicato; la verifica finale deve sempre avvenire sul runtime reale.
+- I bulk run locali possono ancora fallire in modo intermittente su `article_generation_worker` finché il nodo `Generate Article JSON` non ha retry/timeout più robusti verso `api.openai.com`.
+- I bulk run immagini possono ancora fallire in modo intermittente finche' `Upload to Sanity + Patch article` non isola meglio gli errori downstream e non aggiunge retry/diagnostica sui passaggi HTTP verso output URL Replicate e API Sanity.
+- Un singolo child workflow fallito nel bulk continua oggi a far fallire il parent `prepopulate_bulk_runner`, anche se gli item precedenti dello stesso batch sono andati a buon fine.
+- Finche' `infra/n8n/docker-compose.yml` non esporta `IMAGE_ASPECT_RATIO`, ogni valore configurato solo nei file env resta inattivo a runtime sia in locale sia in production.
+- Finche' production non viene ricreata/riavviata con il compose corretto, locale e prod possono ancora divergere sul ratio effettivo anche con env file coerenti.
+- Finche' il codice conserva il driver `api` ma l'engine espone un endpoint `articles` stub, chiunque usi o testi quel path puo' ricevere segnali incoerenti rispetto al sito live reale.
+- La rimozione e' verificata solo rispetto ai consumatori presenti nel repo e al sito live osservato; un consumer esterno non tracciato che chiamasse ancora `/v1/content/articles` o `/v1/content/categories` verrebbe rotto dal deploy di questa modifica.
+- Finche' i runtime non vengono ridistribuiti, production puo' ancora esporre il vecchio comportamento anche se il source e' stato ripulito.
+- Finche' il polling Replicate e l'upload/patch Sanity restano nello stesso code node, i messaggi UI possono continuare a suggerire falsi positivi di regressione sul patch step anche quando il failure reale e' una prediction Replicate interrotta.
+- L'osservabilita' resta ambigua finche' l'engine espone una read API stub (`publisher-read-adapter-pending`) mentre il frontend production legge direttamente da Sanity: verificare l'endpoint sbagliato puo' far sembrare il sito vuoto anche quando il dominio live sta gia' servendo gli articoli.

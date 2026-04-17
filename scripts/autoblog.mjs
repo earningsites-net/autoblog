@@ -2078,7 +2078,6 @@ function commandProvisionEnv(siteSlug, flags) {
     SITE_BLUEPRINT_PATH: `./sites/${siteSlug}/site.blueprint.json`,
     CONTENT_REPOSITORY_DRIVER: 'sanity',
     CONTENT_ENGINE_URL: 'http://localhost:8787',
-    CONTENT_API_BASE_URL: '',
     REVALIDATE_SECRET: crypto.randomUUID().replace(/-/g, ''),
     SANITY_PROJECT_ID: '',
     SANITY_DATASET: blueprint.publishingTarget?.dataset || 'production',

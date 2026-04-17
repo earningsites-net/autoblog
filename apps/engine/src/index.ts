@@ -3256,51 +3256,6 @@ app.get('/v1/sites/:siteSlug/health', async (req) => {
   return engine.health(params.siteSlug);
 });
 
-app.get('/v1/content/categories', async (req, reply) => {
-  const query = req.query as { siteSlug?: string };
-  const siteSlug = query.siteSlug;
-  if (!siteSlug) {
-    return reply.code(400).send({ ok: false, error: 'siteSlug query param is required' });
-  }
-
-  const site = await siteRegistry.getSite(siteSlug);
-  if (!site) {
-    return reply.code(404).send({ ok: false, error: `Unknown site: ${siteSlug}` });
-  }
-
-  return {
-    siteSlug,
-    source: 'blueprint',
-    items: site.categories.map((category, index) => ({
-      _id: `cat-${category.slug || index}`,
-      title: category.title,
-      slug: category.slug,
-      description: category.description,
-      accent: category.accent
-    }))
-  };
-});
-
-app.get('/v1/content/articles', async (req, reply) => {
-  const query = req.query as { siteSlug?: string };
-  const siteSlug = query.siteSlug;
-  if (!siteSlug) {
-    return reply.code(400).send({ ok: false, error: 'siteSlug query param is required' });
-  }
-
-  const site = await siteRegistry.getSite(siteSlug);
-  if (!site) {
-    return reply.code(404).send({ ok: false, error: `Unknown site: ${siteSlug}` });
-  }
-
-  // Placeholder read-side endpoint. Real implementation should query the publishing target through a repository/adapter.
-  return {
-    siteSlug,
-    source: 'publisher-read-adapter-pending',
-    items: []
-  };
-});
-
 app.get('/v1/factory/sites', async (req, reply) => {
   if (!requireFactoryAccess(req, reply)) return;
   const sites = await siteRegistry.listSites();
@@ -3978,7 +3933,10 @@ app.get('/ops/factory', async (req, reply) => {
       const revalidateSecret = String(vercelEnv.REVALIDATE_SECRET || '').trim();
       const portalBaseUrl = String(vercelEnv.NEXT_PUBLIC_PORTAL_BASE_URL || 'https://aiblogs.earningsites.net').trim();
       const blueprintPath = String(vercelEnv.SITE_BLUEPRINT_PATH || ('../../sites/' + siteSlug + '/site.blueprint.json')).trim();
-      const contentDriver = String(vercelEnv.CONTENT_REPOSITORY_DRIVER || 'sanity').trim() || 'sanity';
+      const contentDriverInput = String(vercelEnv.CONTENT_REPOSITORY_DRIVER || 'sanity').trim().toLowerCase();
+      const contentDriver = contentDriverInput === 'auto' || contentDriverInput === 'sanity'
+        ? contentDriverInput
+        : 'sanity';
       const suggestedStudioUrl = String(studioDeploy.suggestedUrl || ('https://' + siteSlug + '.sanity.studio')).trim();
       const studioHostname = String(studioDeploy.hostname || siteSlug).trim() || siteSlug;
 
