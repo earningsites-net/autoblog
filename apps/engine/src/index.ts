@@ -2642,6 +2642,7 @@ app.get('/api/public/sites/:siteSlug/settings', async (req, reply) => {
     ok: true,
     site: {
       siteSlug,
+      monetization: settings.monetization,
       publicContactEmail: resolveSitePublicContactEmail(settings, registrySite),
       privacyPolicyOverride: String(settings.privacyPolicyOverride || ''),
       cookiePolicyOverride: String(settings.cookiePolicyOverride || ''),

@@ -53,50 +53,6 @@ function replaceContainerHtml(container: HTMLElement, html: string) {
   }
 }
 
-type MonetizationHeadProps = {
-  html: string;
-  enabled?: boolean;
-};
-
-export function MonetizationHead({ html, enabled = true }: MonetizationHeadProps) {
-  const insertedNodesRef = useRef<Node[]>([]);
-
-  useEffect(() => {
-    const documentRef = document;
-    for (const node of insertedNodesRef.current) {
-      if (node.parentNode) {
-        node.parentNode.removeChild(node);
-      }
-    }
-    insertedNodesRef.current = [];
-
-    if (!enabled || !html.trim()) {
-      return;
-    }
-
-    const nodes = parseHtml(documentRef, html);
-    for (const node of nodes) {
-      if (node.nodeType === Node.TEXT_NODE && !String(node.textContent || '').trim()) {
-        continue;
-      }
-      const nextNode = cloneNodeWithLiveScripts(documentRef, node);
-      documentRef.head.appendChild(nextNode);
-      insertedNodesRef.current.push(nextNode);
-    }
-
-    return () => {
-      for (const node of insertedNodesRef.current) {
-        if (node.parentNode) {
-          node.parentNode.removeChild(node);
-        }
-      }
-      insertedNodesRef.current = [];
-    };
-  }, [enabled, html]);
-
-  return null;
-}
-
 type MonetizationSlotProps = {
   html: string;
   enabled?: boolean;

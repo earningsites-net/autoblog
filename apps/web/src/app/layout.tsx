@@ -15,7 +15,7 @@ import {
   Space_Grotesk
 } from 'next/font/google';
 import './globals.css';
-import { MonetizationHead } from '@web/components/monetization-html';
+import { MonetizationHead } from '@web/components/monetization-head';
 import { SiteHeader } from '@web/components/site-header';
 import { SiteFooter } from '@web/components/site-footer';
 import { RouteLoadingOverlay } from '@web/components/route-loading-overlay';
@@ -120,8 +120,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       data-theme-tone={theme.tone}
       suppressHydrationWarning
     >
-      <body style={bodyStyle} className="font-body antialiased [font-family:var(--font-body)]">
+      <head>
         <MonetizationHead enabled={monetizationEnabled} html={siteSettings.monetization.headHtml} />
+      </head>
+      <body style={bodyStyle} className="font-body antialiased [font-family:var(--font-body)]">
         {gaId ? (
           <>
             <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} strategy="afterInteractive" />

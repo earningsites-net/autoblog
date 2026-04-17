@@ -148,7 +148,9 @@ function normalizeMonetization(settings: Partial<SiteMonetizationSettings> | nul
 type PublicPortalSiteSettingsOverlay = Pick<
   PublicSiteSettings,
   'publicContactEmail' | 'privacyPolicyOverride' | 'cookiePolicyOverride' | 'disclaimerOverride'
->;
+> & {
+  monetization?: SiteMonetizationSettings;
+};
 
 async function fetchPublicSitePortalSettingsUncached(): Promise<PublicPortalSiteSettingsOverlay | null> {
   const baseUrl = resolveEnginePublicBaseUrl();
@@ -163,6 +165,7 @@ async function fetchPublicSitePortalSettingsUncached(): Promise<PublicPortalSite
 
     const payload = (await response.json()) as {
       site?: {
+        monetization?: Partial<SiteMonetizationSettings>;
         publicContactEmail?: string;
         privacyPolicyOverride?: string;
         cookiePolicyOverride?: string;
@@ -173,6 +176,7 @@ async function fetchPublicSitePortalSettingsUncached(): Promise<PublicPortalSite
     if (!site) return null;
 
     return {
+      ...(site.monetization ? { monetization: normalizeMonetization(site.monetization) } : {}),
       publicContactEmail: String(site.publicContactEmail || ''),
       privacyPolicyOverride: String(site.privacyPolicyOverride || ''),
       cookiePolicyOverride: String(site.cookiePolicyOverride || ''),
@@ -269,6 +273,7 @@ async function fetchSiteSettingsUncached(): Promise<PublicSiteSettings> {
 
   return {
     ...next,
+    ...(portalOverlay.monetization ? { monetization: normalizeMonetization(portalOverlay.monetization) } : {}),
     publicContactEmail: portalOverlay.publicContactEmail ?? next.publicContactEmail,
     privacyPolicyOverride: portalOverlay.privacyPolicyOverride ?? next.privacyPolicyOverride,
     cookiePolicyOverride: portalOverlay.cookiePolicyOverride ?? next.cookiePolicyOverride,
