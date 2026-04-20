@@ -15,6 +15,10 @@
   - created backup branch `backup-context-files-3ff34de`
   - ran `git reset --mixed HEAD~1` on `codex/change-daily-beauty-lab-title`
   - tracked files from that commit now show again as local changes/untracked files
+- Published the restored docs/task changes onto `main`:
+  - committed selected files as `docs: add context and task notes`
+  - fast-forwarded local `main` to `origin/main`
+  - cherry-picked the docs commit onto `main` for direct push
 - Stabilizzato pipeline end-to-end n8n (`article -> image -> qa/publish`) con publish reale su frontend.
 - Introdotto scheduler piano-based (`plan_generation_scheduler_worker`) con quote mensili (`base=3`, `standard=20`, `pro=60`) e trigger periodico.
 - Attivato test mode scheduler con cadenze rapide per validazione:
@@ -64,7 +68,7 @@
 ## Next
 - For any new concurrent thread, start the first message with `TASK: <task-id>`.
 - If needed, realign local repo by switching to `main`, fast-forwarding from `origin/main`, and deciding whether to keep/cherry-pick local commit `3ff34de`.
-- After user verification, decide whether to recommit the restored files, cherry-pick them elsewhere, or discard them.
+- Optionally delete stale local branch `codex/change-daily-beauty-lab-title` after confirming no further work is needed there.
 - Validare un giro completo cambio piano `base -> standard -> pro` con verifica incremento publish nel mese.
 - Portare variabili da test mode a valori produzione prima del rilascio commerciale.
 - Aggiungere soglia refill opzionale (`brief_ready < N`) per evitare buchi tra publish e refill.
@@ -79,6 +83,7 @@
 - If `TASK:` is omitted for a new activity, updates will continue in `inbox.md`.
 - Deleting the stale local branch without deciding what to do with commit `3ff34de` would lose unmerged local work unless it remains reachable elsewhere.
 - `docs/tasks/inbox.md` is also modified by task tracking and is not part of the original restored commit payload.
+- The old branch still tracks a deleted upstream (`gone`); keeping it around may cause future sync confusion until it is cleaned up.
 - Se `apps/engine` non è raggiungibile, il refill automatico non rigenera topic e lo scheduler resta in no-op.
 - Config test mode lasciata attiva in produzione può accelerare publish oltre il ritmo atteso.
 - Gli slug sono meno “clean” per via del suffisso tecnico, ma il tradeoff evita errori bloccanti di unicità.
