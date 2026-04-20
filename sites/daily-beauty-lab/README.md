@@ -1,4 +1,4 @@
-# Daily Beauty Lab
+# My Identity Beauty Lab
 
 Generated from blueprint: generic-editorial-magazine
 

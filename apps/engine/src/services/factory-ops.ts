@@ -983,13 +983,25 @@ export class FactoryOpsService {
       }
     }
 
+    let blueprint: Record<string, unknown> | null = null;
+    if (blueprintExists) {
+      try {
+        const raw = await fs.readFile(blueprintPath, 'utf8');
+        blueprint = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        blueprint = null;
+      }
+    }
+
     let deploy: Record<string, unknown> | null = null;
     if (envExists) {
       try {
         const env = await this.siteRuntime.readSiteEnv(siteSlug);
         const normalizedSlug = String(env.SITE_SLUG || env.NEXT_PUBLIC_SITE_SLUG || siteSlug).trim() || siteSlug;
-        const siteName = String(env.NEXT_PUBLIC_SITE_NAME || '').trim();
-        const siteDescription = String(env.NEXT_PUBLIC_SITE_DESCRIPTION || '').trim();
+        const siteName =
+          String(blueprint?.brandName || '').trim() || String(env.NEXT_PUBLIC_SITE_NAME || '').trim();
+        const siteDescription =
+          String(blueprint?.siteDescription || '').trim() || String(env.NEXT_PUBLIC_SITE_DESCRIPTION || '').trim();
         const projectId = String(env.SANITY_PROJECT_ID || '').trim();
         const dataset = String(env.SANITY_DATASET || 'production').trim();
         const apiVersion = String(env.SANITY_API_VERSION || '2025-01-01').trim();
