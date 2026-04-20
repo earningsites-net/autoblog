@@ -23,6 +23,10 @@
 - Verifica eseguita:
   - `npm --workspace @autoblog/web run typecheck` OK
   - `npm --workspace @autoblog/engine run typecheck` OK
+- Creati branch e PR per la issue:
+  - branch: `codex/change-daily-beauty-lab-title`
+  - commit: `1a0eaa1` (`fix(web): align daily beauty lab public title`)
+  - PR: `#15` `Fix Daily Beauty Lab public title source of truth`
 
 ## Decisions
 - Il source of truth del brand pubblico nel frontend resta `sites/<slug>/site.blueprint.json -> brandName`.
@@ -34,6 +38,7 @@
   - aggiornare l'env production se contiene ancora `NEXT_PUBLIC_SITE_NAME=Daily Beauty Lab`
   - rieseguire il deploy del web
   - verificare header, footer e metadata sul sito live
+- Far revisionare e mergiare la PR `#15`, poi verificare il sito pubblico dopo il deploy.
 
 ## Risks
 - Finche' il deploy production attivo non viene ricostruito con il nuovo codice o con env riallineata, il sito live puo' continuare a mostrare il vecchio titolo.
