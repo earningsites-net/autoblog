@@ -1,7 +1,7 @@
 {
   "version": 1,
   "siteSlug": "daily-beauty-lab",
-  "brandName": "Daily Beauty Lab",
+  "brandName": "My Identity Beauty Lab",
   "siteDescription": "The site focuses on modern beauty, skincare, and self-care routines for everyday users. Content includes practical guides, beginner-friendly routines, product-agnostic tips, and educational articles about ingredients and",
   "businessMode": "transfer_first",
   "delivery": {
@@ -78,10 +78,7 @@
       "Adapt output to the configured niche prompt",
       "Use the configured niche prompt as editorial context."
     ],
-    "disclaimerVariants": [
-      "general",
-      "safety"
-    ],
+    "disclaimerVariants": ["general", "safety"],
     "editorialPrompt": "The site focuses on modern beauty, skincare, and self-care routines for everyday users. Content includes practical guides, beginner-friendly routines, product-agnostic tips, and educational articles about ingredients and beauty habits. The tone is clean, accessible, and editorial, similar to a digital beauty magazine. The content avoids medical claims, clinical advice, or professional dermatological recommendations. Instead, it focuses on general wellness, beauty tips, and lifestyle-oriented content that is safe, evergreen, and easy to consume."
   },
   "categories": [
