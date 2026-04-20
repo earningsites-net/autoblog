@@ -2098,8 +2098,13 @@ function commandProvisionEnv(siteSlug, flags) {
   };
 
   const nextEnv = { ...existing };
+  const blueprintManagedKeys = new Set([
+    'NEXT_PUBLIC_SITE_NAME',
+    'NEXT_PUBLIC_DEFAULT_LOCALE',
+    'NEXT_PUBLIC_SITE_DESCRIPTION'
+  ]);
   for (const [key, value] of Object.entries(defaults)) {
-    if (flags.force || !(key in nextEnv) || nextEnv[key] === '') {
+    if (flags.force || blueprintManagedKeys.has(key) || !(key in nextEnv) || nextEnv[key] === '') {
       nextEnv[key] = value;
     }
   }

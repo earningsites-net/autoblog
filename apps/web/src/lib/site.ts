@@ -12,7 +12,8 @@ if (process.env.NODE_ENV === 'production' && !resolvedSiteSlug) {
 
 export const siteConfig = {
   slug: resolvedSiteSlug,
-  name: process.env.NEXT_PUBLIC_SITE_NAME || activeBlueprint?.brandName || 'AutoBlog',
+  // Public brand renames should follow the blueprint even if a deploy env is stale.
+  name: activeBlueprint?.brandName || process.env.NEXT_PUBLIC_SITE_NAME || 'AutoBlog',
   description:
     process.env.NEXT_PUBLIC_SITE_DESCRIPTION ||
     activeBlueprint?.siteDescription ||
