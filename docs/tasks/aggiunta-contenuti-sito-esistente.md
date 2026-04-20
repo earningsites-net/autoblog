@@ -46,6 +46,22 @@
 - Chiarita la differenza operativa tra i selector topic `auto`, `heuristic`, `hybrid` e `llm` nel codice corrente di `scripts/autoblog.mjs`.
 - Verificato che il `PREPOPULATE_TRIGGER_URL` locale punta ancora all'ID `IK5hWdMSdBZKr51n`, che corrisponde al workflow `prepopulate_bulk_runner` canonico usato nel repo.
 - Verificato che il trigger locale usa ancora il path webhook draft/encoded `.../webhook/<id>/webhook%2520trigger/factory-prepopulate`, mentre la documentazione corrente tende a riferirsi al path semplice published `.../webhook/factory-prepopulate`.
+- Verificato che `prepopulate_bulk_runner` pianifica un ciclo per ogni articolo mancante rispetto al target e oggi forza internamente `batchSize = 1`, quindi chiama `article_generation_worker` una volta per ciclo e non per articolo pubblicato finale.
+- Verificato che `article_generation_worker` processa al massimo un topic per esecuzione (`Fetch brief_ready topics` usa `[0...1]`), quindi il numero di run del worker va confrontato con i cicli eseguiti, non con gli articoli effettivamente pubblicati.
+- Verificato che esiste un secondo orchestratore, `plan_generation_scheduler_worker`, che richiama anch'esso `article_generation_worker`; quindi il conteggio run in n8n può includere esecuzioni dello scheduler oltre a quelle del bulk manuale.
+- Verificato che un'execution `article_generation_worker` senza topic disponibili non arriva alla chiamata OpenAI: `Fetch brief_ready topics` -> `Explode Topics` produce zero item e i nodi downstream, incluso `Generate Article JSON`, non partono.
+- Verificato però un rischio reale di doppia chiamata OpenAI su uno stesso topic quando due execution si sovrappongono: il worker legge il primo `topicCandidate` ancora `brief_ready`, chiama OpenAI, crea l'articolo draft e solo dopo patcha il topic a `generated`; senza claim/lock preventivo, due run concorrenti possono prendere lo stesso topic prima dell'update di stato.
+- Analizzato il caso production concreto `prepopulate_bulk_runner` execution `41031` su `ai-news-blogger`: non è un caso innocuo di run vuoti.
+- Verificato via n8n API che il batch `41031` ha pianificato `plannedCycles=11` con `prepopulateBatchId=prepop-2026-04-15T15-56-38-011Z`, e che tutti gli 11 child `article_generation_worker` (`41032`-`41043`, senza `41039`) hanno eseguito `Generate Article JSON`, quindi hanno davvero chiamato OpenAI.
+- Verificato che in production il workflow attivo `article_generation_worker` è driftato rispetto al repo: `Fetch brief_ready topics` usa `const limit = schedulerRunId ? 1 : Number($env.ARTICLE_BATCH_SIZE || 3)`, quindi nei run bulk ogni execution elabora fino a 3 topic, non 1.
+- Verificato che in production anche il workflow attivo `prepopulate_bulk_runner` è driftato rispetto al repo: `Load Prepopulate Config` usa ancora `batchSize` da payload/env con fallback `3`, non il `batchSize = 1` hardcoded presente nel source locale.
+- Verificato via Sanity che gli 11 run `article_generation_worker` del batch `41031` hanno generato 30 articoli unici (30 `sourceTopic` distinti, nessun duplicato), quindi il costo extra osservato in quel caso viene dal batching runtime e non da no-op o da doppie prese dello stesso topic.
+- Verificato che l'esecuzione concorrente dello scheduler `41039` non ha contribuito al caso: riguardava `daily-beauty-lab` e ha chiuso `noWorkNeeded` senza lanciare `article_generation_worker`.
+- Verificato che nel runtime driftato i due controlli di batching sono distinti:
+  - `prepopulate_bulk_runner` usa `PREPOPULATE_BATCH_SIZE` / `input.batchSize` per il numero di cicli pianificati
+  - `article_generation_worker` usa `ARTICLE_BATCH_SIZE` per il numero di topic elaborati per execution bulk
+- Verificato negli env attuali che i default runtime salvati sono ancora `PREPOPULATE_BATCH_SIZE=3` e `ARTICLE_BATCH_SIZE=3` in `infra/n8n/.env.production`.
+- Chiarita la conclusione operativa: per il tema batching il source del repo è già nella direzione corretta, ma un semplice `git pull` del clone VPS non basta a correggere il comportamento live se i workflow attivi in n8n production non vengono anche reimportati/pubblicati e il runtime env non viene riallineato.
 - Diagnosticato un failure locale reale su `prepopulate_bulk_runner -> Run image_generation_worker` leggendo il log n8n attivo.
 - Verificato che il workflow locale attivo `image_generation_worker` (`DJO82hLkI6S6wg0v`) non è allineato al file sorgente del repo: nella versione attiva manca ancora il polling della prediction Replicate e il nodo `Upload to Sanity + Patch article` fallisce con `Retry the workflow once the prediction is complete`.
 - Confermato dal log locale che il parent `prepopulate_bulk_runner` fallisce solo in cascata dopo il child `image_generation_worker`:
@@ -119,6 +135,14 @@
 - Verifica tecnica post-change:
   - `npm run typecheck` passato (`web` + `studio`)
   - `npm --workspace @autoblog/engine run typecheck` passato
+- Dopo commit/push/pull del source su production, riavviati i servizi VPS necessari:
+  - `autoblog-engine`
+  - `autoblog-n8n`
+- Verificato post-restart che entrambi i servizi siano tornati `active`.
+- Verificato anche il runtime effettivo dentro il container n8n production dopo il restart:
+  - `IMAGE_MODEL=bytedance/seedream-4.5`
+  - `IMAGE_ASPECT_RATIO=16:9`
+- Questo conferma che il patch al compose e' attivo in production, ma anche che il valore live dell'env prod oggi non e' `3:2`: il container sta leggendo realmente `16:9`.
 
 ## Decisions
 - Task id impostato a `aggiunta-contenuti-sito-esistente`.
@@ -163,6 +187,7 @@
 - La homepage Vercel e' prerenderizzata/cacheata e puo' mostrare aggiornamenti con un piccolo ritardo anche quando i documenti sono gia' `published` in Sanity e i permalink articolo sono immediatamente raggiungibili.
 - Mantenere un endpoint articles placeholder che restituisce `200` con array vuoto e' peggio che non averlo: comunica uno stato falsamente autorevole e alimenta diagnosi sbagliate.
 - La rimozione del read-side `api` e' sicura per il repo e per il path live osservato, a condizione di trattare eventuali consumatori esterni non versionati come rischio residuo separato.
+- Per rendere effettive modifiche source-side su production non basta il `git pull`: per engine serve restart del service, per n8n serve restart del service stack e verifica runtime delle env nel container.
 
 ## Next
 - Se serve, trasformare questa procedura in documentazione permanente del repo.
@@ -186,6 +211,11 @@
 - Correggere il disallineamento SEO/canonical del frontend live che oggi continua a referenziare `ai-news-blogger.vercel.app`.
 - Se si decide di non supportare piu' il read-side via engine, rimuovere l'endpoint stub `/v1/content/articles`, aggiornare `ContentRepositoryDriver`/documentazione e fare fallire esplicitamente la modalita' `api` invece di lasciarla esistere come path morto.
 - Dopo la rimozione source, riallineare i runtime/deploy che devono ricevere questa semplificazione architetturale.
+- Se l'obiettivo di business resta `IMAGE_ASPECT_RATIO=3:2` anche per Seedream, il prossimo intervento richiesto non e' un altro restart ma correggere prima `/etc/autoblog/n8n.env` e poi ricreare `autoblog-n8n`.
+- Se serve ridurre la confusione operativa sui conteggi, aggiungere metadati/filtri piu' espliciti nei run (`pipelineMode`, `prepopulateBatchId`, `schedulerRunId`) o disattivare temporaneamente lo scheduler durante i refill bulk manuali.
+- Se serve eliminare il rischio di doppia spesa OpenAI su topic concorrenti, introdurre un claim atomico del `topicCandidate` prima di `Generate Article JSON` oppure sospendere temporaneamente lo scheduler durante i bulk manuali.
+- Riallineare urgentemente i workflow attivi di production (`prepopulate_bulk_runner`, `article_generation_worker`) al source del repo, perché oggi il runtime production usa ancora il comportamento batch legacy e falsifica le aspettative sui costi/volumi.
+- Se serve solo una mitigazione immediata senza reimport dei workflow, impostare entrambi `PREPOPULATE_BATCH_SIZE=1` e `ARTICLE_BATCH_SIZE=1` nel runtime production e riavviare `autoblog-n8n`; se il trigger prepopulate passa esplicitamente `batchSize` nel payload, anche quel valore va portato a `1`.
 
 ## Risks
 - `targetPublishedCount` non è un hard cap stretto se i worker n8n elaborano più item per ciclo; per refill molto piccoli conviene allineare i batch env dei worker.
@@ -210,5 +240,9 @@
 - Finche' il codice conserva il driver `api` ma l'engine espone un endpoint `articles` stub, chiunque usi o testi quel path puo' ricevere segnali incoerenti rispetto al sito live reale.
 - La rimozione e' verificata solo rispetto ai consumatori presenti nel repo e al sito live osservato; un consumer esterno non tracciato che chiamasse ancora `/v1/content/articles` o `/v1/content/categories` verrebbe rotto dal deploy di questa modifica.
 - Finche' i runtime non vengono ridistribuiti, production puo' ancora esporre il vecchio comportamento anche se il source e' stato ripulito.
+- Finche' `/etc/autoblog/n8n.env` resta a `IMAGE_ASPECT_RATIO=16:9`, production continuera' a generare immagini con `16:9` anche se il codice ora propaga correttamente il ratio dal compose al container.
 - Finche' il polling Replicate e l'upload/patch Sanity restano nello stesso code node, i messaggi UI possono continuare a suggerire falsi positivi di regressione sul patch step anche quando il failure reale e' una prediction Replicate interrotta.
 - L'osservabilita' resta ambigua finche' l'engine espone una read API stub (`publisher-read-adapter-pending`) mentre il frontend production legge direttamente da Sanity: verificare l'endpoint sbagliato puo' far sembrare il sito vuoto anche quando il dominio live sta gia' servendo gli articoli.
+- Finche' n8n mostra insieme run del bulk manuale e run dello scheduler, il numero totale di execution di `article_generation_worker` puo' apparire sovradimensionato rispetto agli articoli nuovi realmente pubblicati.
+- Finche' il topic viene marcato `generated` solo dopo la creazione dell'articolo, run concorrenti di `article_generation_worker` possono consumare due chiamate OpenAI sullo stesso topic anche se solo un articolo finale viene poi considerato valido/pubblicato.
+- Finche' i workflow attivi production restano driftati dal repo, le analisi basate solo sul source locale sottostimano il numero reale di chiamate OpenAI e di articoli generati per batch.

@@ -16,6 +16,8 @@ This file stores durable project context shared across tasks.
 - Use `TASK: <task-id>` in the first message of each new thread when that thread should have its own task history.
 - `docs/tasks/_active.md` is fallback-only for threads that do not declare `TASK:`; it is not the source of truth across simultaneous threads.
 - Once a thread has established its task, keep using that same task file for the life of the thread unless a new `TASK:` is provided.
+- This workspace/task context is only for the Autoblog project under the `earningsites` account.
+- Do not mix issues, credentials, runtime assumptions, or backlog items from unrelated company projects such as `next`, `datahub`, or `dils` (account `d.ciamprone@gmail.com`).
 
 ## Local Run Commands
 - Install deps: `npm install`
@@ -89,7 +91,11 @@ This file stores durable project context shared across tasks.
     - `placements[]` con target iniziali `homeLead`, `homeMid`, `categoryTop`, `articleTop`, `articleSidebar`, `articleBottom`
   - il legacy AdSense-specifico (`adsensePublisherId`, `adsMode`, `adsenseSlot*`, `fallbackToPlatform`) è rimosso e le colonne Postgres legacy vengono droppate allo startup dell'engine/portal store
   - il registry runtime non deve salvare codice raw monetization: solo un riepilogo non sensibile (`enabled`, `providerName`, presenza head code, target configurati)
-  - il frontend pubblico considera `adsEnabled` vero solo se il sito non è offline e `monetization` contiene codice effettivo; `headHtml` va iniettato una sola volta lato client e i placement HTML devono rieseguire eventuali `<script>` anche dopo navigazione client-side
+  - il frontend pubblico considera `adsEnabled` vero solo se il sito non è offline e `monetization` contiene codice effettivo; `headHtml` va renderizzato nel `<head>` già lato server (così è visibile anche ai crawler) mentre i placement HTML nel body devono rieseguire eventuali `<script>` anche dopo navigazione client-side
+- Public site naming:
+  - il source of truth del brand pubblico nel web è `sites/<slug>/site.blueprint.json -> brandName`
+  - `NEXT_PUBLIC_SITE_NAME` è un env derivato/legacy utile per bootstrap e deploy, ma non deve prevalere sul blueprint nei render pubblici
+  - `siteSettings.siteName` in Sanity oggi non rinomina da solo header/footer/metadata del frontend: se serve un brand rename pubblico, aggiornare il blueprint e riallineare il deploy/runtime derivato
 - Il vecchio viewer interno `/ops/db` e il relativo endpoint `/api/ops/db/table` sono stati rimossi: l'ispezione del portal DB va fatta via Postgres esterno (es. DBeaver/SSH tunnel) o query SQL, non tramite route admin nell'engine.
 - Stato attuale Postgres portal:
   - local dev usa il Postgres del compose `infra/n8n` con database dedicato (`autoblog_portal_local`) bootstrapato via `npm run portal:postgres:bootstrap`
