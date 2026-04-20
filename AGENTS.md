@@ -31,6 +31,23 @@ Keep thread context small and reliable while working on `main`, including simult
   - important run/deploy commands
 - Do not store per-task progress in `docs/context.md`.
 
+## Bugfix Workflow
+- For reported bugs, diagnose first and patch second.
+- Gather concrete evidence before editing:
+  - reproduce the issue, or
+  - inspect logs, runtime state, data, env, deploy state, or permissions until the failure mode is specific
+- Classify the problem boundary before changing code: source bug, runtime/env drift, data issue, deploy mismatch, permissions/infrastructure, or external dependency behavior.
+- Find the root cause before patching unless the case is truly trivial and directly proven.
+- Check the regression boundary before fixing:
+  - when the problem started
+  - what changed recently
+  - whether the behavior is new, intermittent, or pre-existing
+- Search for existing code paths, helpers, configs, or features that already solve the problem before adding new logic.
+- Scan adjacent flows, callers, configs, and runbooks that the change can affect before changing behavior.
+- Prefer the smallest fix in the authoritative path. Do not add temporary scripts, helpers, or fallback logic unless they are clearly reusable or required for durable verification.
+- Before closing the task, run the smallest meaningful verification that proves the fix and checks adjacent flows for regressions.
+- In the final handoff, explain the root cause, the chosen fix, the verification performed, and any remaining risk. Do not describe only the patch.
+
 ## Runtime Alignment
 - After any change to n8n workflows, runtime env, or code that affects live execution, explicitly sync every relevant environment instead of assuming the repo state is already live.
 - Treat `repo source`, `local runtime`, and `production runtime` as separate states that can drift.
@@ -63,6 +80,12 @@ Keep thread context small and reliable while working on `main`, including simult
 - `ops/factory` is allowed to create/update source-safe site files on the VPS (`sites/<slug>/site.blueprint.json`, optional `README.md`), which means the VPS clone can temporarily differ from `main` after site creation.
 - After any production site creation via `ops/factory`, sync the source-safe site files back locally (`site:pull` or `site:sync:source`), commit them on `main`, and only then treat local, GitHub, and VPS as aligned again.
 - When the user delegates commit/push/pull tasks, prefer the safe Git path above over ad-hoc file syncs, and explicitly stop if the repo state makes that unsafe.
+
+## GitHub Issue Workflow
+- If working on an assigned GitHub issue, create a new branch from the current local state before editing. Use `codex/<issue-or-task-id>` unless the user asks for a different name.
+- Move the issue to `In Progress` before starting implementation.
+- Open a PR when the work is ready for review and move the issue to `Done` only after the PR step required by the board workflow is complete.
+- If project-board access, permissions, or repository state make any of these steps unsafe or impossible, stop and report the blocker explicitly instead of silently skipping the step.
 
 ## Task Naming
 - Use short `kebab-case` ids (example: `fix-webhook-timeout`).

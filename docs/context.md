@@ -17,7 +17,7 @@ This file stores durable project context shared across tasks.
 - `docs/tasks/_active.md` is fallback-only for threads that do not declare `TASK:`; it is not the source of truth across simultaneous threads.
 - Once a thread has established its task, keep using that same task file for the life of the thread unless a new `TASK:` is provided.
 - This workspace/task context is only for the Autoblog project under the `earningsites` account.
-- Do not mix issues, credentials, runtime assumptions, or backlog items from unrelated company projects such as `next`, `datahub`, or `dils` (account `d.ciamprone@gmail.com`).
+- Do not mix issues, credentials, runtime assumptions, or backlog items from unrelated company projects such as `next`, `datahub`, `dils`, or `rtr-technology` (account `d.ciamprone@gmail.com`).
 
 ## Local Run Commands
 - Install deps: `npm install`
