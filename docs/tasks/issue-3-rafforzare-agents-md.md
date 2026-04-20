@@ -20,6 +20,10 @@
 - Aggiornato `docs/context.md` per includere anche `rtr-technology` tra i progetti esterni da non contaminare nel contesto Autoblog.
 - Riletto il file finale per verificare che le nuove regole restino corte, imperative e non duplicative rispetto ai guardrail Git/VPS gia presenti.
 - Creato branch dedicato `codex/issue-3-rafforzare-agents-md` a partire dallo stato locale corrente per preparare commit e PR della task.
+- Creato commit locale `bc03316` (`Strengthen AGENTS bugfix workflow`) con le modifiche a `AGENTS.md`, `docs/context.md` e al task file del thread.
+- Pushato il branch remoto `origin/codex/issue-3-rafforzare-agents-md`.
+- Aperta PR `#16` `Strengthen AGENTS bugfix workflow`:
+- `https://github.com/earningsites-net/autoblog/pull/16`
 
 ## Decisions
 - Questo thread usa `docs/tasks/issue-3-rafforzare-agents-md.md` come task file, normalizzando il riferimento utente `TASK: #3 - ...` in un id `kebab-case` coerente con `AGENTS.md`.
@@ -37,7 +41,7 @@
 - L'esclusione dei progetti non correlati e' piu corretta in `docs/context.md` che in `AGENTS.md`, perche' e' contesto durevole condiviso e non procedura di esecuzione.
 
 ## Next
-- Creare commit, push e PR della modifica verso `main`.
+- Attendere review/merge della PR `#16`.
 - Se vuoi automatizzare davvero il passaggio di kanban richiesto dalla nuova policy, serve prima estendere i permessi GitHub locali con scope `read:project` e probabilmente `project`.
 - Facoltativo: riflettere le stesse regole di diagnosi anche in eventuali runbook operativi se vuoi che valgano non solo per gli agenti ma anche per i fix manuali.
 
