@@ -195,8 +195,6 @@ export default async function ArticlePage({ params }: Props) {
               <span>{formatDate(article.publishedAt)}</span>
               <span aria-hidden>•</span>
               <span>{article.readTimeMinutes} min read</span>
-              <span aria-hidden>•</span>
-              <span>QA {article.qaScore}</span>
             </div>
             <h1 className="mt-4 font-display text-4xl leading-tight text-ink sm:text-5xl">{article.title}</h1>
             <p className={excerptClass}>{article.excerpt}</p>

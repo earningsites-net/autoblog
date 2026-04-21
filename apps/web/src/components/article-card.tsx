@@ -450,8 +450,6 @@ export function ArticleCard({
             <span>{formatDate(article.publishedAt)}</span>
             <span aria-hidden>•</span>
             <span>{article.readTimeMinutes} min read</span>
-            <span aria-hidden>•</span>
-            <span>QA {article.qaScore}</span>
           </div>
           <h3 className={`mt-3 font-display transition ${titleToneClass} ${titleClass}`}>
             {article.title}
