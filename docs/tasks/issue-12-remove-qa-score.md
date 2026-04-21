@@ -13,6 +13,9 @@
 - Ran `npm --workspace @autoblog/web run typecheck`.
 - Ran `npm --workspace @autoblog/web run build`; Next prerendered listing and article routes successfully.
 - Checked generated web build assets for visible `QA {}` / `QA 90`-style strings; none found.
+- Committed and pushed branch `codex/issue-12-remove-qa-score`.
+- Opened draft PR #18: `https://github.com/earningsites-net/autoblog/pull/18`.
+- Moved issue #12 project status to `Done`; GitHub now reports the issue state as `CLOSED`.
 
 ## Decisions
 - Use `issue-12-remove-qa-score` as the thread-local task file for the user-provided `TASK: #12 - Rimuovere il QA score dal frontend pubblico`.
@@ -20,7 +23,7 @@
 - Limit the public frontend change to removing visible markup and adjacent separators, preserving date/read-time metadata.
 
 ## Next
-- Commit, push, and open a draft PR for issue #12.
+- Review and merge PR #18 when ready.
 
 ## Risks
 - Public frontend no longer renders QA score, but the field remains available in Sanity/front-end data objects for internal uses.
