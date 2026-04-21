@@ -15,6 +15,8 @@
 - Create modifiche sorgente preventive, poi rimosse su richiesta: il fix mantenuto e' solo il repair dati live.
 - Verificato stato GitHub issue #10: issue aperta, senza assignee e senza `projectItems`, quindi nessun project-board item disponibile da spostare in `In Progress`/`Done`.
 - Verificato anche `gh project list --owner earningsites-net`: il token attivo manca dello scope `read:project`, quindi non puo' leggere o modificare GitHub Projects via CLI finche' non viene autorizzato quello scope.
+- Aperta draft PR documentale: https://github.com/earningsites-net/autoblog/pull/17
+- Il connettore GitHub ha fallito la creazione PR con `403 Resource not accessible by integration`; usato fallback `gh pr create`.
 - Verifiche passate:
   - `npm --workspace @autoblog/web run typecheck`
   - `npm --workspace @autoblog/studio run typecheck`
@@ -25,10 +27,11 @@
 - Per il repair live, usare `_updatedAt` come `publishedAt` perche' rappresentava il momento della promozione manuale a `published`.
 - Nessuna modifica codice mantenuta per questa task: il problema concreto e' stato risolto correggendo i documenti Sanity.
 - Aprire comunque PR documentale quando richiesto esplicitamente, anche se il fix applicativo e' stato un repair dati live senza diff codice.
+- L'assenza di assignee non e' il blocker per spostare un item di GitHub Projects; il blocker osservato e' la mancanza dello scope `read:project` e l'assenza di `projectItems` visibili sulla issue.
 
 ## Next
 - Nessun deploy codice necessario per la correzione attuale.
-- Aprire PR solo documentale per registrare la chiusura operativa della issue.
+- Per spostare la issue su GitHub Projects, autorizzare `gh` con scope project (`gh auth refresh -s read:project,project`) o collegare/rendere visibile l'item Project alla issue.
 
 ## Risks
 - Se in futuro si pubblicano manualmente altri articoli cambiando solo `status` a `published`, bisogna valorizzare anche `publishedAt`.
