@@ -24,6 +24,18 @@
 - Pushato il branch remoto `origin/codex/issue-3-rafforzare-agents-md`.
 - Aperta PR `#16` `Strengthen AGENTS bugfix workflow`:
 - `https://github.com/earningsites-net/autoblog/pull/16`
+- Verificato il post-merge su GitHub:
+- PR `#16` `closed` con `merged=true`
+- merge commit su `main`: `5b60ab7e604d425188316dd2c7da4d9305abbacf`
+- Verificato il clone production sulla VPS dopo il pull:
+- branch `main`
+- `HEAD == origin/main == 5b60ab7`
+- working tree pulito (`branch.ab +0 -0`)
+- ownership corretta `autoblog:autoblog` per `AGENTS.md`, `docs/context.md` e `docs/tasks/issue-3-rafforzare-agents-md.md`
+- Verificato il clone locale:
+- il branch remoto `origin/codex/issue-3-rafforzare-agents-md` risulta effettivamente cancellato dopo `git fetch --prune origin`
+- la clone locale e' ancora posizionata sul branch di lavoro locale `codex/issue-3-rafforzare-agents-md`
+- il branch locale `main` e' ancora fermo a `948c0f2` e risulta `behind 3` rispetto a `origin/main`
 
 ## Decisions
 - Questo thread usa `docs/tasks/issue-3-rafforzare-agents-md.md` come task file, normalizzando il riferimento utente `TASK: #3 - ...` in un id `kebab-case` coerente con `AGENTS.md`.
@@ -39,9 +51,13 @@
 - Le istruzioni su spostamento issue nel kanban possono entrare in `AGENTS.md` come workflow atteso, ma vanno formulate senza assumere che i permessi `read:project`/`project` siano sempre gia disponibili nel terminale.
 - La nuova sezione `Bugfix Workflow` va tenuta volutamente breve e in alto nel file: il valore e' imporre il sequencing corretto, non descrivere tutte le tecniche possibili di debugging.
 - L'esclusione dei progetti non correlati e' piu corretta in `docs/context.md` che in `AGENTS.md`, perche' e' contesto durevole condiviso e non procedura di esecuzione.
+- Dopo il merge, il sistema e' allineato su GitHub e sulla VPS production; il solo disallineamento residuo osservato in questa sessione e' locale, dove `main` non e' ancora stato aggiornato e la shell e' ancora sul branch feature ormai remoto `gone`.
 
 ## Next
-- Attendere review/merge della PR `#16`.
+- Se vuoi riallineare anche questa clone locale, il passo successivo corretto e':
+- `git switch main`
+- `git pull --ff-only origin main`
+- opzionalmente cancellare il branch locale `codex/issue-3-rafforzare-agents-md`
 - Se vuoi automatizzare davvero il passaggio di kanban richiesto dalla nuova policy, serve prima estendere i permessi GitHub locali con scope `read:project` e probabilmente `project`.
 - Facoltativo: riflettere le stesse regole di diagnosi anche in eventuali runbook operativi se vuoi che valgano non solo per gli agenti ma anche per i fix manuali.
 
@@ -50,3 +66,4 @@
 - Se il workflow GitHub viene fuso male con il metodo di bugfix, il file rischia di mescolare disciplina tecnica e procedura di project management in modo poco leggibile.
 - Anche con istruzioni corrette, la parte kanban puo' restare bloccata da scope GitHub mancanti; il rischio va distinto dal contenuto del file.
 - La policy migliora il comportamento degli agenti futuri, ma non elimina da sola i rischi di fix manuali eseguiti fuori processo o fuori repo.
+- Finche' il laptop resta sul branch feature locale ormai remoto `gone`, e `main` resta `behind`, questa clone puo' creare confusione sul reale stato allineato del repo.
